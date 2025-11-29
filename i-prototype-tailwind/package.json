@@ -12,14 +12,19 @@
   "dependencies": {
     "@heroicons/react": "^2.2.0",
     "@types/react-router-dom": "^5.3.3",
+    "clsx": "^2.1.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "react-router-dom": "^7.8.0"
+    "react-router-dom": "^7.9.6",
+    "recharts": "^3.5.1",
+    "tailwind-merge": "^3.4.0",
+    "uplot": "^1.6.32"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
     "@tailwindcss/postcss": "^4.1.11",
     "@tailwindcss/vite": "^4.1.11",
+    "@types/node": "^24.10.1",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^4.7.0",
