@@ -1,0 +1,63 @@
+<!DOCTYPE html><!-- saved from url=(0014)about:internet -->
+
+<html>
+<head>
+
+<title>Hinzufügen eines Cursors in einer Anzeige</title><!--(Meta) insert after title ======================================-->
+
+
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"><!--(Links)=========================================================-->
+
+
+<link href="..\MCHelp.css" rel="stylesheet" type="text/css">
+
+</head><!--(Body)==========================================================-->
+
+
+<body>
+
+
+<h1>Hinzufügen eines Cursors in einer Anzeige</h1>
+
+<p>Fügen Sie einen Cursor zur Datenanzeige in einem Linienschreiber oder Oszilloskop hinzu, um die Werte einzelner Datenpunkte anzuzeigen.</p>
+<ul>
+	<li>Sie können bis zu zwei Cursor zu einem Linienschreiber oder Oszilloskop hinzufügen.</li>
+	<li>Cursor können nur zu jeweils demselben Kanal einer Anzeige hinzugefügt werden.</li>
+	<li>Die Farbe des Cursor entspricht der Farbe des zugeordneten Kanals.</li>
+	<li>Cursor können einer Anzeige vor, während oder nach einer Erfassung hinzugefügt werden.</li>
+</ul>
+
+<p>Gehen Sie folgendermaßen vor, um Cursor zu einer Anzeige hinzuzufügen:</p>
+<ol>
+	<li>Wenn Daten gerade erfasst werden, klicken Sie auf die Feststell-Schaltfläche <img src="../images/Icon-lock-live.png" width="20" alt="Lock Symbol"> um in den Rückblick-Modus zu wechseln. Andernfalls gehen Sie zu Punkt 2.</li>
+	<li>Klicken Sie auf die Cursor-Symbole (Cursor A <img src="../images/Icon-cursorA.png" alt="Cursor A" width="20" border="0" class="inline"> oder Cursor B <img src="../images/Icon-cursorB.png" alt="Cursor B" width="20" border="0" class="inline">). <br>Ein Fadenkreuz wird der Anzeige des aktuell ausgewählten Kanals hinzugefügt. Die X-Koordinate zeigt entweder die Erfassungszeit (absolut oder relativ) oder die Nummer des Messwertes, entsprechend den Anzeige-Einstellungen für die X-Achse. Die Y-Koordinate zeigt den Messwert.</li>
+
+	<li>Klicken Sie auf das andere Cursor-Symbol, um einen zweiten Cursor hinzuzufügen. <br>Werden zwei Cursor hinzugefügt, wird zusätzlich die Differenz in Zeit und Amplitude zwischen den beiden Cursor angezeigt.</li>
+
+	<li>Ziehen Sie das Fadenkreuz entlang der Anzeige, um die Werte jedes Datenpunktes anzuzeigen. Ein <span style="color: Gray;"><strong>A</strong></span> oder <span style="color: Gray;"><strong>B</strong></span> identifiziert den Cursor auf der Anzeige.</li>
+	<li>Klicken Sie das Entsperren-Symbol <img src="../images/Icon-lock-review.png" width="20" alt="">, um den Rückblick-Modus zu verlassen und zur Anzeige der aktuell erfassten Messwerte zurückzukehren.</li>
+</ol>
+
+<p>Das Bild zeigt zwei Cursor, die dem Kanal 0 auf dem Linienschreiber hinzugefügt wurden.</p>
+
+<p style="text-align:center"><img src="../images/Cursors.png" alt="Cursor A und Cursor B" width="753" border="0"></p>
+
+<p>Klicken Sie erneut auf das Cursor-Symbol, wenn Sie Cursor aus der Anzeige entfernen möchten.</p>
+
+<p>Um den Wert der Datenpunkte auf einem anderen Kanal anzuzeigen, klicken Sie auf das Symbol des Kanals. Die Cursor wechseln zu dem ausgewählten Kanal.</p>
+<h2>Skalierung und Cursor</h2>
+<p>Wenn Sie Cursor zu einem Linienschreiber oder Oszilloskop hinzufügen und dann die Anzeige so zoomen, dass die Cursorposition außerhalb der angezeigten Daten wandert, dann zeigen Pfeile (<img src="../images/CursA-arrow.png" alt="" width="21" height="10" border="0">, <img src="../images/CursB-arrow.png" alt="" width="21" height="10" border="0">) die Position der Cursor relativ zu den angezeigten Daten an.<br><br> <img src="../images/Cursor-Zoom.png" alt="Lock Symbol" width="715" border="0"></p><!-- video link ======================================================================-->
+
+<h3>Demo-Video</h3>
+<p>Klicken Sie auf <strong>Wiedergabe</strong> um ein Video anzuzeigen, das die Visualisierung von Messwerten mit dem Cursor erklärt.</p>
+
+<p align="center">
+<video width="480" controls>
+  <source src="../video/daqami-cursor.mp4" type="video/mp4">
+  Ihr Browser unterstützt keine Anzeige von Videos.
+</video></p>
+
+<p>Falls Sie dieses Video nicht betrachten können, wechseln Sie zum <a href="http://www.de.mccdaq.com/daq-software/DAQami.aspx">DAQami Demo-Video</a>. Es zeigt detailliert, wie die Konfiguration und Datenerfassung mit DAQami durchgeführt wird.</p>
+
+</body>
+</html>

@@ -1,0 +1,92 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!-- saved from url=(0014)about:internet -->
+<html>
+<head>
+
+<title>Output Display</title>
+
+<!--(Meta) insert after title ======================================-->
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+
+<!--(Links)=========================================================-->
+<link href="..\MCHelp.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<!--(Body)==========================================================-->
+<body>
+
+
+<h1>Output Display</h1>
+<p>When you add an output channel to an Output display, DAQami creates an output control for users to change the output value when an acquisition is running. The type of control that is created depends on the type of output channel. An example is shown here:</p>
+
+<p align="center"><img src="../images/Display-output.jpg" alt="Output display" width="353" border="0"></p>
+
+<p>Refer to the callout numbers below for a description of each component on the Output display.</p>
+
+<!-- Callout Descriptions =====================================-->
+<table class="bordered" width="90%">
+<tr><td width="5%"><strong>Callout</strong></td><td width="20%"><strong>Name</strong></td><td><strong>Description</strong></td></tr>
+
+<tr><td>1</td><td>Output controls</td><td>An output control is created for each output channel added to the display. The type of control depends on the type of output signal. The control color corresponds to the channel color. Right-click on the control icon to show a context menu with options to remove the channel or change its color. A signal type setting is also available for analog output channels that support hardware pacing.  Refer to the <a href="#outputcontrols">Output Channel Controls</a> discussion below.</td></tr>
+
+<tr><td>2</td><td>Display title</td><td>The title of the display (refer to <strong>Display Title</strong> in <a href="DisplaySettings.htm">Configuring Display Settings</a>).</td></tr>
+
+<tr><td>3</td><td>Icons</td><td>Icons used to copy, customize, and remove the display.
+
+<div class="stepnoborder">
+<table cellspacing="7" width="95%"> 
+<tr><td><img src="../images/Icon-copy.png" alt="Copy display icon" width="24" border="0" class="inline"></td><td>Copies an image of the display to the clipboard.</td></tr>
+<tr><td><img src="../images/Icon-displaysetting.png" alt="Display settings icon" width="24" border="0" class="inline"></td><td>Opens the Display Settings dialog box where you can customize the display appearance.</td></tr>
+<tr><td><img src="../images/Icon-displaydelete.png" alt="Display delete icon" width="24" border="0" class="inline"></td><td>Removes the display from the Display Panel.</td></tr>
+</table>
+</div>
+</td></tr>
+</table>
+
+<!-- Menu ==================================================================-->
+<h2>Context menu</h2>
+<p>Right-click on the display to show a menu with the following options:</p>
+<ul>
+	<li><strong>Edit Display</strong>: opens the Display Settings dialog box.</li>
+	<li><strong>Remove Display</strong>: removes the display from the Display Panel.</li>
+</ul>
+
+<!-- Output Channel Controls ================================================-->
+<h3><a name="outputcontrols">Output Channel Controls</a></h3>
+<p>Typical controls for each type of output signal are shown here.</p>
+<p>The name on the control is specific to the signal name on the selected hardware, and may differ from the controls shown here.</p>
+
+<table class="bordered" width="90%">
+<tr><td width="15%"><strong>Output Channel</strong></td><td width="17%"><strong>Control</strong></td><td><strong>Description</strong></td></tr>
+
+<tr><td rowspan="3"><a name="aoutcontrols">Analog Output</a></td><td align="center"><img src="../images/ao_slider.png" alt="AOUT slider control" width="102" border="0" align="middle"><br><strong>Slider control</strong></td><td>Use the analog voltage slider control to change the analog output signal during an acquisition. The slider control is the default control created when you add an analog output channel to an Output display<br><br>
+<p>Right-click on the control to show a menu with the following options:</p>
+<ul>
+	<li><strong>Remove From Display</strong>: removes the channel and control from the Output display.</li>
+	<li><strong>Color</strong>: opens a color palette to select a color for the channel.</li>
+	<li><strong>Signal Type</strong> (hardware-paced AO support only): if the device supports hardware-paced analog output, select <strong>Waveform</strong> to convert to a waveform control. Use this control change waveform settings during an acquisition.<br><br>
+	<img src="../images/AOutCtrlContext.png" alt="" width="225" height="120" border="0"></li>
+</ul>
+</tr>
+<tr><td colspan="2"><strong>Note:</strong> Changing an analog output signal with a Slider control affects the frequency of the hardware-paced waveforms on all other AO channels. There is currently no known work-around for this issue.</td></tr>
+<tr><td align="center"><img src="../images/ao_wave.png" alt="AOUT waveform control" width="88" border="0"><br><strong>Waveform control</strong></td><td>Use the analog waveform control to modify waveform settings before or during an acquisition.<br><br>If the selected device supports analog output scanning, select <strong>Signal Type&raquo;Waveform</strong> from the context menu to change from a slider to a waveform control.<br><br>
+To change back to a slider control, select <strong>Signal Type&raquo;Slider</strong> from the context menu.</td></tr>
+
+
+<tr><td rowspan="2"><a name="doutcontrols">Digital Output</a></td><td align="center"><img src="../images/do_switch.png" alt="DOUT switch control" width="80" border="0"><br><strong>Digital switch control</strong></td><td>Use the digital switch control to change the high/low state of a digital pin during an acquisition.<br><br>
+<p>Right-click on the control to show a menu with the following options:</p>
+<ul>
+	<li><strong>Remove From Display</strong>: removes the channel and control from the Output display.</li>
+	<li><strong>Color</strong>: select a color for the channel from the color palette.</li>
+	<li><strong>Signal Type</strong> (hardware-paced AO support only): if the device supports digital output scanning, select <strong>Square Wave</strong> to change to a square wave control to configure the output channel settings.<br><br>
+	<img src="../images/DOutCtrlContext.png" alt="" width="240" border="0"></li>
+</ul></td></tr>
+<tr><td><img src="../images/do_sqwave.png" alt="DOUT wave control" width="88" height="96" border="0"></td><td><strong>Digital square wave control</strong><br><br>If the selected device supports digital output scanning and all digital bits on the port are configured for output, select <strong>Signal Type&raquo;Square Wave</strong> from the context menu to change from a switch to a square wave control.<br><br>
+To change back to a switch control, select <strong>Signal Type&raquo;Switch</strong> from the context menu.</td></tr>
+
+<tr><td><a name="coutcontrols">Counter/Timer Output</a></td><td><img src="../images/co_freq-dutycyl.png" alt="COUT control" width="88" border="0" align="center"></td><td>Use the pulse output control to configure the pulse settings before or during an acquisition.</td></tr>
+</table>
+
+</body>
+</html>

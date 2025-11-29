@@ -1,0 +1,68 @@
+<!DOCTYPE html><!-- saved from url=(0014)about:internet -->
+
+<html>
+<head>
+
+<title>Daten anzeigen und loggen</title><!--(Meta) insert after title ======================================-->
+
+
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"><!--(Links)=========================================================-->
+
+
+<link href="..\MCHelp.css" rel="stylesheet" type="text/css">
+
+
+</head><!--(Body)==========================================================-->
+
+
+<body>
+
+<h1>Daten anzeigen und loggen</h1>
+<p>DAQami kann Messdaten erfassen, speichern und anzeigen.</p>
+<p>Messdaten können in eine .csv-Datei exportiert werden, sobald die Erfassung beendet ist.</p>
+<p>Messdaten der aktivierten Kanäle können in einer Technical Data Management Streaming (TDMS) Datei gespeichert werden. Unter <strong>Logging-Optionen</strong> können Sie den Dateinamen und den Speicherort angeben.</p>
+<p>Aktuell anzeigte Daten können auch direkt aus den Anzeigen exportiert werden.</p>
+
+<p>Während der Anzeige der Messdaten können Sie mit dem Feststell-Symbol zwischen Live-Modus und Rückblick-Modus wechseln.</p>
+
+<div class="stepnoborder">
+<table cellspacing="7" width="95%"> 
+<tr><td><img src="../images/Icon-lock-live.png" alt="Live-Modus" width="24" border="0" class="inline"></td><td>Wenn das Symbol <em>gesperrt</em> anzeigt, werden in der Anzeige die jeweils neuesten Daten der aktuell laufenden Erfassung dargestellt.<br><br>Klicken Sie auf das Symbol, um in den Rückblick-Modus zu wechseln.</td></tr>
+<tr><td><img src="../images/Icon-lock-review.png" alt="Rückblick-Modus" width="24" border="0" class="inline"></td><td>Wenn das Symbol <em>entsperrt</em> zeigt, befindet sich die Anzeige im Rückblick-Modus. Ein Rollbalken erscheint, mit dem auf zurückliegende Daten gescrollt werden kann. Die Datenerfassung läuft ununterbrochen weiter entsprechend der Konfiguration.<br><br>Klicken Sie auf das Symbol, um in den Live-Modus zu wechseln.</td></tr>
+</table>
+</div>
+<p>Mit  den Tasten im DAQami <a href="../GetStarted/MainWindow.htm">Hauptfenster</a> kann eingestellt werden, ob Daten nur erfasst oder erfasst und gespeichert werden sollen:</p>
+
+<div class="stepnoborder">
+<table cellspacing="7" width="95%"> 
+<tr><td><img src="../images/Icon-log.png" alt="Erfassung starten und Messdaten auf Festplatte speichern." width="25" border="0" class="inline"></td><td>Erfassung starten und Messdaten aller aktivierten Kanäle in einer TDMS-Datei speichern. Optional können bis zu 1 Million Messdaten angezeigt und in eine .csv-Datei exportiert werden.<br><br> <strong>Hinweis:</strong> Bei der kontinuierlichen Erfassung von mehr als 1 Million Messwerten pro Kanal könnten Performanceprobleme in Abhängigkeit vom PC, auf dem DAQami läuft, von der Anzahl der erfassten Kanäle, von der Erfassungsrate und anderer Faktoren entstehen. Unter diesen Umständen müssen Sie die Erfassungsrate und die Anzahl der aktivierten Kanäle verringern und/oder eine schnellere Festplatte installieren.</td></tr>
+<tr><td><img src="../images/Icon-start.png" alt="Start-Symbol" width="25" border="0" class="inline"></td><td>Erfassung starten und optional bis zu 1 Million Samples pro Kanal anzeigen und in eine .csv-Datei exportieren. Daten werden nicht in eine TDMS-Datei gespeichert. </td></tr>
+
+<tr><td><img src="../images/Icon-stop.png" alt="Stopp-Symbol" width="25" border="0" class="inline"></td><td>Erfassung beenden. Die Messdaten können in eine .csv-Datei exportiert werden, sobald die Erfassung beendet ist.</td></tr>
+
+</table>
+</div>
+<p>Der Zeitstempel bezieht sich auf den ersten Kanal in der Erfassung.</p><!-- video link ======================================================================-->
+
+
+<h3>Demo-Video</h3>
+<p>Klicken Sie auf <strong>Wiedergabe</strong> um ein Video anzuzeigen, das den Wechsel im Anzeigemodus zwischen Live und Rückblick erklärt.</p>
+
+<p align="center">
+<video width="480" controls>
+  <source src="../video/daqami-data.mp4" type="video/mp4">
+  Ihr Browser unterstützt keine Anzeige von Videos.
+</video></p>
+
+<p>Falls Sie dieses Video nicht betrachten können, wechseln Sie zum <a href="http://http://www.de.mccdaq.com/daq-software/DAQami.aspx">DAQami Demo-Video</a>. Es zeigt detailliert, wie die Konfiguration und Datenerfassung mit DAQami durchgeführt wird.</p>
+
+<h2>Siehe auch</h2>
+<p><a href="../Config/Channel.htm">Kanäle konfigurieren</a></p>
+<p><a href="LogOptions.htm">Logging-Optionen</a></p>
+<p><a href="DataExport.htm">Daten exportieren</a></p>
+<p><a href="DataOpen.htm">Gespeicherte Daten öffnen</a></p>
+<p><a href="../Display/Strip.htm">Linienschreiber</a></p>
+<p><a href="../Display/Scalar.htm">Numerische Anzeige</a></p>
+<p><a href="../Display/Block.htm">Oszilloskop</a></p>
+</body>
+</html>

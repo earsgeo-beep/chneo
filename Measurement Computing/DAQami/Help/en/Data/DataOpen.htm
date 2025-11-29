@@ -1,0 +1,46 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!-- saved from url=(0014)about:internet -->
+<html>
+<head>
+
+<title>Opening Saved Data</title>
+
+<!--(Meta) insert after title ======================================-->
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+
+<!--(Links)=========================================================-->
+<link href="../MCHelp.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<!--(Body)==========================================================-->
+<body>
+
+
+<h1>Opening Saved Data</h1>
+<p>DAQami logs data and configured settings to a <span class="code">.tdms</span> file each time you click <img src="../images/Icon-log.png" alt="Run the acquisition and log the data to disk" width="11" border="0"> to run an acquisition.
+<br><br>To open a data file, complete the following steps.</p>
+<ol>
+<li>Launch DAQami and click <strong>Open Saved Data</strong> on the <strong>Getting Started</strong> dialog box, or select <img src="../images/Icon-toolsmenu.png" alt="Gear icon" width="15" border="0" class="inline">&raquo;<strong>Open Saved Data</strong>.
+<br><br><img src="../images/Tools-OpenSavedData.jpg" alt="Open Saved Data option" width="449" border="0"></li>
+
+<li>If a configuration file is open, you are prompted to save changes made to it.</li>
+<li>Select a DAQami data file from the <strong>Open Saved Data</strong> dialog box.</li>
+<li class="none">Because DAQami can only store in memory a maximum of 1 million samples per channel of data, if you open a data file containing more than 1 million samples per channel, you are prompted to select a range of data (1 million samples or less).<br><br>
+Use the scrollbar to select a range of data to load from the file, or enter a range of data based on <strong>Absolute Time</strong>/<strong>Relative Time</strong>.
+<br><br><p style="text-align:center"><img src="../images/OpenFile1mill.png" alt="Open Saved Data option" width="556" border="0"></p>
+	<br><br><strong>Tip</strong>: Select a file under <strong>Recent Data Files</strong> on the Getting Started dialog box to open a recently opened data file.</li>
+	</ol>
+	<p>When you open saved data, the device, channel, sample rate, trigger, and display settings associated with the data are loaded into DAQami. All DAQami features are available when you open a data file &ndash; you can add displays, drag channels between displays, add cursors, and so on.</p>
+<p>If you add or remove displays, edit display settings, and/or change the color or name of a channel, you can save these changes to the data file by selecting <img src="../images/Icon-toolsmenu.png" alt="Gear icon" width="15" border="0" class="inline">&raquo;<strong>Save Display Settings to Data File</strong>.</p>
+	<p>You can acquire additional data if the same device is still connected. When you acquire additional data, a new data file is created. Select the <strong>Overwrite</strong> option button on the <strong>Logging Options</strong> dialog box to replace the existing data file with new data.</p> 
+
+
+<h3>See Also</h3>
+<p><a href="DataExport.htm">Exporting Data</a></p>
+<p><a href="../GetStarted/GetStarted.htm">Getting Started Dialog Box</a></p>
+<p><a href="LogOptions.htm">Logging Options Dialog Box</a></p>
+<p><a href="../GetStarted/ToolsMenu.htm">Gear Menu</a></p>
+<p><a href="DispSettSave.htm">Updating Display Settings in a Data File</a></p>
+</body>
+</html>

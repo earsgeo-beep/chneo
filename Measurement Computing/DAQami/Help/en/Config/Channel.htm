@@ -1,0 +1,372 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!-- saved from url=(0014)about:internet -->
+<html>
+<head>
+
+<title>Configuring Channels</title>
+
+<!--favicon code==============================================-->
+	<link rel="shortcut icon" href="http://www.favicon.ico" />
+	<link type="image/x-icon" rel="icon" href="favicon.ico" />
+	<link type="image/x-icon" rel="shortcut icon" href="favicon.ico" />	
+	
+	<link rel="shortcut icon" type="image/x-icon" href="data:image/ico;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAQAQAAAAAAAAAAAAAAAAA
+AAAAAADanA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7///////v48v/anA7/2pwO/9qcDv/anA7/2pwO///////anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv///////////9qcDv/anA7/2pwO/////////////////9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7//////9qcDv//////2pwO/9qcDv//////2pwO///////anA7/
+2pwO/9qcDv/anA7////////////anA7/2pwO///////anA7/2pwO////////////2pwO/9qcDv//
+/////////9qcDv//////2pwO///////anA7//////9qcDv//////2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO////////////2pwO///////anA7/2pwO/9qcDv///////////9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAA==">
+
+<!--(Meta) insert after title ======================================-->
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+
+<!--(Links)=========================================================-->
+<link href="..\MCHelp.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<!--(Body)==========================================================-->
+<body>
+
+<h1>Configuring Channels</h1>
+<p>Use the <strong>Channels tab</strong> on the Configuration Panel to activate and configure the analog, digital, and counter I/O channels to include in the acquisition. The settings that display are specific to the device selected on the Device Panel.</p>
+<p>Channel settings are stored in a <span class="code">.amicfg</span> file when you save the configuration.</p>
+
+<p><strong>Note</strong>: When running <em>concurrent</em> input and/or output operations with DAQami &ndash; whether among multiple devices or on a single device &ndash; there may be time lags between the data being acquired and/or generated for each operation. Although every effort is made to coordinate data timing between subsystems and devices, because all except one susbsystem is started through software, the <em>virtual</em> nature of the trigger for starting each operation  results in some variation, particularly in the starting time.<br><br>
+When running <em>composite</em> I/O operations with DAQami using USB-1808 Series or USB-CTR Series devices, all susbsystem operations are synchronized by sharing a single hardware clock.</p>
+<p><strong>Note</strong>: When continuously acquiring more than 1 million samples per channel, you may experience performance issues depending on the PC that is running DAQami, the number of channels being sampled, the sample rate, and other factors. For optimal performance in this scenario, reduce the sample rate, reduce the number of active channels, and/or install a faster hard drive.</p>
+<p><strong>Tip</strong>: When selecting channels on this tab, press &lt;Shift&gt; to select multiple contiguous channels at the same time, or &lt;Ctrl&gt; to select and configure multiple non-contiguous channels. To select all channels, click anywhere in the grid and press &lt;Ctrl-A&gt;. The settings selected for one channel are applied to all selected <em>active</em> channels.</p>
+
+
+	
+
+<p>Click on the links below to go to the configuration procedure for each channel type:</p>
+<ul>
+	<li><a href="#AI">Analog input channels</a></li>
+	<li><a href="#AO">Analog output channels</a></li>
+	<li><a href="#DIO">Digital I/O channels</a></li>
+	<li><a href="#CI">Counter input channels</a></li>
+	<li><a href="#CO">Counter/timer output channels</a></li>
+</ul>
+
+<!-- Analog Input channel procedure ========================================================================-->
+<h2><a name="AI">Configuring Analog Input Channels</a></h2>
+<p>Complete the following steps to configure analog input settings:</p>
+<ol>	
+	<li>Select the <strong>Active</strong> checkbox for each analog input channel that you want to activate. The settings for each activated channel become enabled.</li>
+	<li>To change the channel color, click the color swatch to open a color palette and select a color. The selected color is applied to the channel icon and data trace on displays.</li>
+	<li>To change the channel name, double-click in the <strong>Channels</strong> column and enter the new name.</li>
+	<li>If the device supports multiple measurement types, click the down arrow in the <strong>Type</strong> list and select the measurement type for the channel.</li>
+	<li>The next available channel setting depends on the  <strong>Type</strong> setting:
+	<ul>
+		<li>Selecting <strong>Voltage</strong> enables the <strong>Range</strong> list. Click the down arrow and select the voltage range for the acquisition.</li>
+		<li>If the device supports mixed channel modes on a per-channel basis, click the down arrow in the <strong>Channel Mode</strong> list and select <strong>Differential</strong> or <strong>Single-Ended</strong> for the channel.</li>
+<li>Selecting <strong>Temperature</strong> enables the <strong>TC Type</strong> list. Click the down arrow and select a thermocouple (TC) type. This column is only visible when the selected device supports thermocouple measurements.</li>
+</ul></li>
+<li class="none"><strong>Note</strong>: When acquiring data from a USB-2408 Series or USB-2416 Series device, click the down arrow on the <strong>Data Rate</strong> list to select a data rate for the acquisition. The maximum sample rate depends upon the data rate set for the channel(s) in the acquisition, and also controls noise filtering on each channel. Refer to the <a href="#datarate">Setting the data rate to control noise filtering</a> discussion below for more information.</li>
+	<li value="6">Select the <strong>Units</strong> to use for the acquisition.<br><br>
+	If you select <strong>Custom</strong>, complete the following steps to create a custom unit:
+	<ol>
+	<li>In the <strong>Multiplier</strong> textbox, enter the value to use to scale data and to calculate the y-axis range. The default is 1. </li>
+	<li>In the <strong>Offset</strong> textbox, enter a value to offset the data. The default is 0.</li>
+</ol></li>
+</ol>
+
+<p align="center"><img src="../images/aiconfig.png" alt="Analog input settings" width="533" height="356" border="0"></p>
+
+<!-- Analog iput channel settings ================================================================-->
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>Analog Input Settings</strong></td></tr>
+
+<tr><td width="15%">Color swatch</td><td>The color applied to the channel icon and channel data on a display. Click to open a color palette and select a color.</td></tr>
+
+<tr><td>Channels</td><td>The name of each channel on the device. The name is included on each display to which you add the channel. You can enter a new name of up to 25 characters.</td></tr>
+
+<tr><td>Active</td><td>The checkbox used to activate/deactivate a channel. Select the checkbox for each channel to include in the acquisition. Activated channels are listed on the Device Panel, and active input channel data is logged. Active channels can be added to displays.</td></tr>
+
+<tr><td>Type</td><td>The analog measurement type(s) supported by the device.</td></tr>
+
+<tr><td>Range</td><td>The range(s) supported by the device. This column is enabled when <strong>Type</strong> is set to <strong>Voltage</strong>.</td></tr>
+
+<tr><td>TC Type</td><td>The TC types supported by the device. This column is enabled when <strong>Type</strong> is set to <strong>Temperature</strong>; it is only visible if the device supports temperature measurements.</td></tr>
+
+<tr><td>Channel Mode</td><td>If the selected device supports configuring some channels as single-ended and some as differential,  select the mode for the selected channel. The default mode is <strong>Differential</strong>.</td></tr>
+
+<tr><td>Data Rate</td><td>USB-2408 Series and USB-2416 Series only. When acquiring data with a USB-2408 Series or USB-2416 Series device, the data rate controls the amount of noise filtering on each channel. By reducing the data rate, the averaging of samples increases, and noise drops correspondingly. If low noise is your main concern, select very low data rates starting at 2.5 Hz. At low rates, much of the noise is averaged out of the data, and issues such as reference noise become less important. Refer to the <a href="#datarate">Setting the data rate to control noise filtering</a> discussion below for more information.</td></tr>
+
+<tr><td>Units</td><td>The unit used to convert the data. Selectable values are specific to the measurement type. Select <strong>Custom</strong> to create a unit not available on the list.<br><br>The unit is shown in parentheses after the channel name below the <strong>Active Channels</strong> list on the Device Panel.</td></tr>
+
+<tr><td>Multiplier</td><td>The value used to scale data and to calculate the y-axis upper and lower range. This column is enabled when <strong>Units</strong> is set to <strong>Custom</strong>.</td></tr>
+
+<tr><td>Offset</td><td>The value used to offset each data point. This column is enabled when <strong>Units</strong> is set to <strong>Custom</strong>.</td></tr>
+</table>
+</div>
+
+<!-- Anaolg Output channel procedure ================================================================-->
+<h2><a name="AO">Configuring Analog Output Channels</a></h2>
+
+<p>Complete the following steps to configure analog output settings:</p>
+<ol>
+	<li>Select the <strong>Active</strong> checkbox for each analog output channel that you want to activate. The settings for each activated channel become enabled.</li>
+	<li>To change the channel color, click the color swatch to open a color palette and select a color. The selected color is applied to the channel icon and data trace on displays.</li>
+	<li>To change the channel name, double-click in the <strong>Channels</strong> column and enter the new name.</li>	
+</ol>
+
+<p align="center"><img src="../images/aoconfig.png" alt="Analog output settings" width="170" border="0"></p>
+
+<!-- Analog Output channel settings ================================================================-->
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>Analog Output Settings</strong></td></tr>
+
+<tr><td width="15%">Color swatch</td><td>The color applied to the channel icon and channel data on a display. Click to open a color palette and select a color.</td></tr>
+
+<tr><td>Channels</td><td>The name of each channel on the device. The name is included on each display to which you add the channel. You can enter a new name of up to 25 characters.</td></tr>
+
+<tr><td>Active</td><td>The checkbox used to activate/deactivate a channel. Select the checkbox for each channel to include in the acquisition. Activated channels are listed on the Device Panel, and active channels can be added displays.</td></tr>
+</table>
+</div>
+
+<p><strong>Output control</strong>: Adding analog output channels to the Output display lets you manipulate the output voltage during the acquisition. If the selected device supports output scanning, you can also modify waveform settings. Refer to the <a href="../Display/Output.htm#outputcontrols">Output Channel Controls</a> discussion for more information about the real-time controls available with analog output channels.</p>
+
+<!-- DIO channel procedure ================================================================-->
+<h3><a name="DIO">Configuring Digital I/O Channels</a></h3>
+<p>Typical digital settings are shown here. The settings which display are specific to the selected device, and may differ from this example.</p>
+
+<p>Complete the following steps to configure digital I/O settings:</p>
+
+<ol>
+	<li>Select the <strong>Active</strong> checkbox for each digital channel that you want to activate. The settings for each activated channel become enabled.</li>
+	<li>To change the channel color (optional), click the color swatch to open a color palette and select a color. The selected color is applied to the channel icon and data trace on displays.</li>
+	<li>To change the channel name (optional), double-click in the <strong>Channels</strong> column and enter the new name.</li>
+<li>If the digital bit is configurable, click the down arrow in the <strong>Direction</strong> column and set the direction to either <em>Input</em> or <em>Output</em>.</li>
+<li class="none">When a port is bit-configurable, the digital bits will run faster when all the bits are configured for the same direction.</li>
+	<li class="none"><strong>TC-32 users</strong>: The digital bits on PortB are used only to monitor alarm outputs, and cannot be used to acquire data. Refer to the hardware user manual for more information about the TC-32 digital bits.</li>
+	</ol>
+
+<p align="center"><img src="../images/dioconfig.png" alt="DIO settings" width="281" border="0"></p>
+
+<!-- DIO channel channel settings ================================================================-->
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>Digital I/O Settings</strong></td></tr>
+<tr><td width="15%">Color swatch</td><td>The color applied to the channel icon and channel data on a display. Click to open a color palette and select a color.</td></tr>
+
+<tr><td>Channels</td><td>The name of each channel on the device. The name is included on each display to which you add the channel. You can enter a new name of up to 25 characters.</td></tr>
+
+<tr><td>Active</td><td>The checkbox used to activate/deactivate a channel. Select the checkbox for each channel to include in the acquisition. Activated channels are listed on the Device Panel, and active input channel data is logged. Active channels can be added to displays.</td></tr>
+
+<tr><td>Direction</td><td>When the bit direction is configurable, select Input or Output.</td></tr>
+</table>
+</div>
+
+<p><strong>Output control</strong>: Adding digital output channels to the Output display lets you manipulate the direction during the acquisition. If the selected device supports output scanning, you can also modify the square wave frequency and duty cycle. Refer to the <a href="../Display/Output.htm#outputcontrols">Output Channel Controls</a> discussion for more information about the real-time controls available with digital output channels.</p>
+
+<!-- Counter Input channel settings ================================================================-->
+<h2><a name="CI">Configuring Counter Input Channels</a></h2>
+<p>Typical counter input settings are shown here. The settings which display are specific to the selected device, and may differ from this example.</p>
+
+<p>Complete the following steps to configure counter input settings:</p>
+
+<ol>	
+	<li>Select the <strong>Active</strong> checkbox for each counter channel that you want to activate. The settings for each activated channel become enabled.</li>
+	<li>To change the channel color (optional), click the color swatch to open a color palette and select a color. The selected color is applied to the channel icon and data trace on displays.</li>
+	<li>To change the channel name (optional), double-click in the <strong>Channels</strong> column and enter the new name.</li>
+	<li>The <strong>Mode</strong> value is populated with the selection in the Selected Channel Settings area.</li>
+</ol>
+
+<p align="center"><img src="../images/ciconfig.png" alt="Counter input settings" width="520" height="373" border="0"></p>
+
+<!-- Events mode counter settings -->
+<h3>Configuring a Channel for Events Mode</h3>	
+<p>Events mode settings are shown in the image above. To configure a channel for event counting &ndash; counting rising or falling edges &ndash; complete the following steps:</p>
+<ol>
+	<li>Select <strong>Events</strong> from the <strong>Mode</strong> list.</li>
+	<li>From the <strong><a name="CountDir" id="CountDir">Count Direction</a></strong> list, select whether to count <strong>Up</strong> or <strong>Down</strong> from the <strong>Initial Count</strong>.</li>
+  	<li>If the device supports edge selection, from the <strong>Starting Edge</strong> list, select <strong>Rising</strong> to count rising edges, or <strong>Falling</strong> to count falling edges.</li>
+
+	<li>Leave the Units set to count <strong>Ticks</strong>, or choose <strong>Custom</strong> and enter a value. When Custom is selected, <strong>Multiplier</strong> and <strong>Offset</strong> columns are shown. 
+	<br>Multiplier and Offset values are used to scale counter data. The default multiplier is 1; the default offset is 0.</li>
+	<li>Enter the <strong>Initial Count</strong> of the counter when counting <strong>Up</strong> or <strong>Down</strong>.</li>
+	<li>Select the <strong><a name="recycle" id="recycle">Recycle</a></strong> checkbox to enable recycle mode and restart counting when the counter reaches the <strong>Maximum</strong> value (when counting up) or the <strong>Minimum</strong> value (when counting down). Clear this checkbox to stop the counter (Non-recycle mode) when <strong>Maximum</strong> or <strong>Minimum</strong> is reached.</li>
+	<li>Select the <strong>Clear on Read</strong> checkbox to clear the counter after each synchronous or asynchronous read. The value of the counter before it was cleared is latched and returned. The counter is typically cleared to zero, but depending on the counting mode, it may be cleared to the <strong>Minimum</strong> value.</li>
+	 <li>Select the <strong><a name="rlimit" id="rlimit">Range Limit</a></strong> checkbox to enable the <strong>Maximum</strong> and <strong>Minimum</strong> boxes. Set these values to mimic limit switches in a mechanical counter. The behavior of the counter depends on the <strong>Count Direction</strong> and <strong>Recycle</strong> settings:
+
+<table class="Bordered" width="70%" align="center">
+<tr><th>Count Direction</th><th>Recycle Checkbox</th><th>Counter Behavior</th></tr>
+<tr><td  class="Bordered" style="vertical-align: bottom;">Up</td><td  class="Bordered" style="vertical-align: bottom;">Selected</td><td  class="Bordered" style="vertical-align: bottom;">When the count reaches the Maximum value, the counter rolls over to the Minimum value.</td></tr>
+<tr><td  class="Bordered" style="vertical-align: bottom;">Up</td><td  class="Bordered" style="vertical-align: bottom;">Clear</td><td  class="Bordered" style="vertical-align: bottom;">When the count reaches the Maximum value, the counter stops.</td></tr>
+<tr><td  class="Bordered" style="vertical-align: bottom;">Down</td><td  class="Bordered" style="vertical-align: bottom;">Selected</td><td  class="Bordered" style="vertical-align: bottom;">When the count reaches the Minimum value, the counter rolls over to the Maximum value.</td></tr>
+<tr><td  class="Bordered" style="vertical-align: bottom;">Down</td><td  class="Bordered" style="vertical-align: bottom;">Clear</td><td  class="Bordered" style="vertical-align: bottom;">When the count reaches the Minimum value, the counter stops.</td></tr>
+</table></li>
+
+	<li>Counting resumes if the direction is reversed or if the counter is reloaded with a value between <strong>Maximum</strong> and <strong>Minimum</strong>.</li>
+
+ 	<li>Select one of the following functions from the <strong>Gate Function</strong> list:
+		<ul>
+		<li><strong>Disabled</strong>&mdash;Gating is disabled.</li>
+		<li><strong>Gate Counter</strong>&mdash;The gate input gates the counter. By default, the counter is enabled when the gate signal is high. When the gate signal is low, the counter is disabled, but holds the count value.</li>
+		<li><strong>Trigger	Counter</strong>&mdash;The counter starts counting when the counter gate input goes active. By default, active is on the rising edge.</li>
+		<li><strong>Count Direction</strong>&mdash;The counter input acts as the pulse source and the counter gate acts as the direction. By default, the counter increments when the counter gate = 1 (high) and decrements when the counter gate = 0 (low).</li>	
+		<li><strong>Clear Count</strong>&mdash;Clears the count to zero unless the <strong>Range Limit</strong> checkbox is selected. If the <strong>Range Limit</strong> is selected, the gate signal reloads the counter with the Minimum value.</li>
+	</ul></li> 
+
+	<li>If gating is enabled, select the <strong>Gate Invert</strong> checkbox to activate the gate on a low-level or falling-edge gate signal. By default, the gate is active on a high-level or rising-edge input signal. </li>
+</ol>
+
+<!-- Frequency Mode counter settings  =========================================================-->	
+<h3>Frequency Mode Settings</h3>
+<p>To configure a channel for frequency counting &ndash; counting cycles over a period of time &ndash; complete the following steps:</p>
+<ol>
+	<li>Select <strong>Frequency</strong> from the <strong>Mode</strong> list.</li>		
+</ol>
+<p align="center"><img src="../images/ctr_freqconfig.png" alt="Counter input settings" width="237" border="0"></p>
+<ol start="2">
+ 	<li>If the device supports edge selection, from the <strong>Starting Edge</strong> list select <strong>Rising</strong> to count rising edges, or <strong>Falling</strong> to count falling edges.</li>
+		<li>From the <strong>Units</strong> list, select <strong>Hz</strong>, <strong>kHz</strong>, or <strong>MHz</strong>.</li>
+ <li>From the <strong>Gate Function</strong> list, select <strong>Disabled</strong> to disable gating on the channel, or <strong>Gate Counter</strong> to enable gating on the channel.</li>
+<li>If gating is enabled, select the <strong>Gate Invert</strong> checkbox to activate the gate on a low-level gate signal. By default, the gate is active on a high-level input signal</li>
+</ol>
+
+<!-- Period or Pulse Width Mode counter settings =====================================================================-->
+<h3>Configuring a Channel for Period Counting Mode or Pulse Width Mode</h3>
+
+<p>To configure a channel for period counting &ndash; calculating the period of a cycle &ndash; or Pulse Width counting  &ndash;  measuring the time from the rising edge to the falling edge, or vice versa, on a counter input signal &ndash; complete the following steps:</p>
+<ol>
+	<li>Select <strong>Period</strong> or <strong>Pulse Width</strong> from the <strong>Mode</strong> list. The settings below are the same for both modes.</li>
+</ol>
+<p align="center"><img src="../images/ctr_periodconfig.png" alt="Counter input settings" width="236" border="0"></p>
+<ol start="2">
+ 	<li>If the device supports edge selection, from the <strong>Starting Edge</strong> list, select <strong>Rising</strong> to count rising edges, or <strong>Falling</strong> to count falling edges.</li>
+		<li>From the <strong>Units</strong> list, select <strong>s</strong> (seconds), <strong>ms</strong> (milliseconds), <strong>&micro;s</strong> (microseconds), or <strong>Ticks</strong>.</li>
+ <li>From the <strong>Gate Function</strong> list, select <strong>Disabled</strong> to disable gating on the channel, or <strong>Gate Counter</strong> to enable gating on the channel.</li>
+<li>If gating is enabled, select the <strong>Gate Invert</strong> checkbox to activate the gate on a low-level gate signal. By default, the gate is active on a high-level input signal</li>
+</ol>
+
+<!-- Timing Mode counter settings =====================================================================-->
+<h3>Configuring a Channel for Timing Mode</h3>	
+<p>To configure a channel for timing mode &ndash; calculating the time between an event on a counter input and a subsequent event on a counter gate &ndash; complete the following steps:</p>
+<ol>
+	<li>Select <strong>Timing</strong> from the <strong>Mode</strong> list.
+
+<p align="center"><img src="../images/ctr_timingconfig.png" alt="Counter input settings" width="236" border="0"></p>
+</li>
+ 	<li>If the device supports edge selection, from the <strong>Starting Edge</strong> list, select <strong>Rising</strong> to count rising edges, or <strong>Falling</strong> to count falling edges.</li>
+	<li>From the <strong>Units</strong> list, select <strong>s</strong> (seconds), <strong>ms</strong> (milliseconds), <strong>&micro;s</strong> (microseconds), or <strong>Ticks</strong>.</li>
+<li>If gating is enabled, select the <strong>Gate Invert</strong> checkbox to invert the <strong>Starting Edge</strong> setting. <ul>
+	<li>If <strong>Rising</strong> is selected, then selecting <strong>Gate Invert</strong> inverts the gate to measure to the falling edge.</li>
+	<li>If <strong>Falling</strong> is selected for Starting Edge, then selecting <strong>Gate Invert</strong> inverts the gate to measure to the rising edge.</li>
+</ul></li>
+
+</ol>
+
+<!-- Counter input channel settings ================================================================-->
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>Counter Input Settings</strong></td></tr>
+
+	<tr><td width="15%">Color swatch</td><td>The color applied to the channel icon and channel data on a display. Click to open a color palette and select a color.</td></tr>
+
+	<tr><td>Channels</td><td>The name of each channel on the device. The name is included on each display to which you add the channel. You can enter a new name of up to 25 characters.</td></tr>
+
+	<tr><td>Active</td><td>The checkbox used to activate/deactivate a channel. Select the checkbox for each channel to include in the acquisition. Activated channels are listed on the Device Panel, and active input channel data is logged. Active channels can be added to displays.</td></tr>
+
+	<tr><td>Mode</td><td>The counter mode. The following counter modes are supported (depending on the counter functionality of the device):
+	<ul>
+		<li><strong>Event</strong>&mdash;Counts rising or falling edges.</li>
+		<li><strong>Frequency</strong>&mdash;Counts cycles over a specified period of time.</li>
+		<li><strong>Period</strong>&mdash;Measures the period of a cycle.</li>
+		<li><strong>Pulse</strong>&mdash;Measures the time from the rising edge to the falling edge, or vice versa, on a counter input signal.</li>
+		<li><strong>Timing</strong>&mdash;Measures the time between an event on a counter input and a subsequent event on a counter gate.</li>
+</ul></td></tr>
+
+	<tr><td>Count Direction</td><td>When the selected Mode is <strong>Events</strong>, select <strong>Up</strong> to count up from <strong> Initial count</strong>, or <strong>Down</strong> to count down from <strong>Initial count</strong></td></tr>
+
+	<tr><td>Starting Edge</td><td>The edge to count; select <strong>Rising</strong> to count rising edges, or <strong>Falling</strong> to count falling edges.</td></tr>
+
+	<tr><td>Units</td><td>The unit used to convert the data. Selectable values are specific to the selected <strong>Mode</strong>. A custom unit can also be entered for each mode.</td></tr>
+
+		<tr><td>Initial Count</td><td>The starting value when counting up or down.</td></tr>		
+		<tr><td>Recycle</td><td>Enables the counter to restart counting when a specified value is reached.</td></tr>
+		<tr><td>Clear on Read</td><td>Clears the counter after each read.</td></tr>
+		<tr><td>Range Limit</td><td>Minimum and maximum values to read.</td></tr>
+		<tr><td>Gate Function:</td><td>Enables a specific input to gate the counter. Selectable values are specific to the selected <strong>Mode</strong>.</td></tr>
+	<tr><td>Gate Invert:</td><td>Enables the counter to increment upon an active low/falling edge/gate low signal.</td></tr>
+</table>
+</div>
+
+<!-- Counter/Timer Output channel procedure ================================================================-->
+<h2><a name="CO">Configuring Counter/Timer Output Channels</a></h2>
+<p>Typical counter output settings are shown here.</p>
+
+<p>Complete the following steps to configure counter output settings:</p>
+<ol>
+	<li>Select the <strong>Active</strong> checkbox for each counter output channel that you want to activate. The settings for each activated channel become enabled.</li>
+	<li>To change the channel color, click the color swatch to open a color palette and select a color. The selected color is applied to the channel icon and data trace on displays.</li>
+	<li>To change the channel name, double-click in the <strong>Channels</strong> column and enter the new name.</li>	
+</ol>
+
+<p align="center"><img src="../images/coconfig.png" alt="Counter input settings" width="174" border="0"></p>
+
+<!-- Counter/Timer Output channel settings ================================================================-->
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>Counter/Timer Output settings</strong></td></tr>
+
+<tr><td width="15%">Color swatch</td><td>The color applied to the channel icon and channel data on a display. Click to open a color palette and select a color.</td></tr>
+
+<tr><td>Channels</td><td>The name of each channel on the device. The name is included on each display to which you add the channel. You can enter a new name of up to 25 characters.</td></tr>
+
+<tr><td>Active</td><td>The checkbox used to activate/deactivate a channel. Select the checkbox for each channel to include in the acquisition. Activated channels are listed on the Device Panel, and active channels can be added to displays.</td></tr>
+
+</table>
+</div>
+<p><strong>Output control</strong>: Adding counter output channels to the Output display lets you set frequency and duty cycle of the output. Refer to the <a href="../Display/Output.htm#outputcontrols">Output Channel Controls</a> discussion for more information about the real-time controls available with digital output channels.</p>
+
+<!-- Data rate settings -2408, 2416 only -->
+<h2><a name="datarate">Setting the data rate to control noise filtering</a> (USB-2408 Series and USB-2416 Series only)</h2>
+<p>The data rate controls the amount of the noise filtering on each channel in a DAQami acquisition. By reducing the data rate, the averaging of samples increases, and noise drops correspondingly.</p>
+<p>If low noise is your main concern, select a very low data rates starting from 2.5 Hz. At low rates, much of the noise is averaged out of the data, and issues such as reference noise become less important.</p>
+
+<p>At higher data rates, higher-frequency noise sources are not averaged out and can begin to be problematic. These
+noise sources include the noise inherent in the A/D converter itself, which is not reducible.
+Since TCs can pick up noise in your environment, select a data rate based on the primary noise frequency.</p>
+<p>For example, to reduce the effect of 60 Hz noise, select a data rate of 60 Hz (or a supported multiple of 60, such as 10 Hz or 5 Hz).</p>
+
+<p>When acquiring from multiple channels, the sample rate is the same for all channels, but channels with a lower data rate have more filtering, or averaging, performed on the data.</p>
+<p>For example, if you set a 10 Hz data rate for channel 0, and a 50 Hz data rate for channel 1, both
+channels pass the same number of samples per second to the host computer. However, more averaging is performed on channel 0 samples; therefore, channel 0 is sampled at a higher resolution.</p>
+<p>The A/D converter on USB-2408 Series and USB-2416 Series devices perform averaging, and the number of averages equals 30,000/data rate.
+In this example, channel 0 is sampled 3000 times over 100 ms, and all samples are averaged into one sample.
+Then, channel 1 is sampled 600 times over 20 ms, and samples are likewise averaged into one sample.
+The final samples are available to you at a maximum rate of about 8 Hz (8.245 Hz).</p>
+
+<p align="center"><img src="../images/DRate.png" alt="" width="407" height="91" border="0"></p>
+
+<!-- See also ===================================================================-->
+<h3>See Also</h3>
+
+<p><a href="Acquisition.htm">Configuring Acquisition Settings</a></p>
+<p><a href="Device.htm">Configuring a Device</a></p>
+<p><a href="ConfigSave.htm">Saving a Configuration File</a></p>
+<p><a href="http://www.mccdaq.com/usb-data-acquisition/USB-2408-Series.aspx">USB-2408 Series</a></p>
+<p><a href="http://www.mccdaq.com/usb-data-acquisition/USB-2416-Series.aspx">USB-2416 Series</a></p>
+
+</body>
+</html>

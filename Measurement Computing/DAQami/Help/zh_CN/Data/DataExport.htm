@@ -1,0 +1,91 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"><!-- saved from url=(0014)about:internet -->
+
+<html>
+<head>
+
+<title>导出数据</title><!--favicon code==============================================--><!-- Req'd for Chrome --><!--(Meta) insert after title ======================================-->
+
+ 	
+	<link type="image/x-icon" rel="icon" href="favicon.ico" />
+	<link type="image/x-icon" rel="shortcut icon" href="favicon.ico" />	
+	
+	
+	<link rel="shortcut icon" type="image/x-icon" href="data:image/ico;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAQAQAAAAAAAAAAAAAAAAA
+AAAAAADanA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7///////v48v/anA7/2pwO/9qcDv/anA7/2pwO///////anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv///////////9qcDv/anA7/2pwO/////////////////9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7//////9qcDv//////2pwO/9qcDv//////2pwO///////anA7/
+2pwO/9qcDv/anA7////////////anA7/2pwO///////anA7/2pwO////////////2pwO/9qcDv//
+/////////9qcDv//////2pwO///////anA7//////9qcDv//////2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO////////////2pwO///////anA7/2pwO/9qcDv///////////9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAA==">
+
+
+
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"><!--(Links)=========================================================-->
+
+
+<link href="../MCHelp.css" rel="stylesheet" type="text/css">
+
+</head><!--(Body)==========================================================-->
+
+
+<body>
+
+
+<h1>导出数据</h1>
+<p>在<strong>导出选项</strong>对话框中，每通道可导出一百万个点，并可将数据以逗号为分隔符，导出至(<span class="code">.csv</span>) 文件中。</p>
+<p>如果每通道采集的点数超过一百万，那么导出的数据记录的是最后一百万个样点。</p>
+<p>选择 <img src="../images/Icon-toolsmenu.png" alt="齿轮图标" width="20" border="0" class="inline">»<strong>导出数据</strong> 打开次对话框。</p>
+
+<p align="center"><img src="../images/Tools-ExportData.jpg" alt="数据记录选项" width="984" vspace="20" border="0"></p>
+<p>导出数据时，DAQami将为每个设备的模拟、数字和计数器通道分别创建(<span class="code">.csv</span>)文件。每个文件都有着和源文件相同的前缀名，同时用后缀来区分不同的设备及所保存的数据类型。</p>
+<p>例如，如果从USB-2408-2AO采集到的包含模拟、数字以及计数器数据的文件导出，同时把用USB-1608GX采集到的数字及计数器数据导出，则这五个文件将创建如下：</p><!-- Logging options ======================================================================-->
+<img src="../images/CSVfiles.png" alt="" width="384" height="112" border="1">
+
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>导出选项</strong></td></tr>
+
+<tr><td width="20%">导出路径</td><td>点击<strong>浏览</strong>，指定<span class="code">.csv</span>文件的导出路径。默认路径为 <span class="code">\Users\&lt;当前用户&gt;\Documents\Measurement Computing\DAQami</span>。</td></tr>
+
+<tr><td>选项</td><td><ul>
+	<li><strong>数据精度 (小数位数)</strong>：选择导出数据的小数点后的位数。</li>
+	<li><strong>相对时间</strong>：勾选复选框，使导出的数据使用相对时间。否则，使用绝对时间。</li>
+<li><strong>限制范围</strong>：勾选复选框，是导出的数据子集是在时间范围内的。你可以使用 <strong>绝对时间</strong> 或 <strong>相对时间</strong>来确定使用范围。每个范围的更新都会基于其他的变化。</li>
+</ul>
+</td></tr>
+
+<tr><td>预览</td><td>点击此按钮，在创建<span class="code">.csv</span>文件之前预览数据。下面列出了针对每一种数据类型的文件<strong>预览</strong>：<br><br><strong>模拟</strong><br><br><img src="../images/export-previewA.png" alt="模拟通道 .csv 数据预览" width="700"  border="0"> <br><br><strong>数字</strong><br><br><img src="../images/export-previewD.png" alt="数字通道 .csv 数据预览" width="700" border="0"> <br><br><strong>计数器</strong><br><br><img src="../images/export-previewC.png" alt="计数器通道 .csv 数据预览" width="700" border="0"> <br><br>点击<strong>导出至文件</strong>按钮，将数据导出至<span class="code">.csv</span> 文件，或点击<strong>取消</strong>按钮，放弃数据导出并关闭当前窗口。</td></tr>
+
+<tr><td>导出至文件</td><td>点击此按钮将数据导出至<span class="code">.csv</span>文件。文件将保存在指定的路径。<br><br>上述<span class="code">.csv</span>预览文件在Microsoft Excel中打开效果如下：<br><br>模拟<br><img src="../images/exported-dataA.png" alt="Excel中打开模拟csv数据文件" width="492" border="0"> <br><br>数字<br><img src="../images/exported-dataD.png" alt="Excel中打开数字csv数据文件" width="370" border="0"> <br><br>计数器<br><img src="../images/exported-dataC.png" alt="Excel中打开计数器csv数据文件" width="349" border="0">
+</td></tr>
+</table>
+
+
+</div>
+
+
+
+
+<h3>另请参阅</h3><!-- <p><a href="DataExport.htm">Exporting Logged Data</a></p>-->
+
+<p><a href="DataAcquire.htm">查看和记录数据</a></p>
+<p><a href="LogOptions.htm">配置数据记录选项</a></p>
+<p><a href="../Display/Strip.htm">带状显示图表</a><p>
+<p><a href="../Display/Scalar.htm">数值显示控件</a><p>
+<p><a href="../Display/Block.htm">块状显示图表</a><p>
+</body>
+</html>

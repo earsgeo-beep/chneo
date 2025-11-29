@@ -1,0 +1,68 @@
+<!DOCTYPE html><!-- saved from url=(0014)about:internet -->
+
+<html>
+<head>
+
+<title>查看和记录数据</title><!--(Meta) insert after title ======================================-->
+
+
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"><!--(Links)=========================================================-->
+
+
+<link href="..\MCHelp.css" rel="stylesheet" type="text/css">
+
+
+</head><!--(Body)==========================================================-->
+
+
+<body>
+
+<h1>查看和记录数据</h1>
+<p>DAQami可以采集、记录数据，并在显示控件中显示数据</p>
+<p>当采集停止时，采集到的数据可以被导出至.csv格式的文件中。</p>
+<p>激活通道的数据可以被记录至TDMS文件。您可在<strong>数据记录选项</strong>对话框中指定数据文件的路径和名称。</p>
+<p>控件同时可以导出目前显示在屏幕上的数据。</p>
+
+<p>当查看数据时，点击显示控件中的上锁/解锁图标，在实时模式和回放模式之间切换。</p>
+
+<div class="stepnoborder">
+<table cellspacing="7" width="95%"> 
+<tr><td><img src="../images/Icon-lock-live.png" alt="实时模式图标" width="24" border="0" class="inline"></td><td>当图标<em>上锁</em>时，显示控件工作在实时模式，不断更新最新采集到的数据。<br><br>点击图标切换至回放模式。</td></tr>
+<tr><td><img src="../images/Icon-lock-review.png" alt="回放模式图标" width="24" border="0" class="inline"></td><td>当图标<em>解锁</em>时，显示控件工作在回放模式。在回放模式的显示控件上，将显示水平滚动条。此时，新数据的采集任务仍正常工作。<br><br>点击图标切换至实时模式。</td></tr>
+</table>
+</div>
+<p>在DAQami <a href="../GetStarted/MainWindow.htm">主窗口</a> 中通过使用按钮来控制数据采集：</p>
+
+<div class="stepnoborder">
+<table cellspacing="7" width="95%"> 
+<tr><td><img src="../images/Icon-log.png" alt="启动数据采集并记录数据至硬盘中" width="25" border="0" class="inline"></td><td>启动数据采集，激活通道的数据被记录至TDMS文件。每通道可显示多达一百万个样点，并可以被导出至.csv文件。<br><br><strong>备注：</strong>当每通道需要连续记录超过一百万个样点时， 可能会出现一些性能问题，具体情况取决于运行DAQami软件的电脑。为了在这种情形下保持最佳性能，应当降低采样率，减少激活的通道数，或者安装一个更快速的硬盘驱动。</td></tr>
+<tr><td><img src="../images/Icon-start.png" alt="启动图标" width="25" border="0" class="inline"></td><td>启动数据采集，每通道可显示多达一百万个样点，并可将数据导出至.csv文件。无数据被记录至TDMS文件 </td></tr>
+
+<tr><td><img src="../images/Icon-stop.png" alt="停止图标" width="25" border="0" class="inline"></td><td>停止采集数据。当停止采集时，数据可以被记录至.csv文件。</td></tr>
+
+</table>
+</div>
+<p>软件将记录首个被扫描通道的时间戳。</p><!-- video link ======================================================================-->
+
+
+<h3>演示视频</h3>
+<p>点击下面的 <strong>播放</strong> 按钮，学习如何在实时模式与回放模式之间切换。</p>
+
+<p align="center">
+<video width="480" controls>
+  <source src="../video/daqami-data.mp4" type="video/mp4">
+  您的浏览器不支持视频卷标。
+</video></p>
+
+<p>如果您无法观看此视频，点击 <a href="http://china.mccdaq.com/daq-software/DAQami.aspx">DAQami 演示视频</a> 了解更多DAQami的使用方法。</p>
+
+<h2>另请参阅</h2>
+<p><a href="../Config/Channel.htm">配置通道</a></p>
+<p><a href="LogOptions.htm">数据记录选项</a></p>
+<p><a href="DataExport.htm">导出数据</a></p>
+<p><a href="DataOpen.htm">打开数据</a></p>
+<p><a href="../Display/Strip.htm">带状显示图表</a></p>
+<p><a href="../Display/Scalar.htm">数值显示控件</a></p>
+<p><a href="../Display/Block.htm">块状显示图表</a></p>
+</body>
+</html>

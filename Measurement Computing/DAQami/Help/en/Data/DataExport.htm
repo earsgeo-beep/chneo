@@ -1,0 +1,122 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!-- saved from url=(0014)about:internet -->
+<html>
+<head>
+
+<title>Exporting Data</title>
+
+ <!--favicon code==============================================-->	
+	<link type="image/x-icon" rel="icon" href="favicon.ico" />
+	<link type="image/x-icon" rel="shortcut icon" href="favicon.ico" />	
+	
+	<!-- Req'd for Chrome -->
+	<link rel="shortcut icon" type="image/x-icon" href="data:image/ico;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAQAQAAAAAAAAAAAAAAAAA
+AAAAAADanA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7///////v48v/anA7/2pwO/9qcDv/anA7/2pwO///////anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv///////////9qcDv/anA7/2pwO/////////////////9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7//////9qcDv//////2pwO/9qcDv//////2pwO///////anA7/
+2pwO/9qcDv/anA7////////////anA7/2pwO///////anA7/2pwO////////////2pwO/9qcDv//
+/////////9qcDv//////2pwO///////anA7//////9qcDv//////2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO////////////2pwO///////anA7/2pwO/9qcDv///////////9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAA==">
+
+
+<!--(Meta) insert after title ======================================-->
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+
+<!--(Links)=========================================================-->
+<link href="../MCHelp.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<!--(Body)==========================================================-->
+<body>
+
+
+<h1>Exporting Data</h1>
+<p>You can export up to 1 million samples per channel to comma-separated values (<span class="code">.csv</span>) files using the settings on the <strong>Export Options</strong> dialog box.</p>
+<p>If you acquire more than 1 million samples per channel, the last million samples in the files are exported.</p>
+<p>To open this dialog box, select <img src="../images/Icon-toolsmenu.png" alt="Gear icon" width="20" border="0" class="inline">&raquo;<strong>Export Data</strong>.</p>
+
+<p align="center"><img src="../images/Tools-ExportData.jpg" alt="Logging Options menu option" width="984" vspace="20" border="0"></p>
+<p>When you export a DAQami data file, a <span class="code">.csv</span> file is created for each device and for each input subsystem &ndash; analog, digital, and/or counter. Each file has the same root name as the source data file, but with a suffix added to it to indicate the device, the type of data in the file, and when the data was acquired.</p>
+<p>For example, if you export a file that contains analog, digital, and counter data acquired by a USB-2408-2AO, and digital and counter data acquired by a USB-1608GX, the following five files are created by the export for each device and subsystem:</p>
+<img src="../images/CSVfiles.png" alt="" width="384" height="112" border="1">
+<!-- Logging options ======================================================================-->
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>Export Options Dialog Box</strong></td></tr>
+
+<tr><td width="20%">Export Path</td><td>Click <strong>Browse</strong> to navigate to the location where you want to export the <span class="code">.csv</span> data file(s). Data is exported by default to the <span class="code">\Users\&lt;current user&gt;\Documents\Measurement Computing\DAQami</span> folder.</td></tr>
+
+<tr><td>Options</td><td><ul>
+	<li><strong>Data Precision (Decimal Places)</strong>: Enter the number of decimal places to include in the exported data</li>
+	<li><strong>Use Relative Time</strong>: Select this checkbox to export the data with the relative time that the data was acquired. Leave this checkbox unchecked to export the absolute time that data was acquired.</li>
+<li><strong>Limit Range</strong>: Select this checkbox to export a subset of the data based on a time range. You can specify the range using <strong>Absolute Time</strong> or <strong>Relative Time</strong>. Each range updates based on changes to the other.</li>
+<li><strong>Decimal Format</strong>: Click on the down arrow and select the decimal format to use when exporting to a .csv file:
+	<ul>
+		<li><strong>Windows Setting</strong>: Use the <strong>Decimal symbol</strong> specified in the <strong>Control Panel&raquo;Region and Language</strong> setting.</li>
+		<li><strong>Dot</strong>: Use a dot (.) as the decimal symbol.</li>
+		<li><strong>Comma</strong>: Use a comma (,) as the decimal symbol.</li>
+	</ul></li>
+<li><strong>Separator</strong>: Click on the down arrow and select the symbol to use to separate each column of data when exporting to a .csv file:
+	<ul>
+		<li><strong>Windows Setting</strong>: Use the <strong>List separator</strong> symbol specified in the <strong>Control Panel&raquo;Region and Language</strong> setting to separate each column of data.</li>
+		<li><strong>Tab</strong>: Use a tab to separate each column of data.</li>
+		<li><strong>Semicolon</strong>: Use a semicolon (;) to separate each column of data.</li>
+		<li><strong>Comma</strong>: Use a comma (,) to separate each column of data.</li>
+	</ul></li>
+<li><strong>Double Quotation Marks Around Values</strong>: Select this checkbox to use double quotation marks to designate text values when exporting to a .csv file.<br><br>
+When this checkbox is clear, no character is used to designate text values.</td></tr>
+</ul>
+</td></tr>
+
+<tr><td>Preview</td><td>Click this button to show the exported data without creating the <span class="code">.csv</span> file yet. Examples of each type of data in the <strong>Preview</strong> dialog box are shown here:
+<br><br><strong>Analog</strong> tab
+<br><br><img src="../images/export-previewA.png" alt="Analog .csv data preview" width="700"  border="0">
+<br><br><strong>Digital</strong> tab
+<br><br><img src="../images/export-previewD.png" alt="Digital .csv data preview" width="700" border="0">
+<br><br><strong>Counter</strong> tab
+<br><br>
+<img src="../images/export-previewC.png" alt="Counter .csv data preview" width="700" border="0">
+
+<br><br>Click the <strong>Export to file</strong> button to export the data to a <span class="code">.csv</span> file, or click <strong>Cancel</strong> to close the window without exporting the data.</td></tr>
+
+<tr><td>Export to file</td><td>Click this button to export the acquired data to a <span class="code">.csv</span> file. The file is stored in the location specified in the Export Path field.
+<br><br>Examples of each <span class="code">.csv</span> file previewed above are shown opened in Microsoft Excel:
+<br><br>Analog data
+<br><img src="../images/exported-dataA.png" alt="csv analog data opened in Excel" width="492" border="0">
+<br><br>Digital data
+<br><img src="../images/exported-dataD.png" alt="csv digital data opened in Excel" width="370" border="0">
+<br><br>Counter data
+<br><img src="../images/exported-dataC.png" alt="csv counter data opened in Excel" width="349" border="0">
+</td></tr>
+</table>
+
+
+</div>
+
+
+
+
+<h3>See Also</h3>
+<!-- <p><a href="DataExport.htm">Exporting Logged Data</a></p>-->
+<p><a href="DataAcquire.htm">Viewing and Logging Data</p>
+<p><a href="LogOptions.htm">Configuring Logging Options</a></p>
+<p><a href="../Display/Strip.htm">Strip Display</a><p>
+<p><a href="../Display/Scalar.htm">Scalar Display</a><p>
+<p><a href="../Display/Block.htm">Block Display</a><p>
+</body>
+</html>

@@ -1,0 +1,181 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!-- saved from url=(0014)about:internet -->
+<html>
+<head>
+
+<title>Configuring Sample Rates and Triggers</title>
+
+<!--favicon code==============================================-->
+	<link rel="shortcut icon" href="http://www.favicon.ico" />
+	<link type="image/x-icon" rel="icon" href="favicon.ico" />
+	<link type="image/x-icon" rel="shortcut icon" href="favicon.ico" />	
+	
+	<link rel="shortcut icon" type="image/x-icon" href="data:image/ico;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAQAQAAAAAAAAAAAAAAAAA
+AAAAAADanA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7///////v48v/anA7/2pwO/9qcDv/anA7/2pwO///////anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv///////////9qcDv/anA7/2pwO/////////////////9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7//////9qcDv//////2pwO/9qcDv//////2pwO///////anA7/
+2pwO/9qcDv/anA7////////////anA7/2pwO///////anA7/2pwO////////////2pwO/9qcDv//
+/////////9qcDv//////2pwO///////anA7//////9qcDv//////2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO////////////2pwO///////anA7/2pwO/9qcDv///////////9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAA==">
+	
+<!--(Meta) insert after title ======================================-->
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+
+<!--(Links)=========================================================-->
+<link href="..\MCHelp.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<!--(Body)==========================================================-->
+<body>
+
+<h1>Configuring Sample Rates and Triggers</h1>
+
+<p>For each device in the acquisition, you can configure the clock source and sample rates for each type of activated channel on the <strong>Sample Rates</strong> tab. You can also configure start and stop triggers for an analog input device on the  <strong>Triggers</strong> tab.</p>
+
+<p>Click on the <strong>Sample Rates</strong> tab and complete the following steps to configure the sample rates for a device:</p>
+
+<ol>
+	<li>Select a device from the Device Panel.</li>
+	<li>For most devices, enter the sample rate in samples per second (S/s) per channel for each type of activated input channel	 &ndash; analog inputs in the <strong>Analog</strong> textbox, digital inputs in the <strong>Digital</strong> textbox, and counter inputs in the  <strong>Counter</strong> textbox.<br><br>
+For devices that support synchronous analog, digital, and counter operations &ndash; also called <em>composite</em> operations &ndash; select one of the following clock options:
+
+<ul>
+	<li>Select the <strong>Shared Input Clock (Composite)</strong> checkbox to pace using one hardware clock to pace all activated input channels from all input subsystems &ndash; analog, digital, and/or counter input.<br><br>
+Enter a sample rate in samples per second (S/s) per channel for all activated input channels.</li>
+	<li>Clear the <strong>Shared Input Clock (Composite)</strong> checkbox to select one subsystem to pace using a hardware clock, while all other subsystems are paced using a software clock:
+	<ul>
+		<li><strong>Analog</strong>: Analog input operations are paced with a hardware clock, and all other operations are paced with a software clock.</li>
+<li><strong>Digital</strong>: Digital input operations are paced with a hardware clock, and all other operations are paced with a software clock.</li>
+		</li>
+<li><strong>Counter</strong>: Counter input operations are paced with a hardware clock, and all other operations are paced with a software clock.</li>
+	<li><strong>None</strong>: All input operations are paced with a software clock.</li>
+</ul></li>
+<li class="none">Enter the sample rate in samples per second (S/s) per channel for each activated subsystem &ndash; analog inputs in the <strong>Analog</strong> textbox, digital inputs in the <strong>Digital</strong> textbox, and counter inputs in the  <strong>Counter</strong> textbox.</li>
+</ul>
+</ol>	
+<p style="float:left; width:4em; margin-left:1em"><strong>Note:</strong></p>
+<p style="float:left">When continuously logging more than 1 million samples per channel, you may experience performance issues depending on the PC that is running DAQami, the number of channels being sampled, the sample rate, and other factors. For optimal performance in this scenario, reduce the sample rate, reduce the number of active channels, and/or install a faster hard drive.</p>
+
+	
+<p>Click on the <strong>Triggers</strong> tab and complete the following steps to configure triggers for a device:</p>
+<ol>
+	<li>Select a device from the Device Panel.</li>
+	<li>Select the start trigger source.
+<ul>
+	<li>Select the default <strong>Manual</strong> to start acquiring samples when you click <img src="../images/Icon-log.png" alt="Run the acquisition and log data to disk" width="11" border="0" class="inline"> or <img src="../images/Icon-start.png" alt="Run the acquisition without logging to disk" width="11" border="0" class="inline">.</li>
+<li>Select <strong>External-Analog</strong> or <strong>External-Digital</strong> to start acquiring samples when the trigger condition is met.
+ <ol>
+ 	<li>Select a device that supports the selected trigger type from the <strong>Device</strong> list.</li>
+	<li>Select a supported trigger mode from the <strong>Mode</strong> list.</li>
+	</ol></li>
+</ul></li>
+	<li>Select the stop trigger source. 
+	<ul>
+		<li>Select the default <strong>Manual</strong> to stop acquiring samples when you click <img src="../images/Icon-stop.png" alt="Stop the acquisition" width="11" border="0" class="inline">.</li>
+		<li>Select <strong>Sample Count</strong> to stop acquiring samples when specified number of samples are acquired.
+		<ol>
+		<li>Select a device and device subsystem &ndash; analog, digital, or counter input channels &ndash; to monitor for sample count.</li>
+	<li>Enter the number of samples (<strong>Sample Count</strong>). The acquisition stops when the specified number of samples are acquired by the selected device subsystem.</li>
+	</ol></li></li>
+</ul>
+</ol>
+
+<p>Sample rates and trigger settings are stored in a configuration file (<span class="code">.amicfg</span> file when you save the configuration.</p>
+<p>Trigger settings apply to all devices in the acquisition.</p>
+<p><strong>Note</strong>: When using multiple devices, start triggers from one device to another occur as close in time as possible; however, there may be some system-dependent latency between devices.</p>
+
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr><td><p style="text-align:center"><img src="../images/Rates_tab.png" alt="Sample Rates tab settings" width="363" border="1"></p></td><td><p style="text-align:center"><img src="../images/Trigs_tab.png" alt="Triggers tab settings" width="333" border="1"></p></td></tr>
+</table>
+</div>
+<!--  =========================================================================-->
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>Sample Rates Tab Settings</strong></td></tr>
+
+<tr><td><strong>Shared Input Clock (Composite)</strong></td><td>This checkbox only appears if the selected device supports synchronous analog, digital, and counter operations (<em>composite</em> operations).<br><br>
+	<ul class="table">
+		<li>Select this checkbox to use one hardware clock to pace all activated input channels from all input subsystems &ndash; analog, digital, and/or counter input.</li>
+<li>Clear this checkbox to select one subsystem option to pace with a hardware clock, while all other subsystems are paced with a software clock.
+<ul>
+	<li><strong>Analog</strong>: Select this option to pace analog input operations with a hardware clock, and pace all other operations are paced with a software clock.</li>
+<li><strong>Digital</strong>: Select this option to pace digital input operations with a hardware clock, and pace all other operations are paced with a software clock.</li>
+<li><strong>Counter</strong>: Select this option to pace counter input operations with a hardware clock, and pace all other operations are paced with a software clock.</li>
+		<li><strong>None</strong>: Select this option to pace all input operations with a software clock.</li>
+</ul></li>
+<li class="none">Enter the sample rate in samples per second (S/s) per channel for each activated subsystem.</li>
+</ul>
+	</td></tr>
+<tr><td><strong>Samples per second per channel</strong> textboxes</td><td>Depending on the type of device and the type of data being acquired, any combination of the following textboxes may be available to enter sample rates in S/s per channel:
+	<ul class="table">
+		<li><strong>Analog</strong> &ndash; If one or more analog input channels are activated, enter the per-channel analog sample rate for each analog channel.</li>
+	<li><strong>Digital</strong> &ndash; If one or more digital input channels are activated, enter the per-channel digital sample rate for each digital channel.</li>
+	<li><strong>Counter</strong> &ndash; If one or more counter input channels are activated, enter the per-channel counter sample rate.</li>
+<li><strong>Composite</strong> &ndash; If the <strong>Shared Input Clock (Composite)</strong> is selected, enter the per-channel sample rate for <em>all</em> activated input channels (all input subsystems).</li>
+</ul>
+The minimum and maximum sample rates per channel allowed by the device and number of active channels is shown below each text box.</td></tr>
+</table>
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>Triggers Tab Settings</strong></td></tr>
+
+
+
+<tr><td colspan="2"><strong>Start Trigger</strong></td></tr>
+<tr><td>Source</td><td>The trigger condition that starts the acquisition. The trigger settings that display update according to the selected device. Click the <strong>Source</strong> arrow and select a trigger source:
+
+	<ul class="table">
+		<li><strong>Manual</strong>: The acquisition starts when you click <img src="../images/Icon-log.png" alt="Run the acquisition and log data to disk" width="11" border="0" class="inline"> or <img src="../images/Icon-start.png" alt="Run the acquisition without logging to disk" width="11" border="0" class="inline">.</li>
+	
+		<li><strong>External-Analog</strong>: <em>All devices</em> start acquiring data when an external analog input signal meets the trigger criteria specified by the selected trigger mode on the selected device.
+<ul class="subtable">	
+	<li><strong>Rising Edge</strong>  &ndash; The acquisition is triggered when the signal transitions from below the level to above. Once conversions are enabled, the external trigger is ignored.<br> A <em>Level</em> text box is shown when this mode is selected.</li>
+	<li><strong>Falling Edge</strong> &ndash; The acquisition is triggered when the signal transitions from above the level to below. Once conversions are enabled, the external trigger is ignored.<br> A <em>Level</em> text box is shown when this mode is selected.</li>
+	<li><strong>Rising Slope</strong>  &ndash; The acquisition is triggered when the signal transitions from below low threshold to above high threshold. Once conversions are enabled, the external trigger is ignored.<br> <em>Low Threshold</em> and <em>High Threshold</em> text boxes are shown when this mode is selected.</li>
+	<li><strong>Falling Slope</strong>  &ndash; The acquisition is triggered when the signal transitions from above high threshold to below low threshold. Once conversions are enabled, the external trigger is ignored.<br> <em>Low Threshold</em> and <em>High Threshold</em> text boxes are shown when this mode is selected.</li>
+</ul></li>
+
+	<li><strong>External-Digital</strong>: Scanning starts when an external digital input signal meets the trigger criteria specified by one of the following <strong>Trigger Mode</strong>s:
+<ul class="subtable">
+	<li><strong>High</strong> &ndash; The acquisition is triggered when the signal goes above the high level.</li>
+	<li><strong>Low</strong>  &ndash; The acquisition is triggered when the signal goes below the low level.</li> 
+	<li><strong>Rising Edge</strong>  &ndash; The acquisition is triggered when the signal transitions from low to high (TTL trigger).</li>
+	<li><strong>Falling Edge</strong> &ndash; The acquisition is triggered when the signal transitions from high to low.</li>
+</ul></li>	
+	</ul>
+	</td></tr>
+
+<tr><td colspan="2"><strong>Stop Trigger</strong></td></tr>
+<tr><td>Trigger Source</td>
+	<td>The trigger condition that stops the acquisition. Click the <strong>Source</strong> arrow and select a trigger source:
+
+	<ul class="table">
+		<li><strong>Manual</strong>: The acquisition stops when you click <img src="../images/Icon-stop.png" alt="Stop the acquisition" width="11" border="0"> or when the number of samples specified in the <strong>Sample Count</strong> field are acquired from the analog, digital, and/or counter channels.</li>
+	<li><strong>Sample Count</strong>: When the selected device and subsystem (analog, digital, or counter channels) acquires the number of samples entered in this textbox, the acquisition stops for all channels on all devices.</li>	
+	</ul></td></tr>
+</table>
+</div>
+
+<!-- See Also -->
+<h3>See Also</h3>
+<p><a href="Device.htm">Configuring a Device</a></p>
+<p><a href="Channel.htm">Configuring Channels</a></p>
+<p><a href="ConfigSave.htm">Saving a Configuration File</a></p>
+
+</body>
+</html>

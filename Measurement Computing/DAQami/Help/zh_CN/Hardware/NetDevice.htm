@@ -1,0 +1,85 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"><!-- saved from url=(0014)about:internet -->
+
+<html>
+<head>
+
+<title>添加网络设备对话框</title><!--favicon code==============================================--><!--(Meta) insert after title ======================================-->
+
+
+	<link rel="shortcut icon" href="http://www.favicon.ico" />
+	<link type="image/x-icon" rel="icon" href="favicon.ico" />
+	<link type="image/x-icon" rel="shortcut icon" href="favicon.ico" />	
+	
+	<link rel="shortcut icon" type="image/x-icon" href="data:image/ico;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAQAQAAAAAAAAAAAAAAAAA
+AAAAAADanA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7///////v48v/anA7/2pwO/9qcDv/anA7/2pwO///////anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv///////////9qcDv/anA7/2pwO/////////////////9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7//////9qcDv//////2pwO/9qcDv//////2pwO///////anA7/
+2pwO/9qcDv/anA7////////////anA7/2pwO///////anA7/2pwO////////////2pwO/9qcDv//
+/////////9qcDv//////2pwO///////anA7//////9qcDv//////2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO////////////2pwO///////anA7/2pwO/9qcDv///////////9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAA==">
+
+
+
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"><!--(Links)=========================================================-->
+
+
+<link href="..\MCHelp.css" rel="stylesheet" type="text/css">
+
+</head><!--(Body)==========================================================-->
+
+
+<body>
+
+
+<h1>添加网络设备对话框</h1>
+<p>拖拽 <strong>网络设备</strong> 图标 <img src="../images/Icon-netdevice.png" alt="添加网络设备按钮" width="16" height="16" border="0"> 至 <strong>设备面板后</strong>，<strong>添加网络设备</strong> .对话框将自动打开。</p> 
+  
+<p>DAQami 将搜索网络设备，并列出在该对话框中。</p>
+<ul>
+	<li>DAQami 自动检测位于局域网内并且使能了DHCP的网络设备。</li>
+	<li>对于位于局域网内，但未使能DHCP的设备，必须手动输入设备的主机名或IP地址，DAQami 才能检测到该设备。</li>
+<li>对于位于其他网络中的设备，还需要输入连接所用的端口号。</li>
+</ul>
+<p>下表列出了添加网络设备对话框中的相关选项：.</p>
+<div class="tblnoborder">
+<table width="95%" cellspacing="7">
+	<tr class="heading"><td colspan="3"><strong>添加网络设备</strong>设置</td></tr>
+	<tr><td><strong>检测类型</strong></td><td colspan="2">在列表中选择<strong>自动</strong>，以自动检测位于局域网内并且使能了DHCP的设备。这是默认的（也是最常用的）检测类型，无需输入更多的设备信息。
+<ul>
+	<li>DAQami 检测到的设备将列出在<strong>已发现设备</strong>列表中。选择一个设备并点击<strong>确定</strong>，将该设备添加至当前配置中。</li>
+	<li>若未发现网络设备，点击刷新设备列表按钮 <img src="../images/Icon-refresh.png" alt="更新图标" width="18" border="0" class="inline">，重新搜索网络设备。</li>
+</ul>
+</td></tr>
+	<tr><td>&nbsp;</td><td colspan="2"><img src="../images/NetDevice-Auto.png" alt="自动添加网络设备对话框" width="400" height="300" border="0"></td></tr>
+<tr><td>&nbsp;</td><td colspan="2">当网络设备不在局域网内部或禁用DHCP时，在列表中选择<strong>手动</strong>。手动检测指定下列选项：
+	<ul>
+	<li><strong>远程网络</strong> – 设备处于远程网络中，勾选此对话框。</li>
+<li><strong>地址</strong> – 设备所在网络的路由器主机名或IP地址。</li>
+	<li class="none">如选中 <strong>远程网络</strong> 复选框，则在主机名/地址后输入连接端口号。下例显示了一个端口号为54211的设备配置。</li>
+</ul></td></tr>
+
+<tr><td>&nbsp;</td><td colspan="2"><img src="../images/NetDevice-Manual.png" alt="手动添加网络设备对话框" width="400" border="0"></td></tr>
+
+<tr><td><strong>连接码</strong></td><td colspan="2">网络设备的连接码默认为<span class="code">0</span>，如该值被修改，则在<strong>连接码</strong>文本框中输入新的连接码。对于使用默认连接码<span class="code">0</span>的设备，DAQami 将忽略该本文框的输入值，并正确连接设备。</td></tr>
+</table>
+</div>
+
+<h3>另请参阅</h3>
+<p><a href="DeviceAdd.htm">添加设备</a></p>
+
+</body>
+</html>

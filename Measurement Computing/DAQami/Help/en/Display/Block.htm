@@ -1,0 +1,131 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!-- saved from url=(0014)about:internet -->
+<html>
+<head>
+
+<title>Block Display</title>
+
+<!--(Meta) insert after title ======================================-->
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+
+<!--(Links)=========================================================-->
+<link href="..\MCHelp.css" rel="stylesheet" type="text/css">
+
+
+</head>
+
+<!--(Body)==========================================================-->
+<body>
+
+
+<h1>Block Display</h1>
+<p>A Block display shows a specified number, or <strong>block</strong>, of samples. Set the time range of samples to plot with the <strong>Seconds to Display</strong> text box on the <a href="AxesOptions.htm">Axes</a> tab of the <strong>Display Settings</strong> dialog box.</p>
+
+<p>Each time the specified number of samples is acquired, the block display refreshes with a new block of acquired data.</p>
+
+<p>The components of a Block display are shown here:</p>
+<p style="text-align:center"><img src="../images/Display-block.JPG" alt="Block display" width="592" height="321" border="0"></p>
+
+<p>Refer to the callout numbers below for a description of each component on a Block display.</p>
+
+<table class="bordered" width="95%">
+<tr><td width="5%"><strong>Callout</strong></td><td width="15%"><strong>Name</strong></td><td><strong>Description</strong></td></tr>
+
+<tr><td>1</td><td>Channel icons</td><td>The channel(s) whose acquired data is plotted on the display. The channel color corresponds to the data trace. Right-click on the channel icon to show a context menu with options to remove the channel or change its color.</td></tr>
+
+<tr><td>2</td><td>Scrollbar</td><td>A horizontal scrollbar that you can slide left or right to review sample data.</td></tr>
+
+<tr><td>3</td><td>Y-axis</td><td>The upper and lower range limits of the y-axis. You set the range limits and scale mode with the settings on the <strong>Axes</strong> tab of the <strong>Display Settings</strong> dialog box.</td></tr>
+
+<tr><td>4</td><td>Display title</td><td>Title of the display. Default title is the display type.</td></tr>
+
+<tr><td>5</td><td>Zoom magnification</td><td>Displays the current level of display magnification. The magnification range is 0.00390625&nbsp;X to 64&nbsp;X. The value updates each time you press a zoom icon.</td></tr>
+
+<tr><td>6</td><td>Icons</td><td>Icons used to zoom in or out, add cursors, customize the display, and remove the display from the Display Panel.<br><br> 
+<div class="stepnoborder">
+<table cellspacing="7" width="95%"> 
+<tr><td><img src="../images/Icon-zoomin.png" alt="Zoom in icon" width="24" border="0" class="inline"></td><td>Zooms in on display data.</td></tr>
+<tr><td><img src="../images/Icon-zoomout.png" alt="Zoom out icon" width="24" border="0" class="inline"></td><td>Zooms out of display data.</td></tr>
+<tr><td><img src="../images/Icon-cursorA.png" alt="Cursor A icon" width="24" border="0" class="inline"></td><td>Adds a cursor to display the value of a data point.</td></tr>
+<tr><td><img src="../images/Icon-cursorB.png" alt="Cursor B icon" width="24" border="0" class="inline"></td><td>Adds another cursor to display the value of a second data point.</td></tr>
+<tr><td><img src="../images/Icon-copy.png" alt="Copy display icon" width="24" border="0" class="inline"></td><td>Copies the display to the clipboard.</td></tr>
+<tr><td><img src="../images/Icon-displaysetting.png" alt="Display settings icon" width="24" border="0" class="inline"></td><td>Opens the Display Settings dialog box where you customize the display appearance.</td></tr>
+<tr><td><img src="../images/Icon-displaydelete.png" alt="Display delete icon" width="24" border="0" class="inline"></td><td>Removes the display from the Display Panel.</td></tr>
+</table>
+</div>
+</td></tr>
+
+<tr><td>7</td><td>Acquired data</td><td>Blocks of acquired data display from left to right. The block size is equal to the number of samples to acquire. You set the time range of samples to show on a display with the <strong>Seconds to Display</strong> text box on the <strong>Axes</strong> tab of the <strong>Display Settings</strong> dialog box.</td></tr>
+
+<tr><td>8</td><td>X-axis</td><td>The absolute time, relative time, or sample count of the acquisition.
+<ul class="table">
+<li>Absolute Time &ndash; shows the time of day when samples are acquired.</li>
+<li>Relative Time &ndash; shows the length of time since the acquisition began when the sample was acquired.</li>
+<li>Sample count &ndash; shows the number of samples acquired.</li>
+</ul> You set the X-axis display mode on the <strong>Preferences</strong> dialog box.</td></tr>
+
+<tr><td>9</td><td>Toggle live /review mode</td><td>Click on the lock icon to toggle the display between live and review mode while an acquisition is running.</td></tr>
+</table>
+
+<div class="stepnoborder">
+<table cellspacing="7" width="95%"> 
+<tr><td><img src="../images/Icon-lock-live.png" alt="Live mode icon" width="24" border="0" class="inline"></td><td>When the lock icon is <em>locked</em>, the display is in live mode and updates as data is acquired based on the configuration.<br><br>Click on the icon to change to review mode.</td></tr>
+<tr><td><img src="../images/Icon-lock-review.png" alt="Review mode icon" width="24" border="0" class="inline"></td><td>When the lock icon is <em>unlocked</em>, the display is in review mode. A horizontal scrollbar appears on the display for reviewing samples. Data continues to be acquired based on the configuration.<br><br>Click on the icon to change to live mode.</td></tr>
+
+</table>
+</div>
+
+
+<p>To show a grid on the display, select the <strong>Show Grid</strong> checkbox on the Display Settings dialog box.</p>
+
+<!-- Menu ==================================================================-->
+<h2>Context menus</h2>
+<p>Right-click anywhere <em>except</em> for the scrollbar and channel icons on a Strip display to show the following menu:</p>
+<img src="../images/StrContextChart.png" alt="" width="531" height="184" border="0">
+<ul>
+	<li><strong>Edit Display</strong>: opens the Display Settings dialog box. Only enabled when DAQami is idle.</li>
+	<li><strong>Zoom&raquo;Zoom In</strong>: zooms in on the data. Enabled when an acquisition is running and when DAQami is idle.</li>
+	<li><strong>Zoom&raquo;Zoom Out</strong>: zooms out on the data. Enabled when an acquisition is running and when DAQami is idle.</li>
+		<li><strong>Auto Scale&raquo;Auto Scale X</strong>: scales the X-axis to show all acquired data (up to 1 million samples). This setting can be changed when an acquisition is running and when DAQami is idle.</li>
+<li><strong>Auto Scale&raquo;Auto Scale Y</strong>: scales the y-axis based on the current minimum and maximum readings in the display.<br><br>
+Only available if <strong>Lock Auto Scale Y</strong> option is deselected. This setting can be changed when an acquisition is running and when DAQami is idle.</li>
+	<li><strong>Auto Scale&raquo;Lock Auto Scale Y</strong>: when selected, the y-axis scale continuously updates as new minimum and maximum readings are acquired. This setting can be changed when an acquisition is running and when DAQami is idle.</li>
+<li>The <strong>Export Options</strong> dialog box includes the following options:
+<ul>
+	<li><strong>Export Path</strong>: Click <strong>Browse</strong> to navigate to the location where you want to export the <span class="code">.csv</span> data file(s). Data is exported by default to the <span class="code">\Users\&lt;current user&gt;\Documents\Measurement Computing\DAQami</span> folder.</li>
+<li><strong>Data Precision (Decimal Places)</strong>: Enter the number of decimal places to include in the exported data</li>
+	<li><strong>Use Relative Time</strong>: Select this checkbox to export the data with the relative time that the data was acquired. Leave this checkbox unchecked to export the absolute time that data was acquired.</li>
+<li><strong>Limit Range</strong>: Select this checkbox to export a subset of the data based on a time range. You can specify the range using <strong>Absolute Time</strong> or <strong>Relative Time</strong>. Each range updates based on changes to the other.</li>
+<li><strong>Preview</strong>: Click this button to show the exported data before creating the <span class="code">.csv</span> file.</li>
+	</ul>
+</li>
+<li><strong>Remove Display</strong>: removes the Block display from the Display tab.</li>
+</ul>
+
+<hr align="left">
+<p>Right-click on the scrollbar to show the following menu:</p>
+<img src="../images/StrContextScroll.png" alt="" width="129" border="0">
+<p>This menu is only available when an acquisition is running in review mode <img src="../images/Icon-lock-review.png" alt="Review mode icon" width="24" border="0" class="inline"> and when DAQami is idle.</p>
+<ul>
+	<li><strong>Scroll Here</strong>: scrolls data to the location of the mouse (scrollbar thumb moves to the left edge of the context menu).<br><br><img src="../images/ScrollHere.jpg" alt="" width="697" border="0"></li>
+	<li><strong>Left Edge</strong>: scrolls to the beginning of the acquired data (scrollbar thumb moves to the left edge of the scrollbar track).</li>
+	<li><strong>Right Edge</strong>: scrolls to the end of the acquired data (scrollbar thumb moves to the right edge of the scrollbar track).</li>
+	<li><strong>Page Left</strong>: depending on the current zoom settings/time span of displayed data, displays the previous  screen of data. For example, if each screen represents one second of data, the thumb moves left to display the previous one second of data.</li>
+	<li><strong>Page Right</strong>: depending on the current zoom settings/time span of displayed data, displays the next  screen of data. For example, if each screen represents one second of data, the thumb moves right to display the next one second of data.</li>
+
+	<li><strong>Scroll Left</strong>: depending on the current zoom settings/time span of displayed data, scrolls data 1/10 of a screen of data to the left. For example, if each screen represents one second of data, the thumb moves left the equivalent of 1/10 second of data, and the displayed data updates accordingly.</li>
+	<li><strong>Scroll Right</strong>: depending on the current zoom settings/time span of displayed data, displays the next  screen of data. For example, if each screen represents one second of data, the thumb moves right the equivalent of 1/10 second of data, and the displayed data updates accordingly.</li>
+
+</ul>
+<!-- See Also ==================================================================-->
+<h3>See Also</h3>
+<p><a href="Strip.htm">Strip Display</a></p>
+<p><a href="Scalar.htm">Scalar Display</a></p>
+<p><a href="DisplayCursors.htm">Adding a Cursor to a Display</a></p>
+<p><a href="DisplaySettings.htm">Display Settings Dialog Box</a></p>
+<p><a href="AxesOptions.htm">Configuring Axes options</a></p>
+<p><a href="DisplayOverview.htm">Display Tasks</a></p>
+<p><a href="../GetStarted/Preferences.htm">DAQami Preferences</a></p>
+
+</body>
+</html>

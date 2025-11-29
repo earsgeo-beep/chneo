@@ -1,0 +1,122 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!-- saved from url=(0014)about:internet -->
+<html>
+<head>
+
+<title>Scalar Display</title>
+
+<!--(Meta) insert after title ======================================-->
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+
+<!--(Links)=========================================================-->
+<link href="..\MCHelp.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<!--(Body)==========================================================-->
+<body>
+
+
+<h1>Scalar Display</h1>
+<p>A Scalar display shows the numeric value of each data point acquired for a channel. An example is shown here:</p>
+
+<p style="text-align:center"><img src="../images/Display-scalar.jpg" alt="Scalar display" width="638" border="0"></p>
+
+<p>Refer to the callout numbers below for a description of each component on a Scalar display.</p>
+
+<table class="bordered" width="95%">
+<tr><td width="5%"><strong>Callout</strong></td><td width="20%"><strong>Name</strong></td><td><strong>Description</strong></td></tr>
+
+<tr><td>1</td><td>Scrollbar</td><td>Slide left or right to select a specific data sample. The scrollbar is enabled during an acquisition if the display is in review mode, and after an acquisition stops.</td></tr>
+
+<tr><td>2</td><td>Channel data value</td><td> The value of the data sample selected with the scrollbar. The displayed unit is set on the <strong>Channels</strong> tab.
+<ul>
+	<li>If an over-range occurs on an analog input channel, <strong>OVR</strong> is shown for that channel on the Scalar display.</li>
+<li>Hover the cursor over the data value to display the minimum and maximum values acquired.
+<br><br><p style="text-align:center"><img src="../images/MinMaxTT.png" alt="" width="139" border="0" align="middle"></p></li>
+<li>Right-click on the channel icon to show a context menu with options to remove the channel or change its color. <br><br>If digital channels are added as a <em>digital port</em> to a Scalar display, the context menu has additional options for displaying digital bits as LEDs in one or two rows, or displaying portwise values as decimal or hexadecimal values.<br><br>
+<p style="text-align:center"><img src="../images/ScalarPortCtxMenu.png" alt="" width="467" height="167" border="0" align="middle"></p>
+<br><br>If a counter channel is added to a Scalar display, the context menu has additional options for displaying counts as decimal or hexadecimal values.<br><br>
+<p style="text-align:center"><img src="../images/CIDecHex.png" alt="" width="343" border="0" align="middle"></p></li>
+</ul>
+</td></tr>
+
+<tr><td>3</td><td>Display title</td><td>The title of the display (refer to <strong>Display Title</strong> in <a href="DisplaySettings.htm">Configuring Display Settings</a>).</td></tr>
+
+<tr><td>4</td><td>Zoom magnification</td><td>Increases (zoom out) or decreases (zoom in) the amount of data that is viewable on the display. The range of viewable data is based on the location of the scrollbar thumb.
+<br><br>For example, if the X-axis Display Mode is set to Sample Count, and you acquire 4963 samples, the Scalar display scrollbar looks like this &ndash; all samples (0 to 4962) are viewable using the scrollbar:
+<p style="text-align:center"><img src="../images/ScalarScroll1X.png" alt="" width="699" height="54" border="0"></p>
+If you move the scrollbar thumb more than halfway towards the right edge, and then click <img src="../images/Icon-zoomin.png" alt="" width="18" border="0" class="inline"> to select <strong>2X</strong>,  magnification, the display "zooms in," or readjusts to make half of the data viewable &ndash; in this example, between samples 1415 and 3896.
+<p style="text-align:center"><img src="../images/ScalarScroll2X.png" alt="" width="699" height="54" border="0"></p>
+ Clicking zoom in to 4X make 1/4 of the original data viewable, and the range of data depends again on the potion of the scrollbar thumb.</td></tr>
+
+<tr><td>5</td><td>Icons</td><td>Icons used to zoom in or out, customize the display, and to remove the display from the Display Panel.
+
+<div class="stepnoborder">
+<table cellspacing="7" width="95%"> 
+<tr><td><img src="../images/Icon-zoomin.png" alt="Zoom in icon" width="24" border="0" class="inline"></td><td>Zooms in on display data.</td></tr>
+<tr><td><img src="../images/Icon-zoomout.png" alt="Zoom out icon" width="24" border="0" class="inline"></td><td>Zooms out of display data.</td></tr>
+<tr><td><img src="../images/Icon-copy.png" alt="Copy display icon" width="24" border="0" class="inline"></td><td>Copies the display to the clipboard.</td></tr>
+<tr><td><img src="../images/Icon-displaysetting.png" alt="Display settings icon" width="24" border="0" class="inline"></td><td>Opens the Display Settings dialog box where you customize the display appearance.</td></tr>
+<tr><td><img src="../images/Icon-displaydelete.png" alt="Display delete icon" width="24" border="0" class="inline"></td><td>Removes the display from the Display Panel.</td></tr>
+</table>
+</div>
+</td></tr>
+
+<tr><td>6</td><td>Time acquired or sample number</td><td>The time (relative or absolute) when the displayed sample(s) was acquired, or the number of the sample. You set the display mode on the <strong>Preferences</strong> dialog box.</td></tr>
+
+<tr><td>7</td><td>Toggle live /review mode</td><td>Click on the lock icon to toggle the display between live and review mode while an acquisition is running.
+<div class="stepnoborder">
+<table cellspacing="7" width="95%"> 
+<tr><td><img src="../images/Icon-lock-live.png" alt="Live mode icon" width="24" border="0" class="inline"></td><td>When the lock icon is <em>locked</em>, the display is in live mode and updates as data is acquired based on the configuration.<br><br>Click on the icon to change to review mode.</td></tr>
+<tr><td><img src="../images/Icon-lock-review.png" alt="Review mode icon" width="24" border="0" class="inline"></td><td>When the lock icon is <em>unlocked</em>, the display is in review mode. A horizontal scrollbar appears on the display for reviewing samples. Data continues to be acquired based on the configuration.<br><br>Click on the icon to change to live mode.</td></tr>
+</table>
+</div>
+
+<tr><td>8</td><td>X-axis</td><td>The absolute time, relative time, or sample count of the acquisition.
+<ul class="table">
+	<li>Absolute Time &ndash; the time of day when samples are acquired.</li>
+	<li>Relative Time &ndash; the length of time since the acquisition began when samples are acquired</li>
+	<li>Sample count &ndash; the number of samples acquired.</li>
+</ul> 
+You set the display mode on the <strong>Preferences</strong> dialog box.</td></tr>
+
+</table>
+
+<p>If the Scalar display is not wide enough or tall enough to show multiple channels, a vertical or horizontal scrollbar becomes available as needed.</p>
+
+<!-- Menu ==================================================================-->
+<h2>Context menus</h2>
+<p>Right-click on the display to show a menu with the following options:</p>
+<ul>
+	<li><strong>Edit Display</strong>: opens the <strong>Display Settings</strong> dialog box. Only enabled when DAQami is idle.</li>
+	<li><strong>Zoom&raquo;Zoom In</strong>: zooms in on the data. Enabled when an acquisition is running and when DAQami is idle.</li>
+	<li><strong>Zoom&raquo;Zoom Out</strong>: zooms out on the data. Enabled when an acquisition is running and when DAQami is idle.</li>
+<li><strong>Remove Display</strong>: removes the Scalar display from the Display tab.</li>
+</ul>
+<hr align="left">
+<p>Right-click on the scrollbar to show the following menu:</p>
+<img src="../images/StrContextScroll.png" alt="" width="129" border="0">
+<p>This menu is only available when an acquisition is running in review mode <img src="../images/Icon-lock-review.png" alt="Review mode icon" width="24" border="0" class="inline"> and when DAQami is idle.</p>
+<ul>
+	<li><strong>Scroll Here</strong>: scrolls data to the location of the mouse (scrollbar thumb moves to the left edge of the context menu).<br><br><img src="../images/ScrollHereScalar.jpg" alt="" width="688" border="0"></li>
+	<li><strong>Left Edge</strong>: scrolls to the beginning of the acquired data (scrollbar thumb moves to the left edge of the scrollbar track).</li>
+	<li><strong>Right Edge</strong>: scrolls to the end of the acquired data (scrollbar thumb moves to the right edge of the scrollbar track).</li>
+	<li><strong>Page Left</strong>: depending on the current zoom settings/time span of displayed data, displays the previous  screen of data. For example, if each screen represents one second of data, the thumb moves left to display the previous one second of data.</li>
+	<li><strong>Page Right</strong>: depending on the current zoom settings/time span of displayed data, displays the next  screen of data. For example, if each screen represents one second of data, the thumb moves right to display the next one second of data.</li>
+
+	<li><strong>Scroll Left</strong>: depending on the current zoom settings/time span of displayed data, scrolls data 1/10 of a screen of data to the left. For example, if each screen represents one second of data, the thumb moves left the equivalent of 1/10 second of data, and the displayed data updates accordingly.</li>
+	<li><strong>Scroll Right</strong>: depending on the current zoom settings/time span of displayed data, displays the next  screen of data. For example, if each screen represents one second of data, the thumb moves right the equivalent of 1/10 second of data, and the displayed data updates accordingly.</li>
+
+</ul>
+<!-- See Also ==================================================================-->
+<h3>See Also</h3>
+<p><a href="Strip.htm">Strip Display</a></p>
+<p><a href="Block.htm">Block Display</a></p>
+<p><a href="../Config/Channel.htm">Configuring Channels</a></p>
+<p><a href="DisplaySettings.htm">Display Settings Dialog Box</a></p>
+<p><a href="../GetStarted/Preferences.htm">DAQami Preferences</a></p>
+<p><a href="DisplayOverview.htm">Display Tasks</a></p>
+
+</body>
+</html>

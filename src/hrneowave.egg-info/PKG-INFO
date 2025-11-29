@@ -1,0 +1,51 @@
+Metadata-Version: 2.4
+Name: hrneowave
+Version: 1.0.0
+Summary: Logiciel d'acquisition et d'analyse de houle pour laboratoire maritime - Version stable
+Author-email: Laboratoire d'Etude Maritime <lem@maritime.fr>
+License: MIT
+Project-URL: homepage, https://github.com/lem-maritime/chneowave
+Project-URL: repository, https://github.com/lem-maritime/chneowave
+Project-URL: documentation, https://chneowave.readthedocs.io
+Keywords: maritime,houle,acquisition,analyse,laboratoire,oceanographie
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Topic :: Scientific/Engineering :: Physics
+Classifier: Topic :: Scientific/Engineering :: Visualization
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: numpy>=1.20.0
+Requires-Dist: scipy>=1.7.0
+Requires-Dist: PySide6>=6.4.0
+Requires-Dist: h5py>=3.6.0
+Requires-Dist: pyqtgraph>=0.12.0
+Requires-Dist: pyyaml>=5.4.0
+Requires-Dist: pytest>=6.0.0
+Requires-Dist: pytest-cov>=2.12.0
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"
+Requires-Dist: black; extra == "dev"
+Requires-Dist: flake8; extra == "dev"
+
+# CHNeoWave
+
+Logiciel d'acquisition et d'analyse de données pour les études maritimes en modèle réduit.
+
+## Installation rapide
+
+```bash
+git clone https://github.com/Gameminde/ProjetChneowave.git
+cd chneowave
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+python -m src.hrneowave.gui.main
+```

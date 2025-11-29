@@ -1,0 +1,82 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!-- saved from url=(0014)about:internet -->
+<html>
+<head>
+
+<title>DAQami User Interface</title>
+
+<!--(Meta) insert after title ======================================-->
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+
+<!--(Links)=========================================================-->
+<link href="../MCHelp.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<!--(Body)==========================================================-->
+<body>
+
+
+<h1>DAQami User Interface</h1>
+
+<p>The image below identifies each component in the main window of the DAQami interface.</p>
+
+<p align="center"><img src="../images/GUI-callouts.png" alt="DAQami components" width="800" border="0"></p>
+
+<p>Refer to the callout numbers for a description of each component.</p>
+
+<table class="bordered" width="95%">
+<tr><td width="5%"><strong>Callout</strong></td>
+<td width="20%"><strong>Name</strong></td><td><strong>Description</strong></td></tr>
+
+<tr><td>1</td><td>Add Device button</td><td>Lists the devices that you can add to the acquisition. Drag a device onto the Device Panel to add it to the acquisition. Disabled while acquiring data.</td></tr>
+
+<tr><td>2</td><td>Add Display button</td><td>Lists the displays that you can add to the acquisition, and opens the Display Panel. Drag a display onto the Display Panel to add it to the acquisition. Disabled while acquiring data.</td></tr>
+
+<tr><td>3</td><td>Panel button (toggle)</td><td>Toggles between the Configuration Panel button and the Display Panel button.
+
+	<ul class="table">
+		<li class="none"> <img src="../images/Icon-configpanel.png" alt="Configuration Panel button" width="22" border="0" class="inline"> &nbsp;&nbsp;Opens the Configuration Panel.</li>
+	<li class="none"> <img src="../images/Icon-displaypanel.png" alt="Display Panel button" width="25" border="0" class="inline"> &nbsp;&nbsp;Opens the Display Panel.</li>
+	</ul></td></tr>
+	
+<tr><td>4</td><td> Display tabs</td><td>Use tabs to organize displays. Click <img src="../images/Icon-add-tab.png" alt="" border="0"> to create a new blank tab.
+
+<tr><td>5</td><td>Log button</td><td>Click <img src="../images/Icon-log.png" alt="Run the acquisition and log the data to disk" width="11" border="0"> to acquire, log, view, and update data from activated channels.</td></tr>
+
+<tr><td>6</td><td>View button</td><td>Click <img src="../images/Icon-start.png" alt="" width="11" border="0"> to acquire, view, and update data from activated channels without logging.</td></tr>
+
+<tr><td>7</td><td>Stop button</td><td>Click <img src="../images/Icon-stop.png" alt="" width="11" border="0"> to stop the current acquisition.</td></tr>
+
+<tr><td>8</td><td>Logging duration</td><td>Displays the running time of an active acquisition using the format <em>days.hours:minutes:seconds:milliseconds</em>.</td></tr>
+
+<tr><td>9</td><td>Gear icon</td><td>Opens a menu with options for working with configuration and data files, configuring log file settings,  setting default preferences, opening this Help file, and exiting the application.</td></tr>
+
+<tr><td>10</td><td>Display/Configuration Panel (toggle)</td><td>The Display Panel shows the displays added to the acquisition, and data acquired during the current session. The Configuration Panel shows settings to configure the device, channels, sample rate, and triggers. Click the Panel button <img src="../images/Icon-displaypanel.png" alt="Display Panel button" width="25" border="0" class="inline">/<img src="../images/Icon-configpanel.png" alt="Configuration Panel button" width="22"  border="0" class="inline"> to toggle between these panels.</td></tr>
+
+
+<tr><td>11</td><td>Acquisition status</td><td>Displays one of the following status descriptions in the left edge of the window:
+	<ul>
+	<li><em>Acquisition Running</em> &ndash; DAQami is acquiring data. Configuration of device, channel, acquisition, and display options is disabled.</li>
+<li><em>Acquisition Idle</em> &ndash; DAQami is not acquiring data. Configuration of device, channel, acquisition, and display settings is enabled.</li>
+	<li><em>Acquisition Armed</em> &ndash; DAQami is waiting for a trigger condition to occur to begin acquiring data. Configuration of device, channel, acquisition, and display settings is disabled.</li>
+</ul>
+Hover over the icon in the bottom-left corner to see sample rates for each device and input channel type. <br>
+<img src="../images/RateHover.png" alt="" width="196" height="163" border="0"><br><br>
+If an open thermocouple is detected, a warning icon <img src="../images/Icon-warning.png" alt="Stop button" width="15" border="0" class="inline"> displays in the right corner. Hovering over the icon displays the message "Open thermocouple detected on the following channel(s): AIx."</li>
+</td></tr>
+
+	<tr><td>12</td><td>Device Panel</td><td>Shows the devices added to the acquisition, and the Active Channels list for each device. Drag an active channel onto a display to show the data acquired from the channel.<br><br>If an open thermocouple is detected, a warning icon <img src="../images/Icon-warning.png" alt="Stop button" width="15" border="0" class="inline"> displays next to the channel on which the condition is detected. Hovering over the warning icon displays the message "Open thermocouple detected."</td></tr>
+	
+	<tr><td>13</td><td>Show/Hide<br> (Device Panel)</td><td>Click to hide the Device Panel. Click again to show the Device Panel.</td></tr>
+</table>
+
+<h3>See Also</h3>
+<p><a href="../Hardware/DeviceAdd.htm">Adding a Device</a></p>
+<p><a href="../Display/DisplayAdd.htm">Adding a Display</a></p>
+<p><a href="../Hardware/ChanActivate.htm">Activating a Channel</a></p>
+<p><a href="GetStarted.htm">Getting Started Dialog Box</a></p>
+<p><a href="ToolsMenu.htm">Gear Menu</a></p>
+
+</body>
+</html>

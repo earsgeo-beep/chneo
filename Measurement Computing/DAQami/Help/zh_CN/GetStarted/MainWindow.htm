@@ -1,0 +1,80 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"><!-- saved from url=(0014)about:internet -->
+
+<html>
+<head>
+
+<title>DAQami 用户界面</title><!--(Meta) insert after title ======================================-->
+
+
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"><!--(Links)=========================================================-->
+
+
+<link href="../MCHelp.css" rel="stylesheet" type="text/css">
+
+</head><!--(Body)==========================================================-->
+
+
+<body>
+
+
+<h1>DAQami 用户界面</h1>
+
+<p>下图显示了DAQami 主窗口的各个组成部分。</p>
+
+<p align="center"><img src="../images/GUI-callouts.png" alt="DAQami 组件" width="800" border="0"></p>
+
+<p>根据插图标号查看对应组件的详细描述。</p>
+
+<table class="bordered" width="95%">
+<tr><td width="5%"><strong>插图标号</strong></td>
+<td width="20%"><strong>名称</strong></td><td><strong>描述</strong></td></tr>
+
+<tr><td>1</td><td>添加设备按钮</td><td>列出可选设备，拖拽至设备面板即可添加到当前配置中。采集数据时禁用。</td></tr>
+
+<tr><td>2</td><td>添加显示控件按钮</td><td>列出可选的显示控件，并打开显示面板，拖拽至显示面板即可添加到当前配置中。采集数据时禁用。</td></tr>
+
+<tr><td>3</td><td>面板切换按钮</td><td>在控制面板按钮和显示面板按钮之间切换。
+
+	<ul class="table">
+		<li class="none"> <img src="../images/Icon-configpanel.png" alt="配置面板按钮" width="22" border="0" class="inline"> &nbsp;&nbsp;打开配置面板。</li>
+	<li class="none"> <img src="../images/Icon-displaypanel.png" alt="显示面板按钮" width="25" border="0" class="inline"> &nbsp;&nbsp;打开显示面板。</li>
+	</ul></td></tr>
+	
+<tr><td>4</td><td> 显示选项卡</td><td>使用选项卡来整理显示桌面. 点击 <img src="../images/Icon-add-tab.png" alt="" border="0"> 创建新的空白选项卡。
+
+</td></tr><tr><td>5</td><td>记录按钮</td><td>点击 <img src="../images/Icon-log.png" alt="启动数据采集并记录数据至硬盘中" width="11" border="0"> 从激活通道中采集、记录、查看与更新数据</td></tr>
+
+<tr><td>6</td><td>查看按钮</td><td>点击 <img src="../images/Icon-start.png" alt="" width="11" border="0"> 从被激活通道中采集、查看与更新数据，但并不记录。</td></tr>
+
+<tr><td>7</td><td>停止按钮</td><td>点击 <img src="../images/Icon-stop.png" alt="" width="11" border="0"> 停止当前的数据采集。</td></tr>
+
+<tr><td>8</td><td>数据采集时间</td><td>以 <em>天.小时:分钟:秒钟:毫秒</em> 的格式显示数据采集已运行的时间。</td></tr>
+
+<tr><td>9</td><td>齿轮图标</td><td>打开主菜单，包括配置、数据、参数、帮助和退出等选项。</td></tr>
+
+<tr><td>10</td><td>显示面板/配置面板</td><td>显示面板包含已添加的显示控件，用于查看读取到的数据。配置面板包含设备、通道、采样率和触发四个选项卡。点击面板按钮 <img src="../images/Icon-displaypanel.png" alt="显示面板按钮" width="25" border="0" class="inline">/<img src="../images/Icon-configpanel.png" alt="配置面板按钮" width="22"  border="0" class="inline"> 在这些选项卡中进行切换。</td></tr>
+
+
+<tr><td>11</td><td>状态栏</td><td>在窗口的左边沿会显示如下状态之一：
+	<ul>
+	<li><em>正在采集数据</em> – DAQami 正在执行数据采集任务配置设备、通道、采集选项、显示控件等功能被禁用。</li>
+<li><em>空闲</em> – DAQami 处于空闲状态，未执行数据采集任务。配置设备、通道、采集选项、显示控件等功能被启用。</li>
+	<li><em>等待触发</em> – DAQami 正在等待触发信号。配置设备、通道、采集选项、显示控件等功能被禁用。</li>
+</ul>
+将鼠标放在左下角的图标上，可以查看每个设备的采样率与输入通道类型。<br><img src="../images/RateHover.png" alt="" width="196" height="163" border="0"><br><br>若热电偶开路状态被检测出，报警图标将 <img src="../images/Icon-warning.png" alt="停止按钮" width="15" border="0" class="inline">  显示在右角落。将光标移至图标上将会提示如下信息 "Open thermocouple detected on the following channel(s): AIx."</li>
+</td></tr>
+
+	<tr><td>12</td><td>设备面板</td><td>显示活动的设备和激活的通道。拖拽面板中的通道至显示控件，即可查看相应的通道数据。<br><br>若热电偶开路状态被检测出，报警图标 <img src="../images/Icon-warning.png" alt="停止按钮" width="15" border="0" class="inline"> 会显示于被检测通道的旁边。将光标移至报警图标上将提示如下信息 "Open thermocouple detected."</td></tr>
+	
+	<tr><td>13</td><td>显示/隐藏(设备面板)</td><td>点击即可隐藏设备面板再次点击即可显示设备面板。</td></tr>
+</table>
+
+<h3>另请参阅</h3>
+<p><a href="../Hardware/DeviceAdd.htm">添加设备</a></p>
+<p><a href="../Display/DisplayAdd.htm">添加显示控件</a></p>
+<p><a href="../Hardware/ChanActivate.htm">激活通道</a></p>
+<p><a href="GetStarted.htm">开始对话框</a></p>
+<p><a href="ToolsMenu.htm">工具菜单</a></p>
+
+</body>
+</html>

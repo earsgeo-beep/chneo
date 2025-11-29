@@ -1,0 +1,130 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"><!-- saved from url=(0014)about:internet -->
+
+<html>
+<head>
+
+<title>块状显示图表</title><!--(Meta) insert after title ======================================-->
+
+
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"><!--(Links)=========================================================-->
+
+
+<link href="..\MCHelp.css" rel="stylesheet" type="text/css">
+
+
+</head><!--(Body)==========================================================-->
+
+
+<body>
+
+
+<h1>块状显示图表</h1>
+<p>块状显示图表显示指定数量的数据点，称之为一个数据<strong>块</strong>。在<strong>显示设置</strong>对话框<a href="AxesOptions.htm">坐标轴</a>标签的<strong>显示秒数</strong>文本框中输入待显示的数据的时间跨度。</p>
+
+<p>每当采集到指定数量的样点时，新数据便会刷新块状显示图表。</p>
+
+<p>组数据显示图表包含以下组件：</p>
+<p style="text-align:center"><img src="../images/Display-block.JPG" alt="组数据显示图表" width="592" height="321" border="0"></p>
+
+<p>根据插图标号查看相关描述。</p>
+
+<table class="bordered" width="95%">
+<tr><td width="5%"><strong>插图标号</strong></td><td width="15%"><strong>名称</strong></td><td><strong>描述</strong></td></tr>
+
+<tr><td>1</td><td>通道图标</td><td>各通道采集到的数据将以曲线的形式显示在此控件中。数据曲线的颜色与通道颜色一致。右键点击通道图标可改变颜色或移除通道。</td></tr>
+
+<tr><td>2</td><td>滚动条</td><td>左右滚动，查看历史数据。</td></tr>
+
+<tr><td>3</td><td>y轴</td><td>y轴上下限，可在 <strong>显示设置</strong> 对话框 <strong>坐标轴</strong> 标签中配置相关选项。</td></tr>
+
+<tr><td>4</td><td>控件名称</td><td>显示控件名称。默认为显示控件类型。</td></tr>
+
+<tr><td>5</td><td>缩放比例</td><td>控件的缩放比例。可从0.00390625倍调节至64倍。每次点击缩放图标，此数值都会更新。</td></tr>
+
+<tr><td>6</td><td>图标</td><td>放大、缩小、显示标尺、配置和移除显示控件。<br><br> 
+<div class="stepnoborder">
+<table cellspacing="7" width="95%"> 
+<tr><td><img src="../images/Icon-zoomin.png" alt="放大图标" width="24" border="0" class="inline"></td><td>放大数据曲线。</td></tr>
+<tr><td><img src="../images/Icon-zoomout.png" alt="缩小图标" width="24" border="0" class="inline"></td><td>缩小数据曲线。</td></tr>
+<tr><td><img src="../images/Icon-cursorA.png" alt="标尺A图标" width="24" border="0" class="inline"></td><td>添加标尺A，显示数据曲线上A点的值。</td></tr>
+<tr><td><img src="../images/Icon-cursorB.png" alt="标尺B图标" width="24" border="0" class="inline"></td><td>添加标尺B，显示数据曲线上B点的值。</td></tr>
+<tr><td><img src="../images/Icon-copy.png" alt="复制图标" width="24" border="0" class="inline"></td><td>复制当前显示控件至剪贴板。</td></tr>
+<tr><td><img src="../images/Icon-displaysetting.png" alt="控件设置图标" width="24" border="0" class="inline"></td><td>打开显示设置对话框，配置显示控件。</td></tr>
+<tr><td><img src="../images/Icon-displaydelete.png" alt="删除控件图标" width="24" border="0" class="inline"></td><td>从显示面板中移除显示控件。</td></tr>
+</table>
+</div>
+</td></tr>
+
+<tr><td>7</td><td>数据</td><td>整组数据从左到右依次显示。一组数据的数量与需要采集的样点数量相等。在<strong>显示设置</strong>对话框&lt;a2&gt;坐标轴&lt;/a2&gt;标签的&lt;s3&gt;显示秒数&lt;/s3&gt;文本框中输入待显示的数据的时间跨度。</td></tr>
+
+<tr><td>8</td><td>x轴</td><td>显示采集进程的绝对时间、相对时间或采样数量。
+<ul class="table">
+<li>绝对时间 — 采集样点的时刻。</li>
+<li>相对时间 — 采集样点时，采集进程已执行的时间。</li>
+<li>样点数量 — 采集样点的编号。</li>
+</ul> 可在<strong>参数设置</strong>中配置显示模式。</td></tr>
+
+<tr><td>9</td><td>切换实时/回放模式</td><td>数据采集过程中，点击显示控件中的上锁/解锁图标，在实时模式和回放模式之间切换。</td></tr>
+</table>
+
+<div class="stepnoborder">
+<table cellspacing="7" width="95%"> 
+<tr><td><img src="../images/Icon-lock-live.png" alt="实时模式图标" width="24" border="0" class="inline"></td><td>当图标<em>上锁</em>时，显示控件工作在实时模式，不断更新最新采集到的数据。<br><br>点击图标切换至回放模式。</td></tr>
+<tr><td><img src="../images/Icon-lock-review.png" alt="回放模式图标" width="24" border="0" class="inline"></td><td>当图标<em>解锁</em>时，显示控件工作在回放模式。在回放模式的显示控件上，将显示水平滚动条。此时，新数据的采集任务仍正常工作。<br><br>点击图标切换至实时模式。</td></tr>
+
+</table>
+</div>
+
+
+<p>在显示设置中勾选 <strong>显示栅格</strong> 复选框可显示栅格。</p><!-- Menu ==================================================================-->
+
+
+<h2>快捷菜单</h2>
+<p>在带状控件显示中右击任意位置， （<em>除了</em>滚动条及通道图标），显示以下选项：</p>
+<img src="../images/StrContextChart.png" alt="" width="531" height="184" border="0">
+<ul>
+	<li><strong>编辑显示控件</strong>：打开显示设置对话框。仅当DAQami空闲时有效。</li>
+	<li><strong>缩放»放大</strong>: 放大仅当DAQami空闲且采集运行时有效。</li>
+	<li><strong>缩放»缩小</strong>: 缩小。仅当DAQami空闲且采集运行时有效。</li>
+		<li><strong>自动缩放»自动缩放X轴方向</strong>：自动缩放X轴方向以显示所有采集到的数据（限制一百万个样点）。仅当DAQami空闲且采集运行时，设置才能被更改。</li>
+<li><strong>自动缩放»自动缩放Y轴方向</strong>：基于当前最大和最小读数进行自动缩放Y轴方向。<br><br>仅当 <strong>锁定自动缩放Y轴方向</strong> 选项未被勾选时有效。仅当DAQami空闲且采集运行时，设置才能被更改。</li>
+	<li><strong>自动缩放»锁定自动缩放Y轴方向</strong>：被钩选时，Y轴方向将按照最新的最大和最小读数持续更新。仅当DAQami空闲且采集运行时，设置才能被更改。</li>
+<li><strong>导出选项</strong> 对话框包含以下选项：
+<ul>
+	<li><strong>导出路径</strong>：点击 <strong>浏览</strong> 指定 <span class="code">.csv</span> 文件的导出路径。默认路径为 <span class="code">\Users\&lt;current user&gt;\Documents\Measurement Computing\DAQami</span> 。</li>
+<li><strong>数据精度 (小数位数)</strong>：选择导出数据的小数点后的位数。</li>
+	<li><strong>相对时间</strong>：勾选复选框，使导出的数据使用相对时间。否则，使用绝对时间。</li>
+<li><strong>限制范围</strong>：勾选复选框，是导出的数据子集是在时间范围内的。你可以使用 <strong>绝对时间</strong> 或 <strong>相对时间</strong>来确定使用范围。每个范围的更新都会基于其他的变化。</li>
+<li><strong>预览</strong>： 在创建 <span class="code">.csv</span> 文件之前预览数据。</li>
+	</ul>
+</li>
+<li><strong>移除显示控件</strong>从显示选项卡中移除块显示控件。</li>
+</ul>
+
+<hr align="left">
+<p>右击滚动条，显示以下菜单：</p>
+<img src="../images/StrContextScroll.png" alt="" width="129" border="0">
+<p>仅当采集在预览模式下运行 <img src="../images/Icon-lock-review.png" alt="回放模式图标" width="24" border="0" class="inline"> 且DAQami空闲时，菜单才有效。</p>
+<ul>
+	<li><strong>滚动这里</strong>：滚动数据至鼠标的位置 (滚动条块移动至快捷菜单的左边沿)。<br><br><img src="../images/ScrollHere.jpg" alt="" width="697" border="0"></li>
+	<li><strong>左边沿</strong>：滚动至采集数据的起始位置 (滚动条块移动至滚动条轨道的左边沿)。</li>
+	<li><strong>右边沿</strong>：滚动至采集数据的最末位置 (滚动条块移动至滚动条轨道的右边沿)。</li>
+	<li><strong>左页面</strong>：取决于目前显示数据的缩放设置/时间跨度，显示之前的数据。例如，假设各屏幕显示某一秒的数据， 则左边区域将显示前一秒的数据。</li>
+	<li><strong>右页面</strong>：取决于目前显示数据的缩放设置/时间跨度，显示之后的数据。例如，如果各屏幕显示某一秒的数据，则右边区域将显示下一秒的数据。</li>
+
+	<li><strong>向左滑动</strong>：取决于目前显示数据的缩放设置/时间跨度，从当前显示数据向左滚动1/10。例如，如果各屏幕显示某一秒的数据，滚动条会向左滚动相同数据的1/10秒，相应的数据也会被显示更新。</li>
+	<li><strong>向右滑动</strong>：取决于目前显示数据的缩放设置/时间跨度， 显示之后的数据。例如，如果各屏幕显示某一秒的数据，滚动条会向右滚动相同数据的1/10秒，相应的数据也会被更新显示。</li>
+
+</ul><!-- See Also ==================================================================-->
+
+<h3>另请参阅</h3>
+<p><a href="Strip.htm">带状显示图表</a></p>
+<p><a href="Scalar.htm">数值显示控件</a></p>
+<p><a href="DisplayCursors.htm">添加标尺</a></p>
+<p><a href="DisplaySettings.htm">显示设置对话框</a></p>
+<p><a href="AxesOptions.htm">配置坐标轴</a></p>
+<p><a href="DisplayOverview.htm">显示控件相关操作</a></p>
+<p><a href="../GetStarted/Preferences.htm">DAQami 参数设置</a></p>
+
+</body>
+</html>

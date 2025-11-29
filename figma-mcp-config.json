@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "figma": {
+      "command": "node",
+      "args": [
+        "C:\\Users\\youcef cheriet\\AppData\\Roaming\\npm\\node_modules\\@sethdouglasford\\mcp-figma\\dist\\index.js"
+      ],
+      "env": {
+        "FIGMA_ACCESS_TOKEN": "figd_NiidvIEL-LM3Ih_frDWYgpzkxHengsh74a4NEvwb"
+      }
+    }
+  }
+}

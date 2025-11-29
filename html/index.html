@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CHNeoWave - Interface Moderne</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Barre de navigation latérale -->
+        <nav class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-wave-square"></i>
+                    <span class="logo-text">CHNeoWave</span>
+                </div>
+                <button class="sidebar-toggle" id="sidebarToggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+
+            <div class="sidebar-content">
+                <!-- Section Projet -->
+                <div class="sidebar-section">
+                    <h3 class="section-title">
+                        <i class="fas fa-folder-open"></i>
+                        <span>Projet</span>
+                    </h3>
+                    <div class="project-info">
+                        <div class="project-name">Bassin Méditerranéen - Houle Courte</div>
+                        <div class="project-status">
+                            <span class="status-indicator active"></span>
+                            Actif
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section Workflow -->
+                <div class="sidebar-section">
+                    <h3 class="section-title">
+                        <i class="fas fa-route"></i>
+                        <span>Workflow</span>
+                    </h3>
+                    <ul class="workflow-steps">
+                        <li class="step completed" data-view="welcome">
+                            <i class="fas fa-home"></i>
+                            <span>Accueil</span>
+                        </li>
+                        <li class="step" data-view="calibration">
+                            <i class="fas fa-tools"></i>
+                            <span>Calibration</span>
+                        </li>
+                        <li class="step" data-view="acquisition">
+                            <i class="fas fa-play-circle"></i>
+                            <span>Acquisition</span>
+                        </li>
+                        <li class="step" data-view="analysis">
+                            <i class="fas fa-chart-line"></i>
+                            <span>Analyse</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Section Outils -->
+                <div class="sidebar-section">
+                    <h3 class="section-title">
+                        <i class="fas fa-wrench"></i>
+                        <span>Outils</span>
+                    </h3>
+                    <ul class="tools-list">
+                        <li><i class="fas fa-cog"></i> Préréglages</li>
+                        <li><i class="fas fa-question-circle"></i> Aide</li>
+                    </ul>
+                </div>
+
+                <!-- Section Système -->
+                <div class="sidebar-section">
+                    <h3 class="section-title">
+                        <i class="fas fa-server"></i>
+                        <span>Système</span>
+                    </h3>
+                    <div class="system-status">
+                        <div class="status-item">
+                            <span class="status-label">DAQ</span>
+                            <span class="status-value connected">Connecté</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">Stockage</span>
+                            <span class="status-value">85% libre</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Contenu principal -->
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="breadcrumb">
+                    <span class="breadcrumb-item">CHNeoWave</span>
+                    <i class="fas fa-chevron-right"></i>
+                    <span class="breadcrumb-item current">Tableau de Bord</span>
+                </div>
+                <div class="top-bar-actions">
+                    <button class="theme-toggle" id="themeToggle">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <div class="user-menu">
+                        <i class="fas fa-user-circle"></i>
+                        <span>Utilisateur</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Vue Accueil (Dashboard) -->
+            <div class="view active" id="welcome-view">
+                <div class="dashboard">
+                    <div class="dashboard-header">
+                        <h1>Tableau de Bord</h1>
+                        <p>Vue d'ensemble de votre projet d'acquisition de données maritimes</p>
+                    </div>
+
+                    <div class="dashboard-grid">
+                        <!-- Carte Vue d'ensemble du projet -->
+                        <div class="dashboard-card project-overview">
+                            <div class="card-header">
+                                <h3>Vue d'ensemble du projet</h3>
+                                <i class="fas fa-folder-open"></i>
+                            </div>
+                            <div class="card-content">
+                                <div class="project-details">
+                                    <div class="detail-item">
+                                        <span class="label">Type d'étude:</span>
+                                        <span class="value">Houle courte en bassin</span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="label">Dernière acquisition:</span>
+                                        <span class="value">Il y a 2 heures</span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="label">Progression:</span>
+                                        <div class="progress-bar">
+                                            <div class="progress-fill" style="width: 65%"></div>
+                                        </div>
+                                        <span class="value">65%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Carte Acquisitions récentes -->
+                        <div class="dashboard-card recent-acquisitions">
+                            <div class="card-header">
+                                <h3>Acquisitions récentes</h3>
+                                <i class="fas fa-history"></i>
+                            </div>
+                            <div class="card-content">
+                                <div class="acquisition-list">
+                                    <div class="acquisition-item">
+                                        <div class="acquisition-preview">
+                                            <canvas class="mini-chart" width="60" height="30"></canvas>
+                                        </div>
+                                        <div class="acquisition-info">
+                                            <div class="acquisition-name">Acquisition_001</div>
+                                            <div class="acquisition-time">14:30 - 8 canaux</div>
+                                        </div>
+                                        <button class="btn-analyze">Analyser</button>
+                                    </div>
+                                    <div class="acquisition-item">
+                                        <div class="acquisition-preview">
+                                            <canvas class="mini-chart" width="60" height="30"></canvas>
+                                        </div>
+                                        <div class="acquisition-info">
+                                            <div class="acquisition-name">Acquisition_002</div>
+                                            <div class="acquisition-time">13:15 - 8 canaux</div>
+                                        </div>
+                                        <button class="btn-analyze">Analyser</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Carte État du système -->
+                        <div class="dashboard-card system-status-card">
+                            <div class="card-header">
+                                <h3>État du système</h3>
+                                <i class="fas fa-server"></i>
+                            </div>
+                            <div class="card-content">
+                                <div class="status-grid">
+                                    <div class="status-metric">
+                                        <div class="metric-icon">
+                                            <i class="fas fa-microchip"></i>
+                                        </div>
+                                        <div class="metric-info">
+                                            <div class="metric-label">CPU</div>
+                                            <div class="metric-value">23%</div>
+                                        </div>
+                                    </div>
+                                    <div class="status-metric">
+                                        <div class="metric-icon">
+                                            <i class="fas fa-memory"></i>
+                                        </div>
+                                        <div class="metric-info">
+                                            <div class="metric-label">RAM</div>
+                                            <div class="metric-value">45%</div>
+                                        </div>
+                                    </div>
+                                    <div class="status-metric">
+                                        <div class="metric-icon">
+                                            <i class="fas fa-hdd"></i>
+                                        </div>
+                                        <div class="metric-info">
+                                            <div class="metric-label">Stockage</div>
+                                            <div class="metric-value">85% libre</div>
+                                        </div>
+                                    </div>
+                                    <div class="status-metric">
+                                        <div class="metric-icon">
+                                            <i class="fas fa-plug"></i>
+                                        </div>
+                                        <div class="metric-info">
+                                            <div class="metric-label">DAQ</div>
+                                            <div class="metric-value connected">Connecté</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Carte Actions rapides -->
+                        <div class="dashboard-card quick-actions">
+                            <div class="card-header">
+                                <h3>Actions rapides</h3>
+                                <i class="fas fa-bolt"></i>
+                            </div>
+                            <div class="card-content">
+                                <div class="action-buttons">
+                                    <button class="action-btn primary" data-view="acquisition">
+                                        <i class="fas fa-play"></i>
+                                        <span>Nouvelle Acquisition</span>
+                                    </button>
+                                    <button class="action-btn secondary" data-view="calibration">
+                                        <i class="fas fa-tools"></i>
+                                        <span>Calibrer Sondes</span>
+                                    </button>
+                                    <button class="action-btn secondary" data-view="analysis">
+                                        <i class="fas fa-chart-line"></i>
+                                        <span>Analyser Données</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vue Calibration -->
+            <div class="view" id="calibration-view">
+                <!-- Contenu de la calibration sera ajouté dans la prochaine phase -->
+            </div>
+
+            <!-- Vue Acquisition -->
+            <div class="view" id="acquisition-view">
+                <!-- Contenu de l'acquisition sera ajouté dans la prochaine phase -->
+            </div>
+
+            <!-- Vue Analyse -->
+            <div class="view" id="analysis-view">
+                <!-- Contenu de l'analyse sera ajouté dans la prochaine phase -->
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
+

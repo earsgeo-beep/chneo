@@ -1,0 +1,176 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"><!-- saved from url=(0014)about:internet -->
+
+<html>
+<head>
+
+<title>Erfassungsraten und Trigger konfigurieren</title><!--favicon code==============================================--><!--(Meta) insert after title ======================================-->
+
+
+	<link rel="shortcut icon" href="http://www.favicon.ico" />
+	<link type="image/x-icon" rel="icon" href="favicon.ico" />
+	<link type="image/x-icon" rel="shortcut icon" href="favicon.ico" />	
+	
+	<link rel="shortcut icon" type="image/x-icon" href="data:image/ico;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAQAQAAAAAAAAAAAAAAAAA
+AAAAAADanA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7///////v48v/anA7/2pwO/9qcDv/anA7/2pwO///////anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv///////////9qcDv/anA7/2pwO/////////////////9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7//////9qcDv//////2pwO/9qcDv//////2pwO///////anA7/
+2pwO/9qcDv/anA7////////////anA7/2pwO///////anA7/2pwO////////////2pwO/9qcDv//
+/////////9qcDv//////2pwO///////anA7//////9qcDv//////2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO////////////2pwO///////anA7/2pwO/9qcDv///////////9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAA==">
+	
+
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"><!--(Links)=========================================================-->
+
+
+<link href="..\MCHelp.css" rel="stylesheet" type="text/css">
+
+</head><!--(Body)==========================================================-->
+
+
+<body>
+
+<h1>Erfassungsraten und Trigger konfigurieren</h1>
+
+<p>Für jedes Gerät in der Erfassung können Taktgeber und Erfassungsraten für jeden Typ der aktivierten Kanäle auf dem Tab <strong>Erfassungsraten</strong> eingestellt werden. Start- und Stopp-Trigger können für Geräte mit analoger Erfassung ebenso unter <strong>Trigger</strong> konfiguriert werden.</p>
+
+<p>Wählen Sie  <strong>Erfassungsraten</strong> aus und bearbeiten Sie zur Konfiguration der Erfassungsraten eines Gerätes die folgenden Schritte:</p>
+
+<ol>
+	<li>Wählen Sie ein Gerät aus der Geräteliste.</li>
+	<li>Bei den meisten Geräten wird eine Erfassungsrate in Messwerte pro Sekunde (S/s) für jeden Kanaltyp mit aktivierten Kanälen eingegeben – für analoge Eingänge unter<strong>Analog</strong>, für digitale Eingänge unter <strong>Digital I/O</strong> und für Zählereingänge unter <strong>Zähler</strong>.<br><br> Bei Geräten, die synchrone Taktung der analogen, digitalen und Zählerkanäle unterstützen – wir nennen diese Betriebsart <em>Composite</em> – wählen Sie eine der folgednen Arten der Taktgenerierung:
+
+<ul>
+	<li><strong>Gemeinsamer Erfassungstakt (Composite)</strong>, um mit einem Hardwaretakt alle aktivierten Kanäle aller Eingangs-Subsysteme – analoge, digitale, und Zählereingänge - zu takten.<br><br> Geben Sie eine Erfassungsrate in Messwerten pro Sekunde (S/s) pro Kanal an für alle aktivierten Eingangskanäle.</li>
+	<li>Wenn Sie <strong>Gemeinsamer Erfassungstakt (Composite)</strong> nicht aktivieren, wählen Sie ein Subsystem aus, das per Hardwaretakt getaktet wird, während alle weiteren Subsysteme per Software getaktet werden:
+	<ul>
+		<li><strong>Analog</strong>: Die analoge Erfassung wird über den Hardwaretakt getaktet, alle weiteren Erfassungen über den Softwaretakt.</li>
+<li><strong>Digital I/O</strong>: Die Erfassung der digitalen Eingänge wird über den Hardwaretakt getaktet, alle weiteren Erfassungen über den Softwaretakt.</li>
+		</ul></li>
+<li><strong>Zähler</strong>: Die Erfassung der Zählereingänge wird über den Hardwaretakt getaktet, alle weiteren Erfassungen über den Softwaretakt.</li>
+	<li><strong>Keine</strong>: Alle Erfassungen erfolgen über den Softwaretakt.</li>
+</ul></li>
+<li class="none">Geben Sie eine Erfassungsrate in Messwerten pro Sekunde (S/s) pro Kanal an für alle aktivierten Subsysteme – analoge Eingänge unter <strong>Analog</strong>, digitale Eingänge unter <strong>Digital I/O</strong> und Zählereingänge unter <strong>Zähler</strong>.</li>
+</ul>
+</ol>	
+	<p><strong>Hinweis:</strong> Bei der kontinuierlichen Erfassung von mehr als 1 Million Messwerten pro Kanal könnten Performanceprobleme in Abhängigkeit vom PC, auf dem DAQami läuft, von der Anzahl der erfassten Kanäle, von der Erfassungsrate und anderer Faktoren entstehen. Unter diesen Umständen müssen Sie die Erfassungsrate und die Anzahl der aktivierten Kanäle verringern und/oder eine schnellere Festplatte installieren.</p>
+<p>Klicken Sie auf <strong>Trigger</strong>  und bearbeiten Sie folgende Schritte zur Konfiguration der Trigger:</p>
+<ol>
+	<li>Wählen Sie ein Gerät aus der Geräteliste.</li>
+	<li>Wählen Sie die Quelle des Start-Triggers.
+<ul>
+	<li>Wählen Sie <strong>Manuell</strong> (Standard) um Messdaten zu erfassen mit <img src="../images/Icon-log.png" alt="Erfassung starten und Messdaten auf Festplatte speichern." width="11" border="0" class="inline"> oder <img src="../images/Icon-start.png" alt="Run the acquisition without logging to disk" width="11" border="0" class="inline">.</li>
+<li>Wählen Sie <strong>Extern-Analog</strong> oder <strong>Extern-Digital</strong> um die Erfassung zu starten, sobald die Triggerbedingung erfüllt ist.
+ <ol>
+ 	<li>Wählen Sie ein Gerät, das den gewünschten Triggertyp unterstützt, aus der  Liste <strong>Gerät</strong>.</li>
+	<li>Wählen Sie einen unterstützten Triggermodus aus der Liste <strong>Bedingung</strong>.</li>
+	</ol></li>
+</ul></li>
+	<li>Wählen Sie den Stopp-Trigger. 
+	<ul>
+		<li>Wählen Sie <strong>Manuell</strong> um standardmäßig die Erfassung per Mausklick zu beenden <img src="../images/Icon-stop.png" alt="Stop the acquisition" width="11" border="0" class="inline">.</li>
+		<li>Wählen Sie  <strong>Messwertzähler</strong>, um die Erfassung nach einer bestimmten Anzahl von Messwerten zu beenden.
+		<ol>
+		<li>Wählen Sie ein Gerät und ein Subsystem – analoge, digitale oder Zählereingänge – um den Messwertzähler zu überwachen.</li>
+	<li>Geben Sie die Anzahl der Samples ein (<strong>Messwertzähler</strong>). Die Erfassung wird beendet, sobald die angegebene Anzahl von Messwerten mit dem ausgewählen Subsystem erfasst worden ist.</li>
+	</ol></li></ul></li>
+</ul>
+</ol>
+
+<p>Erfassungsraten und Triggereinstellungen werden beim Sichern in einer Konfigurationsdatei (<span class="code">.amicfg</span>) gespeichert.</p>
+<p>Die Triggereinstellungen gelten für sämtliche Geräte in der Erfassung.</p>
+<p><strong>Hinweis</strong>: Wenn mehrere Geräte verwendet werden, werden die Start-Trigger jedes Gerätes so zeitnah wie möglich ausgelöst. Es können jedoch systembedingte Latenzzeiten zwischen den Geräten auftreten.</p>
+
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr><td><p style="text-align:center"><img src="../images/Rates_tab.png" alt="Sample Rates tab settings" width="363" border="1"></p></td><td><p style="text-align:center"><img src="../images/Trigs_tab.png" alt="Triggers tab settings" width="333" border="1"></p></td></tr>
+</table>
+</div><!--  =========================================================================-->
+
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>Erfassungsraten einstellen</strong></td></tr>
+
+<tr><td><strong>Gemeinsamer Erfassungstakt (Composite)</strong></td><td>Dieses Auswahlfeld wird nur angezeigt, wenn das ausgewählte Gerät die synchrone Taktung von analogen, digitalen und Zählerkanälen (<em>Composite</em> Betriebsart) unterstützt.<br><br>
+	<ul class="table">
+		<li>Markieren Sie das Feld, um alle aktivierten Kanäle aller Eingangs-Subsysteme – analoge, digitale und/oder Zählereingänge - über den Hardwaretakt zu takten.</li>
+<li>Markieren Sie das Feld nicht und wählen Sie ein Subsystem, das per Hardwaretakt getaktet wird, während alle weiteren Subsysteme per Softwaretakt getaktet werden.
+<ul>
+	<li><strong>Analog</strong>: Die analoge Erfassung wird über den Hardwaretakt getaktet, alle weiteren Erfassungen über den Softwaretakt.</li>
+<li><strong>Digital I/O</strong>: Die Erfassung der digitalen Eingänge wird über den Hardwaretakt getaktet, alle weiteren Erfassungen über den Softwaretakt.</li>
+<li><strong>Zähler</strong>: Die Erfassung der Zählereingänge wird über den Hardwaretakt getaktet, alle weiteren Erfassungen über den Softwaretakt.</li>
+		<li><strong>Keine</strong>: Alle Erfassungen erfolgen über den Softwaretakt.</li>
+</ul></li>
+<li class="none">Geben Sie eine Erfassungsrate in Messwerten pro Sekunde (S/s) pro Kanal an für jedes aktivierte Subsystem.</li>
+</ul>
+	</td></tr>
+<tr><td>Eingabeflder für <strong>Messwerte pro Sekunde pro Kanal</strong></td><td>Abhängig von Gerätetyp und Typ der erfassten Messwerte kann eine beliebige Kombination der folgenden Felder erscheinen zur Eingabe der Erfassungsrate in S/s pro Kanal:
+	<ul class="table">
+		<li><strong>Analog</strong> – Wenn ein oder mehrere analoge Eingänge aktiviert sind, geben Sie hier die Erfassungsrate pro Kanal an für jeden analogen Kanal.</li>
+	<li><strong>Digital I/O</strong> – Wenn ein oder mehrere digitale Eingänge aktiviert sind, geben Sie hier die Erfassungsrate pro Kanal an für jeden digitalen Kanal.</li>
+	<li><strong>Zähler</strong> – Wenn ein oder mehrere Zählereingänge aktiviert sind, geben Sie hier die Erfassungsrate pro Kanal an.</li>
+<li><strong>Composite</strong> – Wenn <strong>Gemeinsamer Erfassungstakt (Composite)</strong> ausgewählt ist, kann eine Abtastrate pro Kanal für <em>alle</em> aktivierten Eingangskanäle (aller Eingangs-Subsysteme) angegeben werden.</li>
+</ul>
+Die minimal und maximal mögliche Erfassungsrate des Gerätes pro Kanal wird unterhalb des Eingabefeldes angezeigt.</td></tr>
+</table>
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>Triggereinstellungen</strong></td></tr>
+
+
+
+<tr><td colspan="2"><strong>Start-Trigger</strong></td></tr>
+<tr><td>Quelle</td><td>Die Triggerbedingung, die die Erfassung startet. Die Triggereinstellungen werden dem ausgewählten Gerät entsprechend angezeigt. Klicken Sie auf den Pfeil unter <strong>Quelle</strong> und wählen Sie die Triggerquelle:
+
+	<ul class="table">
+		<li><strong>Manuell</strong>: Die Erfassung startet mit dem Klick auf <img src="../images/Icon-log.png" alt="Erfassung starten und Messdaten auf Festplatte speichern." width="11" border="0" class="inline"> oder <img src="../images/Icon-start.png" alt="Run the acquisition without logging to disk" width="11" border="0" class="inline">.</li>
+	
+		<li><strong>Extern-Analog</strong>: <em>Alle Geräte</em> starten mit der Messdatenerfassung, sobald ein externes Analogsignal die Triggerbedingung erfüllt, die mit dem Triggermodus auf dem ausgewählten Gerät spezifiziert wurde.
+<ul class="subtable">	
+	<li><strong>Steigende Flanke</strong> – Die Erfassung startet bei einem Übergang von unterhalb nach oberhalb des Pegelwertes. Ist die Erfassung einmal gestartet, wird der externe Trigger ignoriert.<br> Ein Eingabefeld für <em>Pegel</em> wird angezeigt, wenn dieser Modus ausgewählt ist.</li>
+	<li><strong>Fallende Flanke</strong> – Die Erfassung startet bei einem Übergang von oberhalb nach unterhalb des Pegelwertes. Ist die Erfassung einmal gestartet, wird der externe Trigger ignoriert.<br> Ein Eingabefeld für <em>Pegel</em> wird angezeigt, wenn dieser Modus ausgewählt ist.</li>
+	<li><strong>Steigender Schwellwert</strong> – Die Erfassung startet bei einem Übergang vom unteren Schwellwert zum oberen Schwellwert. Ist die Erfassung einmal gestartet, wird der externe Trigger ignoriert.<br> Eingabefelder für <em>Unterer Schwellwert</em> und <em>Oberer Schwellwert</em> werden angezeigt, wenn dieser Modus ausgewählt ist.</li>
+	<li><strong>Fallender Schwellwert</strong> – Die Erfassung startet bei einem Übergang vom oberen Schwellwert zum unteren Schwellwert. Ist die Erfassung einmal gestartet, wird der externe Trigger ignoriert.<br> Eingabefelder für <em>Unterer Schwellwert</em> und <em>Oberer Schwellwert</em> werden angezeigt, wenn dieser Modus ausgewählt ist.</li>
+</ul></li>
+
+	<li><strong>Extern-Digital</strong>: Die Erfassung startet, sobald das externe digitale Signal die unter <strong>Trigger-Modus</strong> spezifizierte Bedingung erfüllt:
+<ul class="subtable">
+	<li><strong>High</strong> – Die Erfassung startet, sobald das Signal den Pegelwert High überschreitet.</li>
+	<li><strong>Low</strong> – Die Erfassung startet, sobald das Signal den Pegelwert Low unterschreitet.</li> 
+	<li><strong>Steigende Flanke</strong> – Die Erfassung startet beim Übergang des Signals von Low nach High (TTL-Trigger).</li>
+	<li><strong>Fallende Flanke</strong> – Die Erfassung startet beim Übergang des Signals von High nach Low.</li>
+</ul></li>	
+	</ul>
+	</td></tr>
+
+<tr><td colspan="2"><strong>Stopp-Trigger</strong></td></tr>
+<tr><td>Quelle</td>
+	<td>Die Triggerbedingung, die die Erfassung beendet. Klicken Sie auf den Pfeil unter <strong>Quelle</strong> und wählen Sie die Triggerquelle:
+
+	<ul class="table">
+		<li><strong>Manuell</strong>: Die Erfassung wird beendet mit einem Klick auf <img src="../images/Icon-stop.png" alt="Stop the acquisition" width="11" border="0">.</li>
+	<li><strong>Messwertzähler</strong>: Sobald das ausgewählte Gerät bzw. Subsystem (analoge, digitale oder Zählerkanäle) die eingegebene Anzahl erfasst hat, wird die Erfassung auf allen Kanälen und allen Geräten beendet.<br>.</li>	
+	</ul></td></tr>
+</table>
+</div><!-- See Also -->
+
+
+<h3>Siehe auch</h3>
+<p><a href="Device.htm">Ein Gerät konfigurieren</a></p>
+<p><a href="Channel.htm">Kanäle konfigurieren</a></p>
+<p><a href="ConfigSave.htm">Eine Konfiguration speichern</a></p>
+
+</body>
+</html>

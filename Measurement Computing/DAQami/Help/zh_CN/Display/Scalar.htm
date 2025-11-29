@@ -1,0 +1,121 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"><!-- saved from url=(0014)about:internet -->
+
+<html>
+<head>
+
+<title>数值显示控件</title><!--(Meta) insert after title ======================================-->
+
+
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"><!--(Links)=========================================================-->
+
+
+<link href="..\MCHelp.css" rel="stylesheet" type="text/css">
+
+</head><!--(Body)==========================================================-->
+
+
+<body>
+
+
+<h1>数值显示控件</h1>
+<p>数值显示控件将实时显示采集到的数据的数值。如下所示：</p>
+
+<p style="text-align:center"><img src="../images/Display-scalar.jpg" alt="数值显示控件" width="638" border="0"></p>
+
+<p>根据插图标号查看相关描述。</p>
+
+<table class="bordered" width="95%">
+<tr><td width="5%"><strong>插图标号</strong></td><td width="20%"><strong>名称</strong></td><td><strong>描述</strong></td></tr>
+
+<tr><td>1</td><td>滚动条</td><td>左右滚动，查看历史数据。滚动条仅在显示控件处于回放模式或采集任务结束后显示。</td></tr>
+
+<tr><td>2</td><td>通道数据值</td><td> 滚动条对应的当前样点的数据值。在<strong>通道</strong>选项卡中可设置显示单位。
+<ul>
+	<li>若数据超过模拟输入通道的量程时，将显示 <strong>OVR</strong> 。</li>
+<li>将鼠标光标放在数据数值上，可以显示被采集数据的最大值与最小值。
+<br><br><p style="text-align:center"><img src="../images/MinMaxTT.png" alt="" width="139" border="0" align="middle"></p></li>
+<li>右键点击通道图标可改变颜色或移除通道。<br><br>若数字通道作为<em>数字端口</em> 被添加，则快捷菜单将有另外两个选项显示数字位， 显示一行或两行LED，或者显示十进制或十六进制的端口值。<br><br>
+<p style="text-align:center"><img src="../images/ScalarPortCtxMenu.png" alt="" width="467" height="167" border="0" align="middle"></p>
+<br><br>若添加了计数器通道，快捷菜单将有两个另外的选项显示计数，十进制选项或十六进制选项。<br><br>
+<p style="text-align:center"><img src="../images/CIDecHex.png" alt="" width="343" border="0" align="middle"></p></li>
+</ul>
+</td></tr>
+
+<tr><td>3</td><td>控件名称</td><td>显示控件名称（参考<strong>配置显示控件</strong>章节的<a href="DisplaySettings.htm">显示控件名称</a>）。</td></tr>
+
+<tr><td>4</td><td>缩放比例</td><td>可在显示界面中增加（缩小）或减少（放大）可视数据值。可视数据值的范围是基于滚动条块的位置。<br><br>例如，若计数器设置了X轴显示模式， 并且采集了4963个样点，则标量显示滚动条将如下显示– 所有的样点(0 到 4962) 全部可见：
+<p style="text-align:center"><img src="../images/ScalarScroll1X.png" alt="" width="699" height="54" border="0"></p>
+如果滚动条块移动到右边沿的一半距离， 点击 <img src="../images/Icon-zoomin.png" alt="" width="18" border="0" class="inline"> 选择 <strong>2X</strong>, 可以放大, 显示"放大," 或者将数据调解二分之一大小使其可见 – 在此例中，数值为 1415和 3896。
+<p style="text-align:center"><img src="../images/ScalarScroll2X.png" alt="" width="699" height="54" border="0"></p>
+ 点击放大至4倍，使得原来的数据1/4可见，且数据的范围再次决定于滚动条块的位置。</td></tr>
+
+<tr><td>5</td><td>图标</td><td>用于放大、缩小、设置和移除控件的图标。
+
+<div class="stepnoborder">
+<table cellspacing="7" width="95%"> 
+<tr><td><img src="../images/Icon-zoomin.png" alt="放大图标" width="24" border="0" class="inline"></td><td>放大数据曲线。</td></tr>
+<tr><td><img src="../images/Icon-zoomout.png" alt="缩小图标" width="24" border="0" class="inline"></td><td>缩小数据曲线。</td></tr>
+<tr><td><img src="../images/Icon-copy.png" alt="复制图标" width="24" border="0" class="inline"></td><td>复制当前显示控件至剪贴板。</td></tr>
+<tr><td><img src="../images/Icon-displaysetting.png" alt="控件设置图标" width="24" border="0" class="inline"></td><td>打开显示设置对话框，配置显示控件。</td></tr>
+<tr><td><img src="../images/Icon-displaydelete.png" alt="删除控件图标" width="24" border="0" class="inline"></td><td>从显示面板中移除显示控件。</td></tr>
+</table>
+</div>
+</td></tr>
+
+<tr><td>6</td><td>样点采集时刻或编号</td><td>当前样点的采样时刻(相对或绝对)或编号。可在<strong>参数设置</strong>中配置显示模式。</td></tr>
+
+<tr><td>7</td><td>切换实时/回放模式</td><td>数据采集过程中，点击显示控件中的上锁/解锁图标，在实时模式和回放模式之间切换。
+<div class="stepnoborder">
+<table cellspacing="7" width="95%"> 
+<tr><td><img src="../images/Icon-lock-live.png" alt="实时模式图标" width="24" border="0" class="inline"></td><td>当图标<em>上锁</em>时，显示控件工作在实时模式，不断更新最新采集到的数据。<br><br>点击图标切换至回放模式。</td></tr>
+<tr><td><img src="../images/Icon-lock-review.png" alt="回放模式图标" width="24" border="0" class="inline"></td><td>当图标<em>解锁</em>时，显示控件工作在回放模式。在回放模式的显示控件上，将显示水平滚动条。此时，新数据的采集任务仍正常工作。<br><br>点击图标切换至实时模式。</td></tr>
+</table>
+</div>
+
+</td></tr><tr><td>8</td><td>x轴</td><td>显示采集进程的绝对时间、相对时间或采样数量。
+<ul class="table">
+	<li>绝对时间 — 采集样点的时刻。</li>
+	<li>相对时间 — 采集样点时，采集进程已执行的时间。</li>
+	<li>样点数量 — 采集样点的编号。</li>
+</ul> 
+可在<strong>参数设置</strong>中配置显示模式。</td></tr>
+
+</table>
+
+<p>如果数值显示控件的大小不足以显示多个通道，可通过垂直或水平滚动条进行调节。</p><!-- Menu ==================================================================-->
+
+
+<h2>快捷菜单</h2>
+<p>右键单击显示控件，显示以下选项：</p>
+<ul>
+	<li><strong>编辑显示</strong>：打开 <strong>显示设置</strong> 对话框窗口。仅当DAQami空闲时有效。</li>
+	<li><strong>缩放»放大</strong>: 放大仅当DAQami空闲且采集运行时有效。</li>
+	<li><strong>缩放»缩小</strong>: 缩小。仅当DAQami空闲且采集运行时有效。</li>
+<li><strong>移除显示控件</strong>：从显示选项卡中移除标量显示。</li>
+</ul>
+<hr align="left">
+<p>右击滚动条，显示以下菜单：</p>
+<img src="../images/StrContextScroll.png" alt="" width="129" border="0">
+<p>仅当采集在预览模式下运行 <img src="../images/Icon-lock-review.png" alt="回放模式图标" width="24" border="0" class="inline"> 且DAQami空闲时，菜单才有效。</p>
+<ul>
+	<li><strong>滚动这里</strong>：滚动数据至鼠标的位置 (滚动条块移动至快捷菜单的左边沿)。<br><br><img src="../images/ScrollHereScalar.jpg" alt="" width="688" border="0"></li>
+	<li><strong>左边沿</strong>：滚动至采集数据的起始位置 (滚动条块移动至滚动条轨道的左边沿)。</li>
+	<li><strong>右边沿</strong>：滚动至采集数据的最末位置 (滚动条块移动至滚动条轨道的右边沿)。</li>
+	<li><strong>左页面</strong>：取决于目前显示数据的缩放设置/时间跨度，显示之前的数据。例如，假设各屏幕显示某一秒的数据， 则左边区域将显示前一秒的数据。</li>
+	<li><strong>右页面</strong>：取决于目前显示数据的缩放设置/时间跨度，显示之后的数据。例如，如果各屏幕显示某一秒的数据，则右边区域将显示下一秒的数据。</li>
+
+	<li><strong>向左滑动</strong>：取决于目前显示数据的缩放设置/时间跨度，从当前显示数据向左滚动1/10。例如，如果各屏幕显示某一秒的数据，滚动条会向左滚动相同数据的1/10秒，相应的数据也会被显示更新。</li>
+	<li><strong>向右滑动</strong>：取决于目前显示数据的缩放设置/时间跨度， 显示之后的数据。例如，如果各屏幕显示某一秒的数据，滚动条会向右滚动相同数据的1/10秒，相应的数据也会被更新显示。</li>
+
+</ul><!-- See Also ==================================================================-->
+
+<h3>另请参阅</h3>
+<p><a href="Strip.htm">带状显示图表</a></p>
+<p><a href="Block.htm">块状显示图表</a></p>
+<p><a href="../Config/Channel.htm">配置通道</a></p>
+<p><a href="DisplaySettings.htm">显示设置对话框</a></p>
+<p><a href="../GetStarted/Preferences.htm">DAQami 参数设置</a></p>
+<p><a href="DisplayOverview.htm">显示控件相关操作</a></p>
+
+</body>
+</html>

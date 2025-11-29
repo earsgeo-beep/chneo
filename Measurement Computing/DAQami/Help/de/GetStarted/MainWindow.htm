@@ -1,0 +1,80 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"><!-- saved from url=(0014)about:internet -->
+
+<html>
+<head>
+
+<title>DAQami Benutzeroberfläche</title><!--(Meta) insert after title ======================================-->
+
+
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"><!--(Links)=========================================================-->
+
+
+<link href="../MCHelp.css" rel="stylesheet" type="text/css">
+
+</head><!--(Body)==========================================================-->
+
+
+<body>
+
+
+<h1>DAQami Benutzeroberfläche</h1>
+
+<p>Das Bild zeigt die verschiedenen Komponenten im Hauptfenster von DAQami.</p>
+
+<p align="center"><img src="../images/GUI-callouts.png" alt="Komponenten von DAQami" width="800" border="0"></p>
+
+<p>Die Nummern verweisen auf die Beschreibung zu jeder Komponente.</p>
+
+<table class="bordered" width="95%">
+<tr><td width="5%"><strong>Nummer</strong></td>
+<td width="20%"><strong>Bezeichnung</strong></td><td><strong>Beschreibung</strong></td></tr>
+
+<tr><td>1</td><td>Gerät hinzufügen</td><td>Zeigt die Geräte, die zur Erfassung hinzugefügt werden können. Ziehen Sie ein Gerät auf die Geräteliste, um es zur Erfassung hinzuzufügen. Ist während einer Erfassung deaktiviert.</td></tr>
+
+<tr><td>2</td><td>Anzeige hinzufügen</td><td>Zeigt die Anzeigeinstrumente, die zur Erfassung hinzugefügt werden können und öffnet den Anzeigenbereich. Ziehen Sie eine Anzeige in den Anzeigenbereich, um sie der Erfassung hinzuzufügen. Ist während einer Erfassung deaktiviert.</td></tr>
+
+<tr><td>3</td><td>Umschalten zwischen Konfiguration und Anzeige</td><td>Schaltet zwischen der Konfiguration und dem Anzeigenbereich um.
+
+	<ul class="table">
+		<li class="none"> <img src="../images/Icon-configpanel.png" alt="Konfiguration" width="22" border="0" class="inline"> &nbsp;&nbsp;Zeigt die Konfiguration.</li>
+	<li class="none"> <img src="../images/Icon-displaypanel.png" alt="Anzeigefenster" width="25" border="0" class="inline"> &nbsp;&nbsp;Zeigt die Anzeigeninstrumente.</li>
+	</ul></td></tr>
+	
+<tr><td>4</td><td> Anzeigefenster</td><td>Verwenden Sie die Anzeigefenster zur Anordnung der Anzeigen. Klicken Sie auf <img src="../images/Icon-add-tab.png" alt="" border="0"> um ein neues Anzeigefenster zu erstellen.
+
+</td></tr><tr><td>5</td><td>Log-Taste</td><td>Klicken Sie auf <img src="../images/Icon-log.png" alt="Erfassung starten und Mesdaten auf Festplatte speichern" width="11" border="0"> um Messdaten eines aktivierten Kanals zu erfassen, zu speichern, anzuzeigen und Signale auszugeben.</td></tr>
+
+<tr><td>6</td><td>Anzeige-Taste</td><td>Klicken Sie auf <img src="../images/Icon-start.png" alt="" width="11" border="0"> um Messdaten eines aktivierten Kanals zu erfassen, anzuzeigen und Signale auszugeben, jedoch nicht zu speichern.</td></tr>
+
+<tr><td>7</td><td>Stopp-Taste</td><td>Klicken Sie auf <img src="../images/Icon-stop.png" alt="" width="11" border="0"> um die aktuelle Erfassung zu stoppen.</td></tr>
+
+<tr><td>8</td><td>Dauer der Erfassung</td><td>Zeigt die Dauer einer laufenden bzw. beendeten Erfassung an im Format <em>Tage,Stunden:Minuten:Sekunden,Millisekunden</em>.</td></tr>
+
+<tr><td>9</td><td>Zahnrad-Symbol (Tools-Menü)</td><td>Öffnet das Auswahlmenü für das Arbeiten mit Konfigurationen und Dateien, Speicheroptionen, Voreinstellungen ...</td></tr>
+
+<tr><td>10</td><td>Anzeigen bzw. Konfiguration (umschaltbar)</td><td>Das Anzeigenfenster zeigt die hinzugefügten Anzeigen und die Messdaten zur aktuellen Erfassung. Das Konfigurationsfenster bietet die Einstellungen für Gerät, Kanäle, Erfassungsrate und Trigger. Klicken Sie auf die Umschalttaste <img src="../images/Icon-displaypanel.png" alt="Anzeigefenster" width="25" border="0" class="inline"> / <img src="../images/Icon-configpanel.png" alt="Konfiguration" width="22"  border="0" class="inline"> um zwischen den Fenstern umzuschalten.</td></tr>
+
+
+<tr><td>11</td><td>Status der Erfassung</td><td>Zeigt eine der folgenden Statusbeschreibungen im linken Bereich der Leiste.
+	<ul>
+	<li><em>Erfassung läuft</em> – DAQami erfasst Messdaten. Die Konfiguration von Gerät, Kanälen, Erfassung und Anzeigen ist deaktiviert.</li>
+<li><em>Erfassung nicht aktiv</em> – DAQami erfasst keine Daten. Die Konfiguration von Gerät, Kanal, Erfassung und Anzeigen ist möglich.</li>
+	<li><em>Erfassung wartet</em> – DAQami wartet auf eine Triggerbedingung, um die Erfassung zu starten. Die Konfiguration von Gerät, Kanal, Erfassung und Anzeigen ist gesperrt.</li>
+</ul>
+Bewegen Sie die Maus über die untere rechte Ecke, um die Erfassungsraten für jedes Gerät und jeden Eingangskanal anzuzeigen. <br> <img src="../images/RateHover.png" alt="" width="196" height="163" border="0"><br><br> Wenn ein offener Thermoelement-Eingang erkannt wird, wird ein Warnsymbol <img src="../images/Icon-warning.png" alt="Stopp-Taste" width="15" border="0" class="inline"> in der rechten Ecke angezeigt. Bewegen Sie die Maus über das Symbol, wird folgende Meldung angezeigt: "Kabelbruch am Thermoelement auf folgenden Kanälen: AIx."</li>
+</td></tr>
+
+	<tr><td>12</td><td>Geräteliste</td><td>Zeigt die zur Erfassung hinzugefügten Geräte und die Liste der aktivierten Kanäle für jedes Gerät. Ziehen Sie einen aktivierten Kanal auf eine Anzeige, um die erfassten Daten anzuzeigen.<br><br>Wenn ein Kabelbruch an einem Thermoelement erkannt worden ist, wird ein Warnsymbol <img src="../images/Icon-warning.png" alt="Stopp-Taste" width="15" border="0" class="inline"> neben dem betroffenen Kanal angezeigt. Wenn die Maus über das Warnsymbol bewegt wird, wird folgende Meldung angezeigt: "Kabelbruch am Thermoelement".</td></tr>
+	
+	<tr><td>13</td><td>Zeigen/Verbergen<br> (Geräteliste)</td><td>Klicken, um die Geräteliste zu verbergen. Erneut klicken, um die Geräteliste wieder anzuzeigen.</td></tr>
+</table>
+
+<h3>Siehe auch</h3>
+<p><a href="../Hardware/DeviceAdd.htm">Ein Gerät hinzufügen</a></p>
+<p><a href="../Display/DisplayAdd.htm">Eine Anzeige hinzufügen</a></p>
+<p><a href="../Hardware/ChanActivate.htm">Einen Kanal aktivieren</a></p>
+<p><a href="GetStarted.htm">Erste-Schritte-Fenster</a></p>
+<p><a href="ToolsMenu.htm">Tools-Menü (Zahnrad-Symbol)</a></p>
+
+</body>
+</html>

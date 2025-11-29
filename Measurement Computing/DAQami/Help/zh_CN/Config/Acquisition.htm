@@ -1,0 +1,149 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"><!-- saved from url=(0014)about:internet -->
+
+<html>
+<head>
+
+<title>配置采样率和触发</title><!--favicon code==============================================--><!--(Meta) insert after title ======================================-->
+
+
+	<link rel="shortcut icon" href="http://www.favicon.ico" />
+	<link type="image/x-icon" rel="icon" href="favicon.ico" />
+	<link type="image/x-icon" rel="shortcut icon" href="favicon.ico" />	
+	
+	<link rel="shortcut icon" type="image/x-icon" href="data:image/ico;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAQAQAAAAAAAAAAAAAAAAA
+AAAAAADanA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7///////v48v/anA7/2pwO/9qcDv/anA7/2pwO///////anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv///////////9qcDv/anA7/2pwO/////////////////9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7//////9qcDv//////2pwO/9qcDv//////2pwO///////anA7/
+2pwO/9qcDv/anA7////////////anA7/2pwO///////anA7/2pwO////////////2pwO/9qcDv//
+/////////9qcDv//////2pwO///////anA7//////9qcDv//////2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO////////////2pwO///////anA7/2pwO/9qcDv///////////9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAA==">
+	
+
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"><!--(Links)=========================================================-->
+
+
+<link href="..\MCHelp.css" rel="stylesheet" type="text/css">
+
+</head><!--(Body)==========================================================-->
+
+
+<body>
+
+<h1>配置采样率和触发</h1>
+
+<p>对于每个数据采集的设备，通过<strong>采样率</strong> 选项卡，你可以设置激活通道的采样率。可以在 <strong>触发</strong> 选项卡上设置模拟输入设备的开始、停止触发。<p>
+
+<p>点击 <strong>采样率</strong> 选项卡，通过以下步骤完成一个设备的采样率设置：</p>
+
+<ol>
+	<li>从设备面板中选择一台设备。</li>
+	<li>分别在 <strong>模拟</strong>，<strong>数字</strong>和/或<strong>计数器</strong>文本框中为已激活的通道输入采样率，单位：采样点/秒/通道</li>
+</ol>	
+	<p><strong>备注：</strong>当每通道需要连续记录超过一百万个样点时， 可能会出现一些性能问题，具体情况取决于运行DAQami软件的电脑。为了在这种情形下保持最佳性能，应当降低采样率，减少激活的通道数，或者安装一个更快速的硬盘驱动。</p>
+<p>点击 <strong>触发</strong> 选项卡，通过以下步骤完成一个设备的触发设置：</p>
+<ol>
+	<li>从设备面板中选择一台设备。</li>
+	<li>选择用于启动数据采集的触发源。
+<ul>
+	<li type="circle">选择默认的<strong>手动设置</strong> ，点击 <img src="../images/Icon-log.png" alt="启动数据采集并记录数据至硬盘中" width="11" border="0" class="inline"> 或<img src="../images/Icon-start.png" alt="启动数据采集但不记录数据" width="11" border="0" class="inline">开始数据采集。</li>
+<li type="circle">选择 <strong>外部-模拟信号</strong> 或 <strong>外部-数字</strong> ，当触发条件满足时开始采集。
+ <ol>
+ 	<li>从 <strong>设备</strong> 列表中，选择一台支持触发类型的设备。</li>
+	<li>从<strong>模式</strong> 列表中选择支持的触发模式。</li>
+	</ol>
+</li></ul></li>
+	<li>选择用于停止数据采集的触发源。 
+	<ul>
+		<li type="circle">选择默认的<strong>手动设置</strong>，点击停止数据采集。 <img src="../images/Icon-stop.png" alt="停止数据采集" width="11" border="0" class="inline"></li>
+		<li type="circle">选择 <strong>样点数量</strong> ，当采集的样点达到指定数量时停止采集。
+		<ol>
+		<li>选择一台设备与设备子系统–模拟，数字，或计数器输入通道–来监控样点数量。</li>
+	<li>输入样点的数量 (<strong>样点数量</strong>)。当被选择的设备子系统采集到指定数量的样点时，采集停止。</li>
+	</ol></li></ul></li>
+</ul></li>
+</ol>
+
+<p>保存时，采样率和触发设置被存储至 <span class="code">.amicfg</span> 文件中。</p>
+<p>触发设置适用于所有的设备。</p>
+<p><strong>注意</strong>：当使用多个设备时，一台设备与另一台设备之间的开始触发设置应尽量时间接近；然而，可能设备间会存在一定的系统延迟。</p>
+
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr><td><p style="text-align:center"><img src="../images/Rates_tab.png" alt="采样率选项卡设置" width="363" border="1"></p></td><td><p style="text-align:center"><img src="../images/Trigs_tab.png" alt="触发选项卡设置" width="333" border="1"></p></td></tr>
+</table>
+</div><!--  =========================================================================-->
+
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>采样率选项卡设置</strong></td></tr>
+
+<tr><td colspan="2">取决于待测数据类型，针对以下三种类型的数据采集，均需要输入采样率，单位：每通道S/s。
+	<ul class="table">
+		<li><strong>模拟</strong> – 激活一路或多路模拟通道时，需输入每通道采样率，该值对所有模拟通道生效。</li>
+	<li><strong>数字</strong> – 激活一路或多路数字通道时，需输入每通道采样率，该值对所有数字通道生效。</li>
+	<li><strong>计数器</strong> – 激活一路或多路计数器通道时，需输入每通道采样率，该值对所有计数器通道生效。</li>
+</ul>
+采样率的最大值与最小值受限于当前设备与活动通道数，同时显示在相应的文本框下方。</td></tr>
+</table>
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>触发选项卡设置</strong></td></tr>
+
+
+
+<tr><td colspan="2"><strong>启动触发</strong></td></tr>
+<tr><td>触发源</td><td>满足触发条件以启动数据采集。触发选项将根据所选设备而适当调整。点击<strong>触发源</strong> 箭头，选择一个触发源：
+
+	<ul class="table">
+		<li><strong>手动设置</strong>：当点击 <img src="../images/Icon-log.png" alt="启动数据采集并记录数据至硬盘中" width="11" border="0" class="inline"> 或 <img src="../images/Icon-start.png" alt="启动数据采集但不记录数据" width="11" border="0" class="inline">时，采集开始。</li>
+	
+		<li><strong>外部模拟信号</strong>：当外部模拟信号满足指定的触发标准时， <em>所有设备</em> 开始数据采集。
+<ul class="subtable">	
+	<li><strong>上升沿</strong> – 信号由低于阈值的状态转变为高于阈值时，触发数据采集. 当AD转换开始时，外部触发信号便无效.<br>当选中此模式时，将显示<em>阈值</em>文本框，用于输入触发阈值。</li>
+	<li><strong>下降沿</strong> – 信号由高于阈值的状态转变为低于阈值时，触发数据采集当AD转换开始时，外部触发信号便无效.<br>当选中此模式时，将显示<em>阈值</em>文本框，用于输入触发阈值。</li>
+	<li><strong>迟滞上升沿</strong> – 信号由低于低阈值状态转变为高于高阈值时，触发数据采集当AD转换开始时，外部触发信号便无效.<br>当选中此模式时，将显示<em>低阈值</em>与 <em>高阈值</em> 用于输入触发的阈值范围</li>
+	<li><strong>迟滞下降沿</strong> – 信号由高于高阈值状态转变为低于低阈值时，触发数据采集当AD转换开始时，外部触发信号便无效.<br>当选中此模式时，将显示<em>低阈值</em>与 <em>高阈值</em> 用于输入触发的阈值范围</li>
+</ul></li>
+
+	<li><strong>外部数字信号</strong>：外部数字信号满足 <strong>触发模式</strong>指定的条件时启动扫描：
+<ul class="subtable">
+	<li><strong>高电平</strong> – 信号高于高电平阈值时，触发数据采集。</li>
+	<li><strong>低电平</strong> – 信号低于低电平阈值时，触发数据采集。</li> 
+	<li><strong>上升沿</strong> – 信号由低电平变为高电平时（TTL触发），触发数据采集</li>
+	<li><strong>下降沿</strong> –信号由高电平变为低电平时，触发数据采集</li>
+</ul></li>	
+	</ul>
+	</td></tr>
+
+<tr><td colspan="2"><strong>停止触发</strong></td></tr>
+<tr><td>触发源</td>
+	<td>满足触发条件以停止数据采集。点击<strong>触发源</strong> 箭头，选择一个触发源：
+
+	<ul class="table">
+		<li><strong>手动设置</strong>：当点击 <img src="../images/Icon-stop.png" alt="停止数据采集" width="11" border="0"> 或采样的数量满足 <strong>样点数量</strong> 的要求时，采样停止。</li>
+	<li><strong>样点数量</strong>： 当被选设备与子系统（模拟、数字或计数器通道）满足文本框中所输入的样点数时，设备的所有通道停止采集。</li>	
+	</ul></td></tr>
+</table>
+</div><!-- See Also -->
+
+
+<h3>另请参阅</h3>
+<p><a href="Device.htm">配置设备</a></p>
+<p><a href="Channel.htm">配置通道</a></p>
+<p><a href="ConfigSave.htm">保存配置</a></p>
+
+</body>
+</html>

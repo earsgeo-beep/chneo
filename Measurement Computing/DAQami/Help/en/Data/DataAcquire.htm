@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<!-- saved from url=(0014)about:internet -->
+<html>
+<head>
+
+<title>Viewing and Logging Data</title>
+
+<!--(Meta) insert after title ======================================-->
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+
+<!--(Links)=========================================================-->
+<link href="..\MCHelp.css" rel="stylesheet" type="text/css">
+
+
+</head>
+
+<!--(Body)==========================================================-->
+<body>
+
+<h1>Viewing and Logging Data</h1>
+<p>DAQami can acquire, log, and present data for viewing on displays.</p>
+<p>Acquired data can be exported to .csv when an acquisition is stopped.</p>
+<p>Data from activated channels can be logged to a Technical Data Management Streaming (TDMS) file. You can specify the name of the data file and the location to save the data from the <strong>Logging Options</strong> dialog box.</p>
+<p>Displays can also export data that is currently showing on the display.</p>
+
+<p>While viewing data on displays, you can click on the lock icon on each display to toggle the display between live and review mode.</p>
+
+<div class="stepnoborder">
+<table cellspacing="7" width="95%"> 
+<tr><td><img src="../images/Icon-lock-live.png" alt="Live mode icon" width="24" border="0" class="inline"></td><td>When the lock icon is <em>locked</em>, the display is in live mode and updates as data is acquired based on the configuration.<br><br>Click on the icon to change to review mode.</td></tr>
+<tr><td><img src="../images/Icon-lock-review.png" alt="Review mode icon" width="24" border="0" class="inline"></td><td>When the lock icon is <em>unlocked</em>, the display is in review mode. A horizontal scrollbar appears on the display for reviewing samples. Data continues to be acquired based on the configuration.<br><br>Click on the icon to change to live mode.</td></tr>
+</table>
+</div>
+<p>Use the buttons on the DAQami <a href="../GetStarted/MainWindow.htm">main window</a> to control when data is acquired and when it is acquired and logged:</p>
+
+<div class="stepnoborder">
+<table cellspacing="7" width="95%"> 
+<tr><td><img src="../images/Icon-log.png" alt="Run the acquisition and log data to disk" width="25" border="0" class="inline"></td><td>Start acquiring and logging data from all active channels to a TDMS file. Optionally, you can view up to 1 million samples per channel on a display, and export data to .csv file.<br><br>
+<strong>Note:</strong> When continuously logging more than 1 million samples per channel, you may experience performance issues depending on the PC that is running DAQami, the number of channels being sampled, the sample rate, and other factors. For optimal performance in this scenario, reduce the sample rate, reduce the number of active channels, and/or install a faster hard drive.</td></tr>
+<tr><td><img src="../images/Icon-start.png" alt="Start icon" width="25" border="0" class="inline"></td><td>Start acquiring data and, optionally, view up to 1 million samples per channel on a display, and export data to .csv file. No data is logged to a TDMS file. </td></tr>
+
+<tr><td><img src="../images/Icon-stop.png" alt="Stop icon" width="25" border="0" class="inline"></td><td>Stop acquiring data. Data can be exported to .csv once the acquisition stops.</td></tr>
+
+</table>
+</div>
+<p>The timestamp applies to the first channel in the acquisition.</p>
+
+<!-- video link ======================================================================-->
+<h3>Video Demo</h3>
+<p>Click the <strong>Play</strong> button below to see a video showing how to acquire data and toggle displays between live and review mode.</p>
+
+<p align="center">
+<video width="480" controls>
+  <source src="../video/daqami-data.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video></p>
+
+<p>If you are unable to view this video, play the <a href="http://www.mccdaq.com/ondemand/video/daqami.mp4">DAQami Video Demo</a> for detailed information about how to set up a configuration and acquire data with DAQami.</p>
+
+<h2>See Also</h2>
+<p><a href="../Config/Channel.htm">Configuring Channels</a></p>
+<p><a href="LogOptions.htm">Logging Options dialog box</a></p>
+<p><a href="DataExport.htm">Exporting Data</a></p>
+<p><a href="DataOpen.htm">Opening Saved Data</a></p>
+<p><a href="../Display/Strip.htm">Strip Display</a></p>
+<p><a href="../Display/Scalar.htm">Scalar Display</a></p>
+<p><a href="../Display/Block.htm">Block Display</a></p>
+</body>
+</html>

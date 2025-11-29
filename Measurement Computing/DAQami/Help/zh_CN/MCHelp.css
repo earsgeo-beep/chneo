@@ -1,0 +1,194 @@
+
+p {
+	font-size: 12px;
+	font-family: Calibri, Arial, Helvetica, sans-serif;
+	margin-top: 0.6em;
+	margin-bottom: 0.5em;	
+}
+
+
+/* Base64 DAQami favicon code */
+#favicon { background-image: url("data:image/x-icon;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAQAQAAAAAAAAAAAAAAAAAAAAAAADanA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7///////v48v/anA7/2pwO/9qcDv/anA7/2pwO///////anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv///////////9qcDv/anA7/2pwO/////////////////9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7//////9qcDv//////2pwO/9qcDv//////2pwO///////anA7/2pwO/9qcDv/anA7////////////anA7/2pwO///////anA7/2pwO////////////2pwO/9qcDv///////////9qcDv//////2pwO///////anA7//////9qcDv//////2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO////////////2pwO///////anA7/2pwO/9qcDv///////////9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="); }
+
+
+/* styles for headings */
+h1, h2, h3, h4{
+	font-family: Calibri, Arial, Helvetica, sans-serif;
+	font-weight: bold;
+}
+
+h1 {
+	margin-bottom: 0.25em;
+	font-size: 16px;
+}
+
+
+h2 {
+	margin-top: 2.em;
+	margin-bottom: 0.25em;
+	font-size: 14px;
+}
+
+h3 {
+	margin-top: 1.75em;
+	margin-bottom: 0.25em;	
+	font-size: 12px;
+}
+
+h4 {	
+	margin-top: 1.25em;
+	margin-bottom: 0.25em;
+	font-size: 11px;	
+	}
+
+/* styles for indented text */
+p.indent1, p.indent2, p.indent3{
+	margin-top: 0.5em;
+	margin-bottom: 0.25em;
+	font-family: Geneva, Arial, Helvetica, sans-serif;
+}  
+
+p.indent1 {margin-left: 1.5em;}
+p.indent2 {margin-left: 3.3em;}
+p.indent3 {margin-left: 5.5em;}
+
+p.code1, p.code2, p.code3, p.code4, p.code5{
+	margin-top:0.25em;
+	margin-bottom:0;
+	font-family: "Courier New", Courier, monospace;
+	font-size:11px;	
+}
+
+p.code1 {margin-left: 1.5em;}
+p.code2 {margin-left: 3.3em;}
+p.code3 {margin-left: 5.5em;}
+p.code4 {margin-left: 7em;}
+p.code5 {margin-left: 8.5em;}
+
+/* style for numbered lists */
+ol {
+	margin:0.4em 0 0.4em 1em;
+	list-style: decimal;
+	font-family: Calibri, Arial, Helvetica, sans-serif;
+	font-size: 12px;
+	padding-left: 0em; /*added to control left indent differences between browsers */
+}
+ol ol {
+    margin:0.4em 0 0.4em 1em;
+	 list-style: lower-alpha;
+	 font-family: Calibri, Arial, Helvetica, sans-serif;
+	font-size: 12px;
+	padding-left: 0em; /*added to control left indent differences between browsers */
+}
+/* style for bulleted lists */
+ul {
+	margin:0.4em 0 0.4em 1em; 	
+	font-family: Calibri, Arial, Helvetica, sans-serif;
+	font-size: 12px;
+	list-style-type: square;
+	padding-left: 0em; /*added to control left indent differences between browsers */
+}
+ul ul {
+	margin: 0.4em 0 0.4em 1em;
+	font-family: Calibri, Arial, Helvetica, sans-serif;
+	font-size: 12px;
+	list-style-type: circle;
+	padding-left: 0em; /*added to control left indent differences between browsers */
+}
+ul.sub{
+	list-style-type: circle;
+	margin-left: 2.55em;	
+}
+/* style for bullets in tables */
+ul.table{
+	margin-left: 0.125em; padding-left: 0em}
+
+/* style for level 2 bullets in tables */
+ul.subtable{
+	margin-left: 0.250em;
+	padding-left: 0em;
+	list-style-type: circle;
+}
+
+
+/* style for lists */
+li {
+	margin: .5em 0 0.125em 1.5em;
+	
+}
+
+li.none {
+	list-style-type: none;
+	margin-top: 0px;
+}
+
+.none {list-style-type: none;}
+
+/* style for tables with borders */
+table.bordered {
+	border: 1px solid #000000;
+	border-collapse: collapse;	
+	margin: 0.25em 0 1em 1em;	
+}
+
+/* common styles for table rows with borders */
+td, th{
+	font-family: Calibri, Arial, Helvetica, sans-serif;
+	font-size: 12px;
+	border: 1px solid #000000;
+	padding: 0.35em 1em; /* padding for top-bottom, left-right */	 
+}
+
+td {vertical-align: top;}
+
+/* Adds color to table heading row */
+tr.heading{background-color: ece9d8;}
+
+/* style for graphical procedures */
+div.stepnoborder table td {border: none; padding: 0.1em 0.1em;}
+
+/* style for tables with no borders (using descendant selectors) */
+div.tblnoborder table td {border: none; padding: 0.35em 2.4em;}
+
+/* styles for hyperlinks */
+a:link {	color: #008000;}
+
+a:visited {color: #008000;}
+
+a:active {color: #ff0000;}
+
+a:hover {
+	color: #ff0000;
+	font-style: italic;		
+}
+
+/* class to center elements */
+.center{text-align: center;}
+
+/* style for code text */
+.code{font-family: "Courier New", Courier, monospace; font-size:1em;}
+
+div.code{
+	font-family: "Courier New", Courier, monospace;
+	font-size:1em;
+}
+
+
+/* page break for PDF conversion */
+.page-break-before{
+	page-break-before: always;
+	}
+
+hr{
+	width: 90%;
+	border: 0.25em solid #9D9D9D;
+}
+
+/* class to align inline image in the middle of text line */
+img.inline{
+	vertical-align: middle;
+}
+
+.code{
+	font-family: "Courier New", Courier, monospace;
+}

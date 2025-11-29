@@ -1,0 +1,17 @@
+2025-07-23 01:43:13,242 - hrneowave.cli - INFO - run_cli() started and logging configured.
+2025-07-23 01:43:13,253 - hrneowave.cli - INFO - --gui flag is set, calling run_gui()
+2025-07-23 01:43:13,253 - hrneowave.cli - INFO - run_gui() started
+2025-07-23 01:43:14,248 - hrneowave.core.signal_bus - INFO - PySide6 imported
+2025-07-23 01:43:14,830 - hrneowave.cli - INFO - Creating MainWindow...
+2025-07-23 01:43:14,831 - hrneowave.gui.view_manager - INFO - Signaux unifiés non disponibles
+2025-07-23 01:43:14,831 - hrneowave.gui.view_manager - INFO - ViewManager initialisé
+2025-07-23 01:43:15,933 - hrneowave.core.project_manager - INFO - Index des projets chargé: 14 projets
+2025-07-23 01:43:15,960 - hrneowave.gui.view_manager - INFO - Changement vers la vue 'welcome'
+2025-07-23 01:43:15,969 - hrneowave.cli - INFO - Showing MainWindow...
+2025-07-23 01:43:16,012 - hrneowave.cli - INFO - Starting event loop...
+2025-07-23 01:43:21,454 - hrneowave.core.project_manager - INFO - Index des projets sauvegardé
+2025-07-23 01:43:21,454 - hrneowave.core.project_manager - INFO - Projet créé: nknlk (ID: 35a9a7e5-df55-46b5-ba27-3ec9116aeccd)
+2025-07-23 01:43:21,465 - hrneowave.core.project_manager - INFO - Projet chargé: nknlk
+2025-07-23 01:43:21,478 - hrneowave.gui.view_manager - INFO - Changement vers la vue 'acquisition'
+2025-07-23 01:43:55,924 - hrneowave.gui.view_manager - INFO - Changement vers la vue 'analysis'
+2025-07-23 01:44:44,477 - hrneowave.cli - INFO - Event loop finished with exit code 0

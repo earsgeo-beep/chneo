@@ -1,0 +1,362 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"><!-- saved from url=(0014)about:internet -->
+
+<html>
+<head>
+
+<title>Kanäle konfigurieren</title><!--favicon code==============================================--><!--(Meta) insert after title ======================================-->
+
+
+	<link rel="shortcut icon" href="http://www.favicon.ico" />
+	<link type="image/x-icon" rel="icon" href="favicon.ico" />
+	<link type="image/x-icon" rel="shortcut icon" href="favicon.ico" />	
+	
+	<link rel="shortcut icon" type="image/x-icon" href="data:image/ico;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAQAQAAAAAAAAAAAAAAAAA
+AAAAAADanA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7///////v48v/anA7/2pwO/9qcDv/anA7/2pwO///////anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv///////////9qcDv/anA7/2pwO/////////////////9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7//////9qcDv//////2pwO/9qcDv//////2pwO///////anA7/
+2pwO/9qcDv/anA7////////////anA7/2pwO///////anA7/2pwO////////////2pwO/9qcDv//
+/////////9qcDv//////2pwO///////anA7//////9qcDv//////2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO////////////2pwO///////anA7/2pwO/9qcDv///////////9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAA==">
+
+
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"><!--(Links)=========================================================-->
+
+
+<link href="..\MCHelp.css" rel="stylesheet" type="text/css">
+
+</head><!--(Body)==========================================================-->
+
+
+<body>
+
+<h1>Kanäle konfigurieren</h1>
+<p>Verwenden Sie <strong>Kanäle</strong> in den Konfigurationseinstellungen, um analoge, digitale und Zählerkanäle zu aktivieren und für die Erfassung zu konfigurieren. Die angezeigten Einstellungen sind spezifisch für das aus der Geräteliste ausgewählte Gerät.</p>
+<p>Die Kanaleinstellungen werden in einer <span class="code">.amicfg</span> Datei hinterlegt, sobald die Konfiguration gespeichert wird.</p>
+<p><strong>Hinweis:</strong> Laufen Erfassung und Ausgabe - entweder auf einem oder mehreren Geräten - gleichzeitig unter DAQami, können zeitliche Verzögerungen bei der Erfassung und/oder Ausgabe der Daten auftreten. Auch wenn alle erdenklichen Bemühungen unternommen werden, um das Zeitverhalten zwischen den Geräten bzw. Subsystemen zu korrelieren, bleibt die <em>virtuelle</em> Eigenschaft des Triggersignals bestehen, da mit Ausnahme eines Subsystems alle anderen über die Software gestartet werden. Daraus resultieren Varianzen besonders beim Startzeitpunkt.<br><br>
+Im Composite I/O-Betriebsmodus mit Ger&auml;ten der USB-1808 oder USB-CTR Serien werden unter DAQami alle Subsysteme mit einem einzigen gemeinsamen Hardwaretakt synchronisiert. Dadurch entstehen keine Verz&ouml;gerungen zwischen den Eingangs-Subsystemen. Erl&auml;uterungen finden Sie unter Gemeinsamer Erfassungstakt (Composite) im Abschnitt <<a href="Acquisition.htm">Erfassungsraten und Trigger konfigurieren</a>>.   </p>
+<p><strong>Hinweis:</strong> Bei der kontinuierlichen Erfassung von mehr als 1 Million Messwerte pro Kanal könnten Performanceprobleme in Abhängigkeit vom PC, auf dem DAQami läuft, von der Anzahl der erfassten Kanäle, von der Erfassungsrate und anderer Faktoren entstehen. Unter diesen Umständen müssen Sie die Erfassungsrate und die Anzahl der aktivierten Kanäle verringern und/oder eine schnellere Festplatte installieren.</p>
+<p><strong>Tipp</strong>: Auswahl mehrerer aufeinanderfolgener Kanäle mit &lt;Shift&gt; und Mausklick, Auswahl einzelner nicht aufeinanderfolgender Kanäle mit &lt;Strg&gt; und Mausklick. Alle Kanäle können ausgewählt werden durch Klicken mit der Tastenkombination &lt;Strg-A&gt;. Die EInstellungen, die für einen Kanal getätigt werden, gelten für alle <em>aktivierten</em> Kanäle.</p>
+
+	
+
+<p>Wählen Sie einen der folgenden Links, um die verschiedenen Kanaltypen zu konfigurieren:</p>
+<ul>
+	<li><a href="#AI">Analoge Eingänge</a></li>
+	<li><a href="#AO">Analoge Ausgänge</a></li>
+	<li><a href="#DIO">Digitale I/O-Kanäle</a></li>
+	<li><a href="#CI">Zählereingänge</a></li>
+	<li><a href="#CO">Counter/Timer Ausgabekanäle</a></li>
+</ul><!-- Analog Input channel procedure ========================================================================-->
+
+
+<h2><a name="AI">Analoge Eingänge konfigurieren</a></h2>
+<p>Führen Sie folgende Schritte aus, um die analogen Eingänge zu konfigurieren:</p>
+<ol>	
+	<li>Markieren Sie die <strong>Aktiv</strong> Checkbox für jeden analogen Eingang, den Sie aktivieren möchten. Die Einstellungen für jeden aktivierten Kanal sind entriegelt.</li>
+	<li>Um die Kanalfarbe zu ändern, wählen Sie mit Mausklick eine Farbe aus der Auswahl im Farbfeld. Die ausgewählte Farbe wird für das Kanal-Symbol und den Kurvenverlauf in den Anzeigen verwendet.</li>
+	<li>Um die Kanalbezeichnung zu ändern, doppelklicken Sie auf die Spalte <strong>Kanäle</strong> und geben Sie die neue Bezeichnung ein.</li>
+	<li>Falls das Gerät mehrere Messgrößen unterstützt, klicken Sie auf den Pfeil unter der Liste <strong>Typ</strong> und wählen Sie die Messgröße für den Kanal.</li>
+	<li>Die jetzt folgenden Einstellungen hängen von der unter <strong>Typ</strong> gewählten Messgröße ab:
+	<ul>
+		<li>Wenn <strong>Spannung</strong> ausgewählt wird, wird das Feld <strong>Bereich</strong> aktiviert. Klicken Sie in die Spalte und wählen Sie einen Eingangsbereich für die Spannungsmessung aus.</li>
+		<li>Falls das Gerät einen individuellen Kanal-Modus für jeden Kanal unterstützt, klicken Sie auf dem Pfeil unter <strong>Kanal-Modus</strong> und wählen Sie <strong>Differentiell</strong> oder <strong>Single-Ended</strong> für den betreffenden Kanal.</li>
+<li>Wenn <strong>Temperatur</strong> ausgewählt wird, wird das Feld <strong>TC-Typ</strong> aktiviert. Klicken Sie auf das Feld und wählen Sie den Thermoelement-Typ aus. Dieses Feld ist nur sichtbar, falls das Gerät Messungen mit Thermoelementen unterstützt.</li>
+</ul></li>
+<li class="none"><strong>Hinweis</strong>: Bei der Messdatenerfassung mit Geräten der USB-2408 oder USB-2416 Serie klicken Sie bitte auf den Pfeil in <strong>Datenrate</strong>, um eine Datenrate für die Erfassung auszuwählen. Die maximale Datenrate hängt von der für die Erfassung gewählten Abtastrate ab und steuert auch die Filtereigenschaft für jeden Kanal. Weitere Informationen dazu finden Sie im Abschnitt <a href="#datarate">Datenrate und Rauschfilter einstellen</a>.</li>
+	<li value="6">Wählen Sie die <strong>Einheit</strong>, die für die Erfassung verwendet werden soll.<br><br> Wenn Sie <strong>Custom</strong> auswählen, geben Sie die Bezeichung der Einheit ein und gehen dann durch die folgenden Schritte, um eine benutzerdefinierte Einheit anzulegen:
+	<ol>
+	<li>Geben Sie im Feld <strong>Multiplikator</strong> den Faktor ein, mit dem die Daten skaliert und der Y-Achsenabschnitt berechnet werden soll. Der Standardwert ist 1 (keine Skalierung). </li>
+	<li>Geben Sie im Feld <strong>Offset</strong> den Offset-Wert der Daten an. Der Standardwert ist 0 (kein Offset).</li>
+</ol></li>
+</ol>
+
+<p align="center"><img src="../images/aiconfig.png" alt="Analog input settings" width="533" height="356" border="0"></p><!-- Analog iput channel settings ================================================================-->
+
+
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>Konfiguration der analogen Eingänge</strong></td></tr>
+
+<tr><td width="15%">Farbauswahl</td><td>Die ausgewählte Farbe wird für das Kanal-Symbol und den Kurvenverlauf in einer Anzeige verwendet. Klicken Sie auf das Farbfeld und wählen Sie die gewünschte Farbe aus.</td></tr>
+
+<tr><td>Kanäle</td><td>Die Bezeichnung für den Kanal des Gerätes. Die Bezeichnung wird in jeder Anzeige verwendet, die den Kanal enthält. Eine bis zu 25 Zeichen lange Bezeichnung kann eingegeben werden.</td></tr>
+
+<tr><td>Aktiv</td><td>Diese Checkbox wird verwendet um Kanäle zu aktivieren oder zu deaktivieren. Aktivieren Sie die Checkbox für jeden Kanal, der verwendet werden soll. Aktivierte Kanäle werden in der Geräteliste aufgeführt und die Messdaten werden erfasst. Aktivierte Kanäle können zu Anzeigen hinzugefügt werden.</td></tr>
+
+<tr><td>Typ</td><td>Die analogen Messgrößen, die das Gerät unterstützt.</td></tr>
+
+<tr><td>Bereich</td><td>Die Messbereiche, die das Gerät anbietet. Diese Spalte ist aktiviert, wenn unter <strong>Typ</strong> <strong>Spannung</strong> ausgewählt ist.</td></tr>
+
+<tr><td>TC-Typ</td><td>Die Thermoelement-Typen, die das Gerät unterstützt. Diese Spalte ist aktiviert, wenn unter <strong>Typ</strong> <strong>Temperatur</strong> ausgewählt ist. Diese Einstellung ist nur sichtbar bei Geräten, die Temperaturmessung unterstützen.</td></tr>
+
+<tr><td>Kanal-Modus</td><td>Wenn auf dem Gerät einige Kanäle als single-ended und andere als differentiell konfiguriert werden können, wählen Sie den Kanal-Modus für den ausgewählten Kanal. Der Modus ist standardmäßig <strong>Differentiell</strong>.</td></tr>
+
+<tr><td>Datenrate</td><td>Betrifft nur die Geräte der USB-2408 und USB-2416 Serie. Wenn Daten mit einem Gerät der USB-2408 oder USB-2416 Serie erfasst werden, dann beeinflusst die Datenrate auch die Rauschfilterung für jeden Kanal. Wird die Datenrate verringert, verbreitert sich die Basis für Mittelwertbildung und der Einfluss von statistischem Rauschen sinkt entsprechend. Falls Rauschen im niedrigen Frequenzbereich ein Problem darstellt, wählen Sie eine sehr geringe Datenrate beginnend bei 2,5 Hz. Bei einer niedrigen Datenrate wird ein großer Anteil des statistischen Rauschens ausgemittelt und der Bezugsrauschwert wird geringer. Weitere Informationen dazu finden Sie im Abschnitt <a href="#datarate">Datenrate und Rauschfilter einstellen</a>.</td></tr>
+
+<tr><td>Einheit</td><td>Die Einheit wird zur Umwandlung der Messwerte verwendet. Die wählbaren Werte sind abhängig von der Messgröße. Wählen Sie <strong>Custom</strong> um eine Einheit anzugeben, die nicht in der Liste aufgeführt ist.<br><br>Die Einheit wird in der Geräteliste unter <strong>Aktivierte Kanäle</strong> in Klammern nach der Kanalbezeichnung aufgeführt.</td></tr>
+
+<tr><td>Multiplikator</td><td>Der Wert wird benutzt zur Skalierung der Messdaten und zur Berechnung der oberen und unteren Grenzen der Y-Achse. Diese Spalte ist aktiviert, wenn <strong>Einheit</strong> auf <strong>Custom</strong> (benutzerdefiniert) gesetzt ist.</td></tr>
+
+<tr><td>Offset</td><td>Der Wert für den Nullversatz (Offset), um den die Messwerte vergrößert bzw. verkleinert werden. Diese Spalte ist aktiviert, wenn <strong>Einheit</strong> auf <strong>Custom</strong> (benutzerdefiniert) gesetzt ist.</td></tr>
+</table>
+</div><!-- Anaolg Output channel procedure ================================================================-->
+
+
+<h2><a name="AO">Analoge Ausgabe konfigurieren</a></h2>
+
+<p>Führen Sie folgende Schritte aus, um die analoge Ausgabe zu konfigurieren:</p>
+<ol>
+	<li>Markieren Sie die <strong>Aktiv</strong> Checkbox für jeden analogen Ausgang, den Sie aktivieren möchten. Die Einstellungen für jeden aktivierten Kanal sind entriegelt.</li>
+	<li>Um die Kanalfarbe zu ändern, wählen Sie mit Mausklick eine Farbe aus der Auswahl im Farbfeld. Die ausgewählte Farbe wird für das Kanal-Symbol und den Kurvenverlauf in den Anzeigen verwendet.</li>
+	<li>Um die Kanalbezeichnung zu ändern, doppelklicken Sie auf die Spalte <strong>Kanäle</strong> und geben Sie die neue Bezeichnung ein.</li>	
+</ol>
+
+<p align="center"><img src="../images/aoconfig.png" alt="Analog output settings" width="170" border="0"></p><!-- Analog Output channel settings ================================================================-->
+
+
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>Einstellungen der analogen Ausgabe</strong></td></tr>
+
+<tr><td width="15%">Farbauswahl</td><td>Die ausgewählte Farbe wird für das Kanal-Symbol und den Kurvenverlauf in einer Anzeige verwendet. Klicken Sie auf das Farbfeld und wählen Sie die gewünschte Farbe aus.</td></tr>
+
+<tr><td>Kanäle</td><td>Die Bezeichnung für den Kanal des Gerätes. Die Bezeichnung wird in jeder Anzeige verwendet, die den Kanal enthält. Eine bis zu 25 Zeichen lange Bezeichnung kann eingegeben werden.</td></tr>
+
+<tr><td>Aktiv</td><td>Diese Checkbox wird verwendet um Kanäle zu aktivieren oder zu deaktivieren. Aktivieren Sie die Checkbox für jeden Kanal, der verwendet werden soll. Aktivierte Kanäle werden in der Geräteliste angezeigt und können in Anzeigen hinzugefügt werden.</td></tr>
+</table>
+</div>
+
+<p><strong>Steuerung der Ausgabe</strong>: Fügen Sie analoge Ausgänge zu einem "Ausgabe" hinzu. Mit dieser Anzeige kann die ausgegebene Spannung während der Erfassung verändert werden. Wenn das ausgewählte Gerät Waveform-Ausgabe (output scanning) unterstützt, dann können Sie die entsprechenden Einstellungen verändern. Weitere Informationen zur Steuerung der analogen Ausgabe in Echtzeit finden Sie unter <a href="../Display/Output.htm#outputcontrols">Steuerung der Ausgabekanäle</a>.</p><!-- DIO channel procedure ================================================================-->
+
+
+<h3><a name="DIO">Digital I/O-Kanäle konfigurieren</a></h3>
+<p>Typische Einstellungen der Digital I/O zeigen wir hier. Die Einstellungen sind gerätespezifisch und können von diesem Beispiel abweichen.</p>
+
+<p>Führen Sie die folgenden Schritte aus, um die Digital I/O zu konfigurieren:</p>
+
+<ol>
+	<li>Markieren Sie die <strong>Aktiv</strong> Checkbox für jeden digitalen Kanal, den Sie aktivieren möchten. Die Einstellungen für jeden aktivierten Kanal sind entriegelt.</li>
+	<li>Um die Kanalfarbe zu ändern, wählen Sie mit Mausklick eine Farbe aus der Auswahl im Farbfeld. Die ausgewählte Farbe wird für das Kanal-Symbol und den Kurvenverlauf in den Anzeigen verwendet.</li>
+	<li>Um die Kanalbezeichnung zu ändern, doppelklicken Sie auf die Spalte <strong>Kanäle</strong> und geben Sie die neue Bezeichnung ein.</li>
+<li>Wenn das digitale Bit konfigurierbar ist, klicken Sie in die Spalte <strong>Richtung</strong> und setzen das Bit entweder auf <em>Eingang</em> oder <em>Ausgang</em>.</li>
+<li class="none">Falls der Port bitweise konfigurierbar ist, werden die digitalen I/O schneller verarbeitet, wenn alle Bits für die gleiche Richtung konfiguriert sind.</li>
+	<li class="none"><strong>TC-32</strong>: Die digitalen Bits von Port B sind feste Alarmausgänge und können nicht zur Datenerfassung verwendet werden. Weitere Informationen zur Verwendung der digitalen Bits auf dem TC-32 finden Sie im Handbuch zum TC-32.</li>
+	</ol>
+
+<p align="center"><img src="../images/dioconfig.png" alt="DIO settings" width="281" border="0"></p><!-- DIO channel channel settings ================================================================-->
+
+
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>Einstellungen für Digital I/O</strong></td></tr>
+<tr><td width="15%">Farbauswahl</td><td>Die ausgewählte Farbe wird für das Kanal-Symbol und den Kurvenverlauf in einer Anzeige verwendet. Klicken Sie auf das Farbfeld und wählen Sie die gewünschte Farbe aus.</td></tr>
+
+<tr><td>Kanäle</td><td>Die Bezeichnung für den Kanal des Gerätes. Die Bezeichnung wird in jeder Anzeige verwendet, die den Kanal enthält. Eine bis zu 25 Zeichen lange Bezeichnung kann eingegeben werden.</td></tr>
+
+<tr><td>Aktiv</td><td>Diese Checkbox wird verwendet um Kanäle zu aktivieren oder zu deaktivieren. Aktivieren Sie die Checkbox für jeden Kanal, der verwendet werden soll. Aktivierte Kanäle werden in der Geräteliste aufgeführt und die Messdaten werden erfasst. Aktivierte Kanäle können zu Anzeigen hinzugefügt werden.</td></tr>
+
+<tr><td>Richtung</td><td>Wenn das Bit konfigurierbar ist, können Sie zwischen Eingang oder Ausgang wählen.</td></tr>
+</table>
+</div>
+
+<p><strong>Steuerung der Ausgabe</strong>: Fügen Sie digitale Ausgänge zu einer "Ausgabe" hinzu. In dieser Anzeige kann ihr Zustand (Ein/Aus bzw. High/Low) während der Erfassung verändert werden. Wenn das ausgewählte Gerät "Output Scanning" unterstützt, können auch Frequenz und Tastverhältnis des Rechtecksignals verändert werden. Weitere Informationen zur Steuerung der digitalen Ausgabe in Echtzeit finden Sie unter <a href="../Display/Output.htm#outputcontrols">Steuerung der Ausgabekanäle</a> .</p><!-- Counter Input channel settings ================================================================-->
+
+
+<h2><a name="CI">Zählereingänge konfigurieren</a></h2>
+<p>Eine typische Konfiguration eines Zählereingangs sehen Sie hier. Die Einstellungen sind gerätespezifisch und können von diesem Beispiel abweichen.</p>
+
+<p>Führen Sie folgende Schritte aus, um die Zählereingänge zu konfigurieren:</p>
+
+<ol>	
+	<li>Markieren Sie die <strong>Aktiv</strong> Checkbox für jeden Zählerkanal, den Sie aktivieren möchten. Die Einstellungen für jeden aktivierten Kanal sind entriegelt.</li>
+	<li>Um die Kanalfarbe zu ändern, wählen Sie mit Mausklick eine Farbe aus der Auswahl im Farbfeld. Die ausgewählte Farbe wird für das Kanal-Symbol und den Kurvenverlauf in den Anzeigen verwendet.</li>
+	<li>Um die Kanalbezeichnung zu ändern, doppelklicken Sie auf die Spalte <strong>Kanäle</strong> und geben Sie die neue Bezeichnung ein.</li>
+	<li>Der in <strong>Zähler-Modus</strong> angezeigte Wert entspricht dem unter "Kanaleinstellungen" ausgewählen Modus.</li>
+</ol>
+
+<p align="center"><img src="../images/ciconfig.png" alt="Counter input settings" width="520" height="373" border="0"></p><!-- Events mode counter settings -->
+
+
+<h3>Einen Kanal als Ereigniszähler konfigurieren</h3>	
+<p>Das BIld oben zeigt die Einstellungen für den Ereigniszähler. Gehen Sie folgendermaßen vor, um einen Kanal als Ereigniszähler (zählt steigende oder fallende Flanken) zu konfigurieren:</p>
+<ol>
+	<li>Wählen Sie <strong>Ereignisse</strong> unter dem Punkt <strong>Zähler-Modus</strong>.</li>
+	<li>Unter dem Punkt <strong><a name="CountDir" id="CountDir">Zählrichtung</a></strong> entscheiden Sie, ob ausgehend vom <strong>Startwert</strong> <strong>Aufwärts</strong> oder <strong>Abwärts</strong> gezählt werden soll.</li>
+  	<li>Wenn das Gerät wählbare Flankensteuerung bietet, wählen Sie unter <strong>Start-Flanke</strong> entweder <strong>Steigend</strong> um steigende Flanken zu zählen oder <strong>Fallend</strong> um fallende Flanken zu zählen.</li>
+
+	<li>Verwenden Sie die voreingestellte Einheit <strong>Pulse</strong> oder wählen Sie <strong>Custom</strong> (benutzerdefiniert) und geben Sie eine Einheit an. Wenn "Custom" (benutzerdefiniert) ausgewählt ist, werden die Zeilen <strong>Multiplikator</strong> und <strong>Offset</strong> angezeigt. <br>Die Werte für Multiplikator und Offset werden verwendet um die Zählerwerte zu skalieren. Die Standardwerte sind für den Multiplikator 1 (keine Skalierung) und für den Offset 0 (kein Offset).</li>
+	<li>Geben Sie den <strong>Startwert</strong> für den Zähler an, wenn <strong>Aufwärts</strong> oder <strong>Abwärts</strong> gezählt wird.</li>
+	<li>Aktivieren Sie die Checkbox <strong><a name="recycle" id="recycle">Zurücksetzen</a></strong>, um den Zähler zurückzusetzen, sobald er die Werte für <strong>Maximum</strong> (als Aufwärtszähler) oder <strong>Minimum</strong> (als Abwärtszähler) erreicht hat. Ist die Checkbox nicht aktiviert, stoppt der Zähler, sobald die Werte für <strong>Maximum</strong> oder <strong>Minimum</strong> erreicht sind.</li>
+	<li>Aktivieren Sie die Checkbox <strong>Löschen nach Lesen</strong>, um den Zähler nach jedem synchronen oder asynchronen Lesevorgang zu löschen. Der Zählerwert vor der Löschung wird gespeichert und ausgegeben. Der Zähler wird standardmäßig auf Null zurückgesetzt. Er kann aber abhängig vom Zählmodus auch auf <strong>Minimum</strong> gesetzt werden.</li>
+	 <li>Aktivieren Sie die Checkbox für <strong><a name="rlimit" id="rlimit">Bereichsgrenze</a></strong>, um die Eingabefelder für <strong>Maximum</strong> und <strong>Minimum</strong> zu aktivieren. Mit diesen Werten können Endschalter in mechanischen Zählern abgebildet werden. Das Verhalten des Zählers hängt von den Einstellungen unter <strong>Zählrichtung</strong> und <strong>Zurücksetzen</strong> ab:</li>
+
+<table class="Bordered" width="70%" align="center">
+<tr><th width="15%">Zählrichtung</th><th width="15%">Checkbox "Zurücksetzen"</th><th>Verhalten des Zählers</th></tr>
+<tr><td  class="Bordered" style="vertical-align: bottom;">Aufwärts</td><td  class="Bordered" style="vertical-align: bottom;">Ausgewählt</td><td  class="Bordered" style="vertical-align: bottom;">Sobald der Zähler das Maximum erreicht, springt er zum Minimum zurück.</td></tr>
+<tr><td  class="Bordered" style="vertical-align: bottom;">Aufwärts</td><td  class="Bordered" style="vertical-align: bottom;">Nicht ausgewählt</td><td  class="Bordered" style="vertical-align: bottom;">Sobald der Zähler das Maximum ereicht, stoppt der Zähler.</td></tr>
+<tr><td  class="Bordered" style="vertical-align: bottom;">Abwärts</td><td  class="Bordered" style="vertical-align: bottom;">Ausgewählt</td><td  class="Bordered" style="vertical-align: bottom;">Sobald der Zähler das Minimum erreicht, springt er zum Maximum zurück.</td></tr>
+<tr><td  class="Bordered" style="vertical-align: bottom;">Abwärts</td><td  class="Bordered" style="vertical-align: bottom;">Nicht ausgewählt</td><td  class="Bordered" style="vertical-align: bottom;">Sobald der Zähler das Minimum erreicht, stoppt der Zähler.</td></tr>
+</table>
+
+	<li>Die Zählung beginnt neu, wenn die Zählrichtung geändert oder der Zähler mit einem neuen Wert zwischen <strong>Maximum</strong> und <strong>Minimum</strong> initialisiert wird.</li>
+
+ 	<li>Wählen Sie eine der folgenden Funktionen aus der Auswahl für <strong>Gate-Funktion</strong>:</li>
+		<ul>
+		<li><strong>Aus</strong> — Die Gate-Signale werden ignoriert.</li>
+		<li><strong>Gate für Zähler</strong> — Das Gate-Signal steuert den Zähler. Der Zähler ist standardmäßig aktiviert, sobald das Gate-Signal "High" ist. Der Zähler ist deaktiviert, sobald das Gate-Signal "Low" ist. Der aktuelle Zählerwert wird beibehalten.</li>
+		<li><strong>Trigger für Zähler</strong> — Der Zähler startet, sobald das Gate-Signal "aktiv" ist. Standardmäßig wird das Gate-Signal "aktiv" mit einer steigenden Flanke.</li>
+		<li><strong>Zählrichtung</strong> — Der Zählereingang verarbeitet die Pulse, während das Gate-Signal die Zählrichtung vorgibt. Standardmäßig zählt der Zähler aufwärts, wenn das Gate-Signal "High" ist und er zählt abwärts, wenn das Gate-Signal "Low" ist.</li>	
+		<li><strong>Zähler zurücksetzen</strong> — Setzt den Zählerwert auf 0, falls die Checkbox für <strong>Bereichsgrenze</strong> nicht aktiviert ist. Falls die <strong>Bereichsgrenze</strong> aktiviert ist, wird mit dem Gate-Signal der Zähler auf das Minimum zurückgesetzt.</li>
+	</ul> 
+
+	<li>Wenn die Gate-Funktion aktiviert ist, dann kann mit der Checkbox <strong>Gate invertiert</strong> das Gate für Low-Pegel oder fallenden Flanke aktiviert werden. Standardmäßig wird das Gate-Signal "aktiv" bei einem High-Pegel oder Signal mit steigender Flanke. </li>
+</ol><!-- Frequency Mode counter settings  =========================================================-->
+
+	
+<h3>Einstellungen für Frequenzmessung</h3>
+<p>Gehen Sie folgendermaßen vor, um einen Kanal zur Frequenzmessung (zählt Perioden innerhalb eines Zeitfensters) zu konfigurieren:</p>
+<ol>
+	<li>Wählen Sie <strong>Frequenz</strong> aus der Liste <strong>Zähler-Modus</strong>.</li>		
+</ol>
+<p align="center"><img src="../images/ctr_freqconfig.png" alt="Counter input settings" width="237" border="0"></p>
+<ol start="2">
+ 	<li>Wenn das Gerät wählbare Flankensteuerung bietet, wählen Sie unter <strong>Start-Flanke</strong> entweder <strong>Steigend</strong> um steigende Flanken zu zählen oder <strong>Fallend</strong> um fallende Flanken zu zählen.</li>
+		<li>Wählen Sie als <strong>Einheit</strong> entweder <strong>Hz</strong>, <strong>kHz</strong> oder <strong>MHz</strong>.</li>
+ <li>Aus der Liste <strong>Gate-Funktion</strong> wählen Sie <strong>Aus</strong> um das Gate-Signal zu ignorieren oder <strong>Gate für Zähler</strong> um die Gate-Funktion zu aktivieren.</li>
+<li>Wenn die Gate-Funktion aktiviert ist, dann wird mit der Checkbox <strong>Gate invertiert</strong> das Gate bei einen Low-Signal aktiviert. Standardmäßig ist das Gate aktiv, wenn ein High-Signal anliegt.</li>
+</ol><!-- Period or Pulse Width Mode counter settings =====================================================================-->
+
+
+<h3>Einen Kanal für Messung von Periodendauer oder Pulsbreite konfigurieren</h3>
+
+<p>Gehen Sie folgendermaßen vor, um einen Kanal zur Messung von Periodendauer (Zeitdauer für eine Periode) oder Pulsbreite (Zeit zwischen steigender und fallender Flanke oder umgekehrt) zu konfigurieren:</p>
+<ol>
+	<li>Wählen Sie <strong>Periode</strong> oder <strong>Pulsbreite</strong> aus der Liste <strong>Zähler-Modus</strong>. Die Einstellungen unten sind für beide Modi gleich.</li>
+</ol>
+<p align="center"><img src="../images/ctr_periodconfig.png" alt="Counter input settings" width="236" border="0"></p>
+<ol start="2">
+ 	<li>Wenn das Gerät wählbare Flankensteuerung bietet, wählen Sie unter <strong>Start-Flanke</strong> entweder <strong>Steigend</strong> um steigende Flanken zu zählen oder <strong>Fallend</strong> um fallende Flanken zu zählen.</li>
+		<li>Wählen Sie als <strong>Einheit</strong> entweder <strong>s</strong> (Sekunden), <strong>ms</strong> (Millisekunden), <strong>µs</strong> (Mikrosekunden) oder <strong>Pulse</strong>.</li>
+ <li>Aus der Liste <strong>Gate-Funktion</strong> wählen Sie <strong>Aus</strong> um das Gate-Signal zu ignorieren oder <strong>Gate für Zähler</strong> um die Gate-Funktion zu aktivieren.</li>
+<li>Wenn die Gate-Funktion aktiviert ist, dann wird mit der Checkbox <strong>Gate invertiert</strong> das Gate bei einen Low-Signal aktiviert. Standardmäßig ist das Gate aktiv, wenn ein High-Signal anliegt.</li>
+</ol><!-- Timing Mode counter settings =====================================================================-->
+
+
+<h3>Einen Kanal für Zeitmessung konfigurieren</h3>	
+<p>Gehen Sie folgendermaßen vor, um einen Kanal für Zeitmessung (Zeitdauer zwischen zwei Ereignissen auf dem Zählereingang und dem Gate-Eingang) zu konfigurieren:</p>
+<ol>
+	<li>Wählen Sie <strong>Zeitmessung</strong> aus der Liste <strong>Zähler-Modus</strong>.</li>
+</ol>
+<p align="center"><img src="../images/ctr_timingconfig.png" alt="Counter input settings" width="236" border="0"></p>
+<ol start="2">	
+ 	<li>Wenn das Gerät wählbare Flankensteuerung bietet, wählen Sie unter <strong>Start-Flanke</strong> entweder <strong>Steigend</strong> um steigende Flanken zu zählen oder <strong>Fallend</strong> um fallende Flanken zu zählen.</li>
+	<li>Wählen Sie als <strong>Einheit</strong> entweder <strong>s</strong> (Sekunden), <strong>ms</strong> (Millisekunden), <strong>µs</strong> (Mikrosekunden) oder <strong>Pulse</strong>.</li>
+<li>Wenn die Gate-Funktion aktiviert ist, dann kann mit der Checkbox <strong>Gate invertiert</strong> die <strong>Start-Flanke</strong> invertiert werden. <ul>
+	<li  type="circle">Wenn <strong>Steigend</strong> eingestellt ist, dann misst <strong>Gate invertiert</strong> die fallende Flanke.</li>
+	<li  type="circle">Wenn <strong>Fallend</strong> als Start-Flanke eingestellt ist, dann misst <strong>Gate invertiert</strong> die steigende Flanke.</li>
+</ul></li>
+
+</ol><!-- Counter input channel settings ================================================================-->
+
+
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>Einstellungen für Zählereingänge</strong></td></tr>
+
+	<tr><td width="15%">Farbauswahl</td><td>Die ausgewählte Farbe wird für das Kanal-Symbol und den Kurvenverlauf in einer Anzeige verwendet. Klicken Sie auf das Farbfeld und wählen Sie die gewünschte Farbe aus.</td></tr>
+
+	<tr><td>Kanäle</td><td>Die Bezeichnung für den Kanal des Gerätes. Die Bezeichnung wird in jeder Anzeige verwendet, die den Kanal enthält. Eine bis zu 25 Zeichen lange Bezeichnung kann eingegeben werden.</td></tr>
+
+	<tr><td>Aktiv</td><td>Diese Checkbox wird verwendet um Kanäle zu aktivieren oder zu deaktivieren. Aktivieren Sie die Checkbox für jeden Kanal, der verwendet werden soll. Aktivierte Kanäle werden in der Geräteliste aufgeführt und die Messdaten werden erfasst. Aktivierte Kanäle können zu Anzeigen hinzugefügt werden.</td></tr>
+
+	<tr><td>Zähler-Modus</td><td>Die Betriebsart des Zählers. Die folgenden Zähler-Modi werden unterstützt (gerätespezifisch):
+	<ul>
+		<li><strong>Ereignisse</strong> — Zählt steigende oder fallende Flanken.</li>
+		<li><strong>Frequenz</strong> — Zählt die Anzahl der Perioden in einem Zeitraum.</li>
+		<li><strong>Periode</strong> — Misst die Dauer einer Periode.</li>
+		<li><strong>Pulsbreite</strong> — Misst die Zeit von der steigenden zur fallenden Flanke des Signals (oder umgekehrt) am Zählereingang.</li>
+		<li><strong>Zeitmessung</strong> — Misst die Zeit zwischen einem Ereignis am Zählereingang und dem folgenden Ereignis am Gate-Eingang.</li>
+</ul></td></tr>
+
+	<tr><td>Zählrichtung</td><td>Wenn <strong>Ereignisse</strong> als Zähler-Modus ausgewählt ist, wählen Sie <strong>Aufwärts</strong> um ausgehend vom <strong>Startwert</strong> aufwärts zu zählen oder <strong>Abwärts</strong> um ausgehend vom <strong>Startwert</strong> abwärts zu zählen.</td></tr>
+
+	<tr><td>Start-Flanke</td><td>Die Flanke, die gezählt werden soll. Wählen Sie <strong>Steigend</strong> um steigene Flanken zu zählen oder <strong>Fallend</strong> um fallende Flanken zu zählen.</td></tr>
+
+	<tr><td>Einheit</td><td>Die Einheit wird zur Umwandlung der Messwerte verwendet. Die verfügbaren Werte sind abhängig vom <strong>Zähler-Modus</strong>. Eine benutzerdefinierte Einheit (Custom) kann für jeden Modus angegeben werden.</td></tr>
+
+		<tr><td>Startwert</td><td>Der Zähler-Startwert für Aufwärts- oder Abwärtszähler.</td></tr>		
+		<tr><td>Zurücksetzen</td><td>Ermöglicht einen Zähler-Neustart, sobald ein spezifizierter Zählerwert erreicht ist.</td></tr>
+		<tr><td>Löschen nach Lesen</td><td>Löscht den Zählerstand nach jedem Lesevorgang.</td></tr>
+		<tr><td>Bereichsgrenze</td><td>Minimale und maximale Zählerwerte.</td></tr>
+		<tr><td>Gate-Funktion:</td><td>Aktiviert ein spezifisches Signal um den Zähler zu steuern. Die verfügbaren Werte sind abhängig vom <strong>Zähler-Modus</strong>.</td></tr>
+	<tr><td>Gate invertiert:</td><td>Der Zählwert erhöht sich bei einem "Low"-Puls/fallende Flanke/"Low"-Gate Signal.</td></tr>
+</table>
+</div><!-- Counter/Timer Output channel procedure ================================================================-->
+
+
+<h2><a name="CO">Konfigurieren der Counter/Timer-Ausgabekanäle</a></h2>
+<p>Hier werden die typischen Einstellungen für einen Counter-Ausgang dargestellt.</p>
+
+<p>Gehen Sie folgendermaßen vor, um die Counter-Augabe zu konfigurieren:</p>
+<ol>
+	<li>Markieren Sie die <strong>Aktiv</strong> Checkbox für jeden Counter-Ausgang, den Sie aktivieren möchten. Die Einstellungen für jeden aktivierten Kanal sind entriegelt.</li>
+	<li>Um die Kanalfarbe zu ändern, wählen Sie mit Mausklick eine Farbe aus der Auswahl im Farbfeld. Die ausgewählte Farbe wird für das Kanal-Symbol und den Kurvenverlauf in den Anzeigen verwendet.</li>
+	<li>Um die Kanalbezeichnung zu ändern, doppelklicken Sie auf die Spalte <strong>Kanäle</strong> und geben Sie die neue Bezeichnung ein.</li>	
+</ol>
+
+<p align="center"><img src="../images/coconfig.png" alt="Counter input settings" width="174" border="0"></p><!-- Counter/Timer Output channel settings ================================================================-->
+
+
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>Einstellungen für Counter/Timer-Ausgabe</strong></td></tr>
+
+<tr><td width="15%">Farbauswahl</td><td>Die ausgewählte Farbe wird für das Kanal-Symbol und den Kurvenverlauf in einer Anzeige verwendet. Klicken Sie auf das Farbfeld und wählen Sie die gewünschte Farbe aus.</td></tr>
+
+<tr><td>Kanäle</td><td>Die Bezeichnung für den Kanal des Gerätes. Die Bezeichnung wird in jeder Anzeige verwendet, die den Kanal enthält. Eine bis zu 25 Zeichen lange Bezeichnung kann eingegeben werden.</td></tr>
+
+<tr><td>Aktiv</td><td>Diese Checkbox wird verwendet um Kanäle zu aktivieren oder zu deaktivieren. Aktivieren Sie die Checkbox für jeden Kanal, der verwendet werden soll. Aktivierte Kanäle werden in der Geräteliste aufgeführt und können zu Anzeigen hinzugefügt werden.</td></tr>
+
+</table>
+</div>
+<p><strong>Steuerung der Ausgabe</strong>: Fügen Sie Counter-Ausgänge zu einer Anzeige für die Ausgabe hinzu. In der Anzeige kann die Frequenz und das Tastverhältnis des Ausgabesignals gesetzt werden. Weitere Informationen zur Steuerung der digitalen Ausgabe in Echtzeit finden Sie unter <a href="../Display/Output.htm#outputcontrols">Steuerung der Ausgabekanäle</a> .</p><!-- Data rate settings -2408, 2416 only -->
+
+
+<h2><a name="datarate">Datenrate und Rauschfilter einstellen</a> (nur bei Geräten der USB-2408 und USB-2416 Serie)</h2>
+<p>Die Datenrate bestimmt die Intensität der Rauschfilterung für den einzelnen Kanal bei der Erfassung mit DAQami. Wird die Datenrate verringert, verbreitert sich die Basis für Mittelwertbildung und der Einfluss von statistischem Rauschen sinkt entsprechend.</p>
+<p>Falls statistisches Rauschen im niedrigen Frequenzbereich ein Problem darstellt, wählen Sie eine sehr geringe Datenrate beginnend bei 2,5 Hz. Bei einer niedrigen Datenrate wird ein großer Anteil des statistischen Rauschens ausgemittelt und der Bezugsrauschwert wird geringer.</p>
+
+<p>Bei höheren Datenraten kann höherfrequentes statistisches Rauschen nicht ausgemittelt werden und den Messwert verfälschen. Der Rauschanteil, der vom A/D-Wandler herrührt, kann nicht reduziert werden. Da Thermoelemente Umgebungsrauschen aufnehmen können, wählen Sie eine Datenrate entsprechend der vorherrschenden Störfrequenz.</p>
+<p>Der Effekt von 50 Hz Rauschen wird beispielsweise reduziert, wenn eine Datenrate von 50 Hz (oder - sofern unterstützt - ein Teiler von 50, wie 10 Hz oder 5 Hz) gewählt wird.</p>
+
+<p>Bei der Erfassung über mehrere Kanäle ist die Abtastrate für alle Kanäle dieselbe, Kanäle mit geringerer Datenrate werden jedoch stärker gefiltert bzw. gemittelt.</p>
+<p>Wenn beispelsweise eine Datenrate von 10 Hz für Kanal 0 und 50 Hz für Kanal 1 gesetzt wird, werden beide Kanäle mit derselben Abtastrate erfasst und übertragen dieselbe Anzahl von Messwerten an den PC. Die Messwerte von Kanal 0 können jedoch stärker gemittelt werden. Kanal 0 erfährt eine höhere zeitliche Auflösung.</p>
+<p>Die A/D-Wandler der Geräte der USB-2408 und USB-2416 Serie bilden Mittelwerte auf einer Basis von 30.000/Datenrate Messwerten. Im obigen Beispiel erfährt Kanal 0 3000 Erfassungen über 100 ms und alle erfassten Werte werden zu einem Messwert gemittelt. Kanal 1 erfährt 600 Erfassungen innerhalb 20 ms, die zu einem Messwert gemittelt werden. Die Messwerte werden mit einer maximalen Rate von 8,245 Hz bereitgestellt.</p>
+
+<p align="center"><img src="../images/DRate.png" alt="" width="407" height="91" border="0"></p><!-- See also ===================================================================-->
+
+
+<h3>Siehe auch</h3>
+
+<p><a href="Acquisition.htm">Erfassungsraten und Trigger konfigurieren</a></p>
+<p><a href="Device.htm">Ein Gerät konfigurieren</a></p>
+<p><a href="ConfigSave.htm">Eine Konfiguration speichern</a></p>
+<p><a href="http://www.mccdaq.de/usb-data-acquisition/USB-2408-Series.aspx">USB-2408 Serie</a></p>
+<p><a href="http://www.mccdaq.de/usb-data-acquisition/USB-2416-Series.aspx">USB-2416 Serie</a></p>
+
+</body>
+</html>

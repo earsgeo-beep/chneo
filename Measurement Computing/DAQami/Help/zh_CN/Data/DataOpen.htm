@@ -1,0 +1,42 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"><!-- saved from url=(0014)about:internet -->
+
+<html>
+<head>
+
+<title>打开数据</title><!--(Meta) insert after title ======================================-->
+
+
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"><!--(Links)=========================================================-->
+
+
+<link href="../MCHelp.css" rel="stylesheet" type="text/css">
+
+</head><!--(Body)==========================================================-->
+
+
+<body>
+
+
+<h1>打开数据</h1>
+<p>DAQami每次 <img src="../images/Icon-log.png" alt="启动数据采集并记录数据至硬盘中" width="11" border="0"> 执行数据采集时，将数据和配置选项保存至 <span class="code">.tdms</span> 文件中。<br><br>通过以下步骤，打开历史数据文件。</p>
+<ol>
+<li>启动DAQami，点击 <strong>开始</strong> 对话框中的 <strong>打开数据</strong>，或选择 <img src="../images/Icon-toolsmenu.png" alt="齿轮图标" width="15" border="0" class="inline">»<strong>打开数据</strong>。<br><br><img src="../images/Tools-OpenSavedData.jpg" alt="打开数据选项" width="449" border="0"></li>
+
+<li>如果此时已打开某个配置，软件将提示保存对当前配置所做的修改。</li>
+<li>在 <strong>打开数据</strong> 对话框中选取一个DAQami 数据文件。</li>
+<li class="none">因为DAQami只能储存每通道最多一百万个点的数据，如果你打开一个每通道样点大于一百万个点的文件时，则需要选择一个数据范围（小于等于一百万个样点）。<br><br>使用滚动条选择需要从文件中加载的数据范围，或输入基于<strong>绝对时间</strong>/<strong>相对时间</strong>的数据范围。<br><br><p style="text-align:center"><img src="../images/OpenFile1mill.png" alt="打开数据选项" width="556" border="0"></p>
+	<br><br><strong>提示</strong>：在开始对话框中，可通过 <strong>最近的数据文件</strong> 中选择一个文件，打开最近使用的数据文件。</li>
+	</ol>
+	<p>打开数据文件时，相应的设备配置，通道配置，采样率及触发配置与显示控件配置将同时载入DAQami。并且所有功能均有效，例如添加显示控件，拖拽通道至控件中，以及添加标尺，等等。</p>
+<p>加入添加或移除了显示控件，编辑了显示控件配置或是改变了通道的颜色或名称，可以通过选择<img src="../images/Icon-toolsmenu.png" alt="齿轮图标" width="15" border="0" class="inline">»<strong>Save Display Settings to Data File</strong>来保存这些更改.</p>
+	<p>如果硬件设备仍然正常连接，您可在此基础上继续采集数据。这会创建一个新数据文件，在 <strong>数据记录选项</strong> 对话框中选择 <strong>覆盖</strong> 将用新数据文件替换旧数据文件。</p> 
+
+
+<h3>另请参阅</h3>
+<p><a href="DataExport.htm">导出数据</a></p>
+<p><a href="../GetStarted/GetStarted.htm">开始对话框</a></p>
+<p><a href="LogOptions.htm">数据记录选项</a></p>
+<p><a href="../GetStarted/ToolsMenu.htm">工具菜单</a></p>
+<p><a href="DispSettSave.htm">在数据文件中更新显示设置</a></p>
+</body>
+</html>

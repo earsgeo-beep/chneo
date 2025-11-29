@@ -1,0 +1,90 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"><!-- saved from url=(0014)about:internet -->
+
+<html>
+<head>
+
+<title>输出显示控件</title><!--(Meta) insert after title ======================================-->
+
+
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"><!--(Links)=========================================================-->
+
+
+<link href="..\MCHelp.css" rel="stylesheet" type="text/css">
+
+</head><!--(Body)==========================================================-->
+
+
+<body>
+
+
+<h1>输出显示控件</h1>
+<p>当添加一个输出通道至输出显示控件时，DAQami允许用户在采集运行时改变输出值。被创建的控制类型取决于输出通道的类型。如下所示：</p>
+
+<p align="center"><img src="../images/Display-output.jpg" alt="输出显示控件" width="353" border="0"></p>
+
+<p>根据插图标号查看相关描述。</p><!-- Callout Descriptions =====================================-->
+
+
+<table class="bordered" width="90%">
+<tr><td width="5%"><strong>插图标号</strong></td><td width="20%"><strong>名称</strong></td><td><strong>描述</strong></td></tr>
+
+<tr><td>1</td><td>输出控制</td><td>每一个被添加至显示的通道都会有输出控制。控制的类型取决于输出信号的类型。控制颜色应与通道颜色一致。右击控制图标，显示快捷菜单，用以移除通道或改变其颜色。对于硬件驱动的模拟输出通道，信号类型设置同样有效。参考 <a href="#outputcontrols">输出通道控制</a> ，获取更多信息。</td></tr>
+
+<tr><td>2</td><td>控件名称</td><td>显示控件名称（参考<strong>配置显示控件</strong>章节的<a href="DisplaySettings.htm">显示控件名称</a>）。</td></tr>
+
+<tr><td>3</td><td>图标</td><td>用于复制、自定义和移除控件的图标。
+
+<div class="stepnoborder">
+<table cellspacing="7" width="95%"> 
+<tr><td><img src="../images/Icon-copy.png" alt="复制图标" width="24" border="0" class="inline"></td><td>复制当前显示控件至剪切板。</td></tr>
+<tr><td><img src="../images/Icon-displaysetting.png" alt="控件设置图标" width="24" border="0" class="inline"></td><td>打开显示设置对话框，自定义显示控件。</td></tr>
+<tr><td><img src="../images/Icon-displaydelete.png" alt="删除控件图标" width="24" border="0" class="inline"></td><td>从显示面板中移除显示控件。</td></tr>
+</table>
+</div>
+</td></tr>
+</table><!-- Menu ==================================================================-->
+
+
+<h2>快捷菜单</h2>
+<p>右键单击显示控件，显示以下选项：</p>
+<ul>
+	<li><strong>编辑显示控件</strong>：打开显示设置对话框。</li>
+	<li><strong>移除显示控件</strong>：从显示面板中移除显示控件。</li>
+</ul><!-- Output Channel Controls ================================================-->
+
+
+<h3><a name="outputcontrols">输出通道控制</a></h3>
+<p>对于不同类型的输出信号，常用控制如下所示。</p>
+<p>控制面板上的名称仅用于被选设备的信号名称，所示案例仅供参考。</p>
+
+<table class="bordered" width="90%">
+<tr><td width="15%"><strong>输出通道</strong></td><td width="17%"><strong>控制</strong></td><td><strong>描述</strong></td></tr>
+
+<tr><td rowspan="3"><a name="aoutcontrols">模拟输出</a></td><td align="center"><img src="../images/ao_slider.png" alt="AOUT滑块控件" width="102" border="0" align="middle"><br><strong>滑块控制</strong></td><td>在采集中使用模拟电压滑块控制来改变模拟输出信号。当添加一个模拟输出通道至输出显示时，默认创建滑块控制。<br><br>
+<p>右击控制图标，显示如下选项的菜单：</p>
+<ul>
+	<li><strong>从显示控件中移除</strong>：从输出显示中移除此通道。</li>
+	<li><strong>颜色</strong>：打开调色板，为通道选择一个颜色。</li>
+	<li><strong>信号类型</strong> （仅支持硬件时钟类型的AO）：如果设备支持硬件时钟的模拟输出功能，选择 <strong>波形</strong> 可以转成波形控制。在采集中，可以使用此控制来改变波形设置。<br><br>
+	<img src="../images/AOutCtrlContext.png" alt="" width="225" height="120" border="0"></li>
+</ul>
+</td></tr>
+<tr><td colspan="2"><strong>提示：</strong> 使用滑块控制改变模拟输出波形信号，可以影响所有硬件驱动的AO输出通道的波形频率。目前没有解决这一问题的措施。</td></tr>
+<tr><td align="center"><img src="../images/ao_wave.png" alt="AOUT 波形控制" width="88" border="0"><br><strong>波形控制</strong></td><td>在采集前或采集运行时，使用模拟波形控制来改变波形设置。<br><br>若被选设备支持输出扫描， 选择 <strong>信号类型»波形</strong>，把滑块改变至波形控制。<br><br>若想变回至滑块控制，在快捷菜单中选择 <strong>信号类型»滑块</strong>。 </td></tr>
+
+
+<tr><td rowspan="2"><a name="doutcontrols">数字输出</a></td><td align="center"><img src="../images/do_switch.png" alt="DOUT 开关控制" width="80" border="0"><br><strong>数据开关控制</strong></td><td>在采集中，使用数字开关控制来改变高电平/低电平状态。<br><br>
+<p>右击控制图标，显示如下选项的菜单：</p>
+<ul>
+	<li><strong>从显示控件中移除</strong>：从输出显示中移除此通道。</li>
+	<li><strong>颜色</strong>：从调色板中为通道选择颜色。</li>
+	<li><strong>信号类型</strong> （仅支持硬件时钟类型的AO）：果设备支持硬件时钟的数字输出扫描时， 选择 <strong>方波</strong> 可以转成方波控制来配置输出通道。<br><br>
+	<img src="../images/DOutCtrlContext.png" alt="" width="240" border="0"></li>
+</ul></td></tr>
+<tr><td><img src="../images/do_sqwave.png" alt="DOUT 波形控制" width="88" height="96" border="0"></td><td><strong>数字方波控制</strong><br><br>若被选择的设备支持数字输出扫描，且所有数字通道都被设置为输出，从快捷菜单中选择<strong>信号类型»方波</strong> ，将开关改变为方波控制。<br><br>若想变回开关控制，在快捷菜单中选择 <strong>信号类型»开关</strong>。</td></tr>
+
+<tr><td><a name="coutcontrols">计数器/定时器输出</a></td><td><img src="../images/co_freq-dutycyl.png" alt="COUT 控制" width="88" border="0" align="center"></td><td>在采集前或采集运行时，使用脉冲输出控制来设置脉冲。</td></tr>
+</table>
+
+</body>
+</html>

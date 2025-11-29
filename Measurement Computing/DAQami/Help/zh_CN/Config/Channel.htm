@@ -1,0 +1,362 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"><!-- saved from url=(0014)about:internet -->
+
+<html>
+<head>
+
+<title>配置通道</title><!--favicon code==============================================--><!--(Meta) insert after title ======================================-->
+
+
+	<link rel="shortcut icon" href="http://www.favicon.ico" />
+	<link type="image/x-icon" rel="icon" href="favicon.ico" />
+	<link type="image/x-icon" rel="shortcut icon" href="favicon.ico" />	
+	
+	<link rel="shortcut icon" type="image/x-icon" href="data:image/ico;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAQAQAAAAAAAAAAAAAAAAA
+AAAAAADanA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7///////v48v/anA7/2pwO/9qcDv/anA7/2pwO///////anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv///////////9qcDv/anA7/2pwO/////////////////9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7//////9qcDv//////2pwO/9qcDv//////2pwO///////anA7/
+2pwO/9qcDv/anA7////////////anA7/2pwO///////anA7/2pwO////////////2pwO/9qcDv//
+/////////9qcDv//////2pwO///////anA7//////9qcDv//////2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO////////////2pwO///////anA7/2pwO/9qcDv///////////9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qc
+Dv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO
+/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/
+2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/anA7/2pwO/9qcDv/a
+nA7/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAA==">
+
+
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"><!--(Links)=========================================================-->
+
+
+<link href="..\MCHelp.css" rel="stylesheet" type="text/css">
+
+</head><!--(Body)==========================================================-->
+
+
+<body>
+
+<h1>配置通道</h1>
+<p>利用配置面板中的 <strong>通道标签</strong>来激活并设置模拟、数字、计数器通道，使其在数据采集中进行测量。显示的选项仅限于被选择的设备.</p>
+<p>保存时，通道设置将存储在 <span class="code">.amicfg</span> 文件中。</p>
+<p><strong>注意：</strong> 当用DAQami运行同步的输入或输出时—无论是多个设备还是单个设备—采集到的数据可能会有一些时间延迟。<br><br>尽管在子系统与设备间的数据时间一致性上做了很多努力，但由于子系统是通过软件启动的， 触发的<em>虚拟</em> 将导致时间的不同， 尤其在开始时间上。</p>
+<p>&#24403;&#20351;&#29992;USB-1808&#31995;&#21015;&#25110;USB-CTR&#31995;&#21015;&#35774;&#22791;&#65292;&#22312;DAQami&#19979;&#36816;&#34892;&#22797;&#21512;I/O&#36873;&#39033;&#26102;&#65292;&#25152;&#26377;&#23376;&#31995;&#32479;&#30340;&#24037;&#20316;&#65292;&#37117;&#20250;&#30001;&#21807;&#19968;&#30340;&#20849;&#20139;&#30828;&#20214;&#26102;&#38047;&#28304;&#36827;&#34892;&#21516;&#27493;&#12290;&#22240;&#27492;&#65292;&#21508;&#23376;&#31995;&#32479;&#36755;&#20837;&#23558;&#27809;&#26377;&#20219;&#20309;&#24310;&#36831;&#12290;&#20851;&#20110;&#20849;&#20139;&#26102;&#38047;&#65288;&#22797;&#21512;&#65289;&#22797;&#36873;&#26694;&#30340;&#35828;&#26126;&#35299;&#37322;&#65292;&#35831;&#28857;&#20987;&#37197;<a href="Acquisition.htm">&#32622;&#37319;&#26679;&#29575;&#21644;&#35302;&#21457;&#12290;</a></p>
+<p><strong>备注：</strong>当每通道需要连续采集超过一百万个样点时， 可能会出现一些性能问题，具体情况取决于运行DAQami软件的电脑。. 为了在这种情形下保持最佳性能，应当降低采样率，减少激活的通道数，或者安装一个更快速的硬盘驱动。</p>
+<p><strong>提示</strong>: 当在此标签中选择通道时，按住&lt;Shift&gt;可同时选中并配置多个相邻通道，按住&lt;Ctrl&gt;可选中多个不相邻通道。如需选中所有通道，在表格中点击任何一点后，按下&lt;Ctrl-A&gt;。对某一通道的配置将应用于所有 <em>活动</em> 通道。</p>
+
+	
+
+<p>点击以下链接来配置每个通道的类型</p>
+<ul>
+	<li><a href="#AI">模拟输入通道</a></li>
+	<li><a href="#AO">模拟输出通道</a></li>
+	<li><a href="#DIO">数字I/O通道</a></li>
+	<li><a href="#CI">计数器输入通道</a></li>
+	<li><a href="#CO">计数器/定时器输出通道</a></li>
+</ul><!-- Analog Input channel procedure ========================================================================-->
+
+
+<h2><a name="AI">配置模拟输入通道</a></h2>
+<p>通过以下步骤来完成模拟输入相关配置：</p>
+<ol>	
+	<li>选中每一个需要被使能的通道的 <strong>激活</strong>复选框。活动通道的选项变为可设置状态。</li>
+	<li>点击调色板，选择适当的颜色（非必需步骤）。该颜色将应用到通道图标和波形曲线上。</li>
+	<li>双击 <strong>通道</strong> 列，可修改通道名称。</li>
+	<li>如设备支持多种测量类型，在<strong>类型</strong>列表点击向下箭头，进行选择。</li>
+	<li>下一个通道选项取决于通道的<strong>类型</strong>：
+	<ul>
+		<li>选择<strong>电压</strong>将激活<strong>输入范围</strong>列。点击向下箭头并选择电压输入范围。</li>
+		<li>若设备支持混合通道模式，点击<strong>通道模式</strong>列表，为通道选择<strong>差分模式l</strong> 或<strong>单端模式</strong>。</li>
+<li>选择 <strong>温度</strong> 将激活 <strong>热电偶类型</strong> 列。点击向下箭头并选择热电偶类型。此列仅在当前设备支持热电偶测量时显示。</li>
+</ul></li>
+<li class="none"><strong>提示</strong>: 用USB-2408或USB-2416系列设备时，在 <strong>数据速率</strong> 列点击向下的箭头，进行选择。设备的最高采样率受限于各通道的数据速率与噪声滤波设置。参考 <a href="#datarate">设置数据速率滤除噪声</a> ，获取更多信息。</li>
+	<li value="6">为采集选择 <strong>单位</strong> 。<br><br>选择 <strong>自定义</strong>，通过以下步骤来创建自定义单元：
+	<ol>
+	<li>在<strong>缩放因子</strong> 文本框中，输入数据的缩放倍数，并以此重新计算y轴刻度范围。默认值为1。 </li>
+	<li>在<strong>偏移</strong> 文本框中，输入数据的偏移量。默认值为0。</li>
+</ol></li>
+</ol>
+
+<p align="center"><img src="../images/aiconfig.png" alt="模拟输入选项" width="533" height="356" border="0"></p><!-- Analog iput channel settings ================================================================-->
+
+
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>模拟输入选项</strong></td></tr>
+
+<tr><td width="15%">调色板</td><td>通道图标和波形曲线的颜色。点击打开调色板，选择适当的颜色。</td></tr>
+
+<tr><td>通道</td><td>设备的通道名称。通道名称将出现在所有关联的显示控件上。可以设置新名称，至多25个字符。</td></tr>
+
+<tr><td>激活</td><td>用于激活/禁用通道。选中复选框，以激活此通道。设备面板中将列出所有活动通道，激活的输入通道的数据将被记录。激活的通道将会被添加至显示面板中。</td></tr>
+
+<tr><td>类型</td><td>设备支持的模拟信号测量类型。</td></tr>
+
+<tr><td>量程</td><td>设备支持的信号范围。此列在<strong>类型</strong>设置为<strong>电压</strong>时有效。</td></tr>
+
+<tr><td>热电偶类型</td><td>设备支持的热电偶类型。此列在<strong>类型</strong>设置为<strong>温度</strong>时有效；并且仅在设备支持温度测量时可见。</td></tr>
+
+<tr><td>通道模式</td><td>如果被选设备支持混合通道模式，可以选择各个通道是单端还是差分模式。默认的模式为<strong>差分模式</strong>。</td></tr>
+
+<tr><td>数据速率</td><td>仅限于USB-2408与USB-2416系列。当使用USB-2408系列或USB-2416系列采集数据时, 数据速率决定了噪声滤波时需要的采样点数量。通过降低数据速率，增加了用于平均滤波的采样点数量，因此噪声得到抑制。如要求噪声尽量小，选择更低的数据速率（最低2.5Hz）。速率较低时，更多的噪声经过平均滤波后被滤除，类似基准噪声一类的问题变得不再重要。参考 <a href="#datarate">设置数据速率控制噪声滤波</a> 获取更多信息</td></tr>
+
+<tr><td>单位</td><td>将数据转换为相应单位。可选的值取决于测量类型。选择<strong>自定义</strong>来指定其他单位。<br><br>数据单位会显示在设备面板中通道名称后面的括号里。</td></tr>
+
+<tr><td>缩放因子</td><td>这个数值用于缩放数据，并以此重新计算y轴的刻度范围。此列仅在<strong>单位</strong>设置为<strong>自定义</strong>时有效。</td></tr>
+
+<tr><td>偏移</td><td>用于对数据进行偏移。此列仅在<strong>单位</strong>设置为<strong>自定义</strong>时有效。</td></tr>
+</table>
+</div><!-- Anaolg Output channel procedure ================================================================-->
+
+
+<h2><a name="AO">配置模拟输出通道</a></h2>
+
+<p>通过以下步骤来完成模拟输出相关配置：</p>
+<ol>
+	<li>选中每一个需要被使能的模拟输出通道 <strong>激活</strong> 复选框。活动通道的选项变为可设置状态。</li>
+	<li>点击调色板，选择适当的颜色（非必需步骤）。该颜色将应用到通道图标和波形曲线上。</li>
+	<li>双击 <strong>通道</strong> 列，可修改通道名称。</li>	
+</ol>
+
+<p align="center"><img src="../images/aoconfig.png" alt="模拟输出设置" width="170" border="0"></p><!-- Analog Output channel settings ================================================================-->
+
+
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>模拟输出设置</strong></td></tr>
+
+<tr><td width="15%">调色板</td><td>通道图标和波形曲线的颜色。点击打开调色板，选择适当的颜色。</td></tr>
+
+<tr><td>通道</td><td>设备的通道名称。通道名称将出现在所有关联的显示控件上。可以设置新名称，至多25个字符。</td></tr>
+
+<tr><td>激活</td><td>用于激活/禁用通道。选中复选框，以激活此通道。设备面板中将列出所有活动通道， 激活的通道会被添加至显示面板中。</td></tr>
+</table>
+</div>
+
+<p><strong>输出控制</strong>: 添加模拟输出通道至输出显示界面，可以在采集中控制输出电压。如果备选设备支持输出扫描，还可以更改信号波形。参考 <a href="../Display/Output.htm#outputcontrols">输出通道控制</a>了解更多关于实时控制模拟输出的信息。</p><!-- DIO channel procedure ================================================================-->
+
+
+<h3><a name="DIO">配置数字I/O通道</a></h3>
+<p>常用的数据通道设置如下所示。显示的选项仅限于被选择的设备，例子仅供参考，实际可能不同 </p>
+
+<p>通过以下步骤来完成数字I/O相关配置：</p>
+
+<ol>
+	<li>选中每一个需要被使能的通道的 <strong>激活</strong> 复选框 。活动通道的选项变为可设置状态。</li>
+	<li>点击调色板，选择适当的颜色（非必需步骤）。该颜色将应用到通道图标和波形曲线上。</li>
+	<li>双击<strong>通道</strong> 列，可修改通道名称。</li>
+<li>如果数字通道可单独配置位，在 <strong>方向</strong>一列点击向下的箭头，对<em>输入</em> 或<em>输出</em>方向进行选择。</li>
+<li class="none">当端口可以对位进行设置时，当所有位设置为同一方向时，传输速率会变快 </li>
+	<li class="none"><strong>TC-32</strong>：端口B上的数字位仅用于监控报警输出， 不能被用于数据采集。参考硬件用户手册，获取TC-32数字位的更多信息。</li>
+	</ol>
+
+<p align="center"><img src="../images/dioconfig.png" alt="DIO设置" width="281" border="0"></p><!-- DIO channel channel settings ================================================================-->
+
+
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>数字 I/O 设置</strong></td></tr>
+<tr><td width="15%">调色板</td><td>通道图标和波形曲线的颜色。点击打开调色板，选择适当的颜色。</td></tr>
+
+<tr><td>通道</td><td>设备的通道名称。通道名称将出现在所有关联的显示控件上。可以设置新名称，至多25个字符。</td></tr>
+
+<tr><td>激活</td><td>用于激活/禁用通道。选中复选框，以激活此通道。设备面板中将列出所有活动通道，激活的输入通道的数据将被记录。激活的通道将会被添加至显示面板中。</td></tr>
+
+<tr><td>方向</td><td>如果数字通道可单独配置位，要对输入/输出方向进行选择</td></tr>
+</table>
+</div>
+
+<p><strong>输出控制</strong>: 添加数字输出通道至输出显示界面，可以在采集中控制方向。如果被选设备支持输出扫描，则可以更改方波频率与占空比参考 <a href="../Display/Output.htm#outputcontrols">输出通道控制</a> 了解更多关于实时控制数字输出的信息。</p><!-- Counter Input channel settings ================================================================-->
+
+
+<h2><a name="CI">配置计数器输出通道</a></h2>
+<p>常用计数器输入选项如下所示。显示的选项仅限于被选择的设备，例子仅供参考，实际可能不同 </p>
+
+<p>通过以下步骤来完成计数器输入相关配置：</p>
+
+<ol>	
+	<li>选中每一个需要被使能的通道的<strong>激活</strong> 复选框 。活动通道的选项变为可设置状态。</li>
+	<li>点击调色板，选择适当的颜色（非必需步骤）。该颜色将应用到通道图标和波形曲线上。</li>
+	<li>双击<strong>通道</strong> 列，可修改通道名称。</li>
+	<li> <strong>模式</strong>值将填充于选中的通道设置区域的选项中。</li>
+</ol>
+
+<p align="center"><img src="../images/ciconfig.png" alt="计数器输入配置" width="520" height="373" border="0"></p><!-- Events mode counter settings -->
+
+
+<h3>配置通道为事件记录模式</h3>	
+<p>事件模式选项将显示在上述的图像中。通过以下步骤，配置通道为事件记录模式 （记录上升沿或下降沿）：</p>
+<ol>
+	<li>在<strong>模式</strong>列表中选择<strong>事件</strong>。</li>
+	<li>在<strong><a name="CountDir" id="CountDir">计数方向</a></strong>列表中，选择从<strong>计数初值</strong><strong>向上计数</strong>或<strong>向下计数</strong>。</li>
+  	<li>如设备支持边沿检测，在<strong>计数边沿</strong>列表中选择<strong>上升沿</strong>来记录上升沿个数，或选择<strong>下降沿</strong>来记录下降沿个数。</li>
+
+	<li>保留计数器单位以 <strong>Ticks</strong>计数, 或选择一个<strong>自定义的</strong> 量并输入值。当选择自定义模式时， 会显示<strong>缩放因子</strong> 与 <strong>偏移</strong> 列。<br>缩放因子和偏移量可以线性变换计数器数值。默认的缩放因子为1; 默认的偏移量为0。</li>
+	<li>输入计数器<strong>向上计数</strong>或<strong>向下计数</strong>的<strong>计数初值</strong>。</li>
+	<li>选中<strong><a name="recycle" id="recycle">循环计数</a></strong>复选框，使能循环计数模式，在计数器达到<strong>最大值</strong>（向上计数）或<strong>最小值</strong>（向下计数）时，重新开始新一轮计数。清除复选框，使计数器在达到 <strong>最大值</strong> 或 <strong>最小值</strong>时停止计数（非循环计数模式）。</li>
+	<li>选中<strong>读取后清零</strong>复选框，在每次同步或异步读取计数器之后，将计数值清零。清零前的计数值将被锁存并返回。通常情况下计数值被清零，但在某些模式下将被设置为<strong>最小值</strong>。</li>
+	 <li>选中<strong><a name="rlimit" id="rlimit">范围限制</a></strong>复选框，使能<strong>最大值</strong>和<strong>最小值</strong>选项。设置最大值与最小值，使计数器带有限位功能。计数器的具体行为取决于<strong>计数方向</strong> 与 <strong>循环计数</strong> 设置。</li>
+
+<table class="Bordered" width="70%" align="center">
+<tr><th width="15%">计数方向</th><th width="15%">循环计数</th><th>计数器行为</th></tr>
+<tr><td  class="Bordered" style="vertical-align: bottom;">向上计数</td><td  class="Bordered" style="vertical-align: bottom;">选中</td><td  class="Bordered" style="vertical-align: bottom;">当计数器达到最大值时，回滚至最小值继续计数。</td></tr>
+<tr><td  class="Bordered" style="vertical-align: bottom;">向上计数</td><td  class="Bordered" style="vertical-align: bottom;">清除</td><td  class="Bordered" style="vertical-align: bottom;">当计数器达到最大值时，计数停止。</td></tr>
+<tr><td  class="Bordered" style="vertical-align: bottom;">向下计数</td><td  class="Bordered" style="vertical-align: bottom;">选中</td><td  class="Bordered" style="vertical-align: bottom;">当计数器达到最小值时，回滚至最大值继续计数。</td></tr>
+<tr><td  class="Bordered" style="vertical-align: bottom;">向下计数</td><td  class="Bordered" style="vertical-align: bottom;">清除</td><td  class="Bordered" style="vertical-align: bottom;">当计数器达到最小值时，计数停止。</td></tr>
+</table>
+
+	<li>计数方向改变或计数器重置为介于<strong>最大值</strong>与<strong>最小值</strong>之间的值时，计数器重新开始计数。</li>
+
+ 	<li>在<strong>门控方式</strong>列表中选择门控选项：</li>
+		<ul>
+		<li><strong>禁用</strong>—门控功能被禁用。</li>
+		<li><strong>门控计数</strong>—门控信号用于门控计数器。默认情况，门控信号为高电平时，计数器使能。门控信号为低电平时，计数停止，但保留当前值。</li>
+		<li><strong>触发计数</strong>—门控信号用于触发计数器。默认情况，上升沿触发。</li>
+		<li><strong>计数方向</strong>—门控信号用于控制计数方向。默认情况，门控信号为高电平时，向上计数；门控信号为低电平时，向下计数。</li>	
+		<li><strong>计数清零</strong>—门控信号用于清零计数器（未使能<strong>范围限制</strong>功能）。若使能了<strong>范围限制</strong>功能，门控信号将使计数器重置为所设置的最小值。</li>
+	</ul> 
+
+	<li>使用门控模式时，选中 <strong>门控反转</strong>复选框，在门信号为低电平或下降沿时激活。默认情况，输入信号高电平或上升沿时触发。 </li>
+</ol><!-- Frequency Mode counter settings  =========================================================-->
+
+	
+<h3>频率测量模式设置</h3>
+<p>通过以下步骤，配置通道为频率测量模式（测频法）：</p>
+<ol>
+	<li>在<strong>模式</strong>列表中选择<strong>频率</strong>。</li>		
+</ol>
+<p align="center"><img src="../images/ctr_freqconfig.png" alt="计数器输入配置" width="237" border="0"></p>
+<ol start="2">
+ 	<li>如设备支持边沿检测， 在 <strong>计数器边沿</strong> 列表中选择<strong>上升沿</strong> 来记录上升沿个数。或选泽 <strong>下降沿</strong> 来记录下降沿个数。</li>
+		<li>在<strong>单位</strong>列表中，选择<strong>Hz</strong>、<strong>kHz</strong>或<strong>MHz</strong>。</li>
+ <li>在<strong>门控方式</strong>列表中，选择<strong>禁用</strong>以禁用门控功能，或选择<strong>门控计数</strong>以启用门控功能。</li>
+<li>使用门控模式时，选择 <strong>门控反转</strong> 复选框， 在门信号为低电平时激活。默认情况下，输入信号在高电平时激活。</li>
+</ol><!-- Period or Pulse Width Mode counter settings =====================================================================-->
+
+
+<h3>配置通道为周期测量或脉宽测量模式</h3>
+
+<p>通过以下步骤，配置通道为周期测量模式（一个信号周期的时间长度）或脉宽测量模式（从上升沿到下降沿之间的时间长度，或从下降沿到上升沿之间的时间长度）：</p>
+<ol>
+	<li>在<strong>模式</strong>列表中选择<strong>周期</strong>或<strong>脉宽</strong>。以下选项通用于所有模式。</li>
+</ol>
+<p align="center"><img src="../images/ctr_periodconfig.png" alt="计数器输入配置" width="236" border="0"></p>
+<ol start="2">
+ 	<li>如设备支持边沿检测，在<strong>计数边沿</strong>列表中选择<strong>上升沿</strong>来记录上升沿个数，或选择<strong>下降沿</strong>来记录下降沿个数。</li>
+		<li>在<strong>单位</strong>列表中，选择<strong>s</strong>（秒）、<strong>ms</strong>（毫秒）、<strong>µs</strong>（微秒）或<strong>Ticks</strong>。</li>
+ <li>在<strong>门控方式</strong>列表中，选择<strong>禁用</strong>以禁用门控功能，或选择<strong>门控计数</strong>以启用门控功能。</li>
+<li>使用门控模式时，选择 <strong>门控反转</strong> 复选框， 在门信号为低电平时激活。默认情况下，输入信号在高电平时激活。</li>
+</ol><!-- Timing Mode counter settings =====================================================================-->
+
+
+<h3>配置通道为时间测量模式</h3>	
+<p>通过以下步骤，配置通道为时间测量模式（连续发生的两个事件之间的时间长度）：</p>
+<ol>
+	<li>在<strong>模式</strong>列表中选择<strong>时间</strong>。</li>
+</ol>
+<p align="center"><img src="../images/ctr_timingconfig.png" alt="计数器输入配置" width="236" border="0"></p>
+<ol start="2">	
+ 	<li>如设备支持边沿检测，在<strong>计数边沿</strong>列表中选择<strong>上升沿</strong>来记录上升沿个数，或选择<strong>下降沿</strong>来记录下降沿个数。</li>
+	<li>在<strong>单位</strong>列表中，选择<strong>s</strong>（秒）、<strong>ms</strong>（毫秒）、<strong>µs</strong>（微秒）或<strong>Ticks</strong>。</li>
+<li>使用门控模式时，选中 <strong>反转门控信号</strong> 复选框，反转<strong>开始边沿</strong> 设置。 <ul>
+	<li  type="circle">如果选择 <strong>上升沿</strong> ，选中 <strong>门控反转</strong> ，在门信号在下降沿时激活。</li>
+	<li  type="circle">如果选择 <strong>下降沿</strong> ，选中<strong>门控反转</strong> ，在门信号在上升沿沿时激活。</li>
+</ul></li>
+
+</ol><!-- Counter input channel settings ================================================================-->
+
+
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>计数器输入配置</strong></td></tr>
+
+	<tr><td width="15%">调色板</td><td>通道图标和波形曲线的颜色。点击打开调色板，选择适当的颜色。</td></tr>
+
+	<tr><td>通道</td><td>设备的通道名称。通道名称将出现在所有关联的显示控件上。可以设置新名称，至多25个字符。</td></tr>
+
+	<tr><td>激活</td><td>用于激活/禁用通道。选中复选框，以激活此通道。设备面板中将列出所有活动通道，激活的输入通道的数据将被记录。激活的通道将会被添加至显示面板中。</td></tr>
+
+	<tr><td>模式</td><td>计数器模式计数器支持以下模式（不同设备提供不同功能）：
+	<ul>
+		<li><strong>事件</strong>—记录上升沿或下降沿数量。</li>
+		<li><strong>频率</strong>—测量一定时间内的信号周期数。</li>
+		<li><strong>周期</strong>—测量一个周期的时间长度。</li>
+		<li><strong>脉宽</strong>—测量信号从上升沿（下降沿）到下降沿（上升沿）的时间长度。</li>
+		<li><strong>时间</strong>—测量连续发生的两个事件之间的时间长度。</li>
+</ul></td></tr>
+
+	<tr><td>计数方向</td><td>当计数器模式设置为<strong>事件</strong>时，选择从<strong>计数初值</strong><strong>向上计数</strong>，或从<strong>计数初值</strong><strong>向下计数</strong>。</td></tr>
+
+	<tr><td>计数边沿</td><td>边沿计数： 选择 <strong>上升沿</strong> 来记录上升沿个数， 或选择<strong>下降沿</strong> 来记录下降沿个数。</td></tr>
+
+	<tr><td>单位</td><td>将数据转换为相应单位。可选的值取决于<strong>模式</strong>设置。每种模式都可以输入自定义单元。</td></tr>
+
+		<tr><td>计数初值</td><td>向上或向下计数时的初始值。</td></tr>		
+		<tr><td>循环计数</td><td>当计数器达到指定值时，重新计数。</td></tr>
+		<tr><td>读数后清除</td><td>每次读数后清空计数器</td></tr>
+		<tr><td>量程限制</td><td>可读取的最大值与最小值。</td></tr>
+		<tr><td>门控方式:</td><td>使一个特定的输入来门控计数器。可选的值取决于<strong>模式</strong>设置。</td></tr>
+	<tr><td>门控反转：</td><td>在信号为低电平或下降沿到来时计数。</td></tr>
+</table>
+</div><!-- Counter/Timer Output channel procedure ================================================================-->
+
+
+<h2><a name="CO">配置计数器/定时器输出通道</a></h2>
+<p>常用计数器输出选项如下图所示。</p>
+
+<p>通过以下步骤来完成计数器输出相关配置：</p>
+<ol>
+	<li>选中每一个需要被使能的计数器输出通道 <strong>激活</strong> 复选框。活动通道的选项变为可设置状态。</li>
+	<li>点击调色板，选择适当的颜色（非必需步骤）。该颜色将应用到通道图标和波形曲线上。</li>
+	<li>双击 <strong>通道</strong> 列，可修改通道名称。</li>	
+</ol>
+
+<p align="center"><img src="../images/coconfig.png" alt="计数器输入配置" width="174" border="0"></p><!-- Counter/Timer Output channel settings ================================================================-->
+
+
+<div class="tblnoborder">
+<table cellspacing="7" width="95%">
+<tr class="heading"><td colspan="2"><strong>计数器/定时器输出设置</strong></td></tr>
+
+<tr><td width="15%">调色板</td><td>通道图标和波形曲线的颜色。点击打开调色板，选择适当的颜色。</td></tr>
+
+<tr><td>通道</td><td>设备的通道名称。通道名称将出现在所有关联的显示控件上。可以设置新名称，至多25个字符。</td></tr>
+
+<tr><td>激活</td><td>用于激活/禁用通道。选中复选框，以激活此通道。设备面板中将列出所有活动通道， 激活的通道会被添加至显示面板中。</td></tr>
+
+</table>
+</div>
+<p><strong>输出控制</strong>：添加计数器输出通道至输出显示界面，可以在采集中设置频率与占空比。参考 <a href="../Display/Output.htm#outputcontrols">输出通道控制</a> 了解更多关于实时控制数字输出的信息。</p><!-- Data rate settings -2408, 2416 only -->
+
+
+<h2><a name="datarate">设置数据速率来控制噪声滤波g</a> (仅限于USB-2408系列与USB-2416系列)</h2>
+<p>数据速率决定了噪声滤波过程需要平均的采样点数量。通过降低数据速率，增加了用于平均滤波的采样点数量，因此噪声得到抑制。</p>
+<p>如要求噪声尽量小，选择更低的数据速率（最低2.5Hz）。速率较低时，更多的噪声经过平均滤波后被滤除，类似基准噪声一类的问题变得不再重要。</p>
+
+<p>速率较高时，高频噪声不会滤除，可能影响测量结果。噪声来源包括不可控的A/D转换器固有噪声。热电偶会引入额外的噪声，因此需要根据最主要的噪声的频率选择合适的数据速率。</p>
+<p>例如，需要削弱60Hz噪声的影响时, 可将数据速率设置为60Hz或更低，如10Hz、5Hz。</p>
+
+<p>使用多通道采集数据时，各通道的采样率是一致的，但数据速率较低的通道会做更多的滤波与数据平均。</p>
+<p>例如，设置通道0的数据速率10Hz，通道1的数据速率50Hz，两个通道每秒钟上传至主机的采样点数量是相同的。但通道0会采集更多样点进行滤波，因此，通道0的分辨率相对更高。</p>
+<p>USB-2408和USB-2416系列设备的A/D转换器在执行数据平均滤波时，被平均的样点数量为30000/数据速率。在本例中，通道0在100ms内采集3000样点，并将其平均为1个数据。而通道1则在20ms内采集600样点，并将其平均为1个数据。最终，实际的数据速率约为8Hz （8.245Hz）。</p>
+
+<p align="center"><img src="../images/DRate.png" alt="" width="407" height="91" border="0"></p><!-- See also ===================================================================-->
+
+
+<h3>另请参阅</h3>
+
+<p><a href="Acquisition.htm">配置扫描选项</a></p>
+<p><a href="Device.htm">配置设备</a></p>
+<p><a href="ConfigSave.htm">保存配置</a></p>
+<p><a href="http://china.mccdaq.com/usb-data-acquisition/USB-2408-Series.aspx">USB-2408系列</a></p>
+<p><a href="http://china.mccdaq.com/usb-data-acquisition/USB-2416-Series.aspx">USB-2416系列</a></p>
+
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<!-- saved from url=(0014)about:internet -->
+<html>
+<head>
+
+<title>Adding a Cursor to a Display</title>
+
+<!--(Meta) insert after title ======================================-->
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+
+<!--(Links)=========================================================-->
+<link href="..\MCHelp.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<!--(Body)==========================================================-->
+<body>
+
+
+<h1>Adding a Cursor to a Display</h1>
+
+<p>Add a cursor to the data trace on a Strip or Block display to show the value of a specific data point.</p>
+<ul>
+	<li>You can add up to two cursors to the channel data on a Strip or Block display.</li>
+	<li>Cursors can only be added to one channel at a time on a display.</li>
+	<li>The color of the cursor corresponds to the color of the selected channel.</li>
+	<li>Cursors can be added to a display before or during the acquisition.</li>
+</ul>
+
+<p>To add cursors to a display, complete the following steps:</p>
+<ol>
+	<li>If data is being acquired, click on the lock icon <img src="../images/Icon-lock-live.png" width="20" alt="lock icon"> to enter review mode, otherwise proceed to step 2.</li>
+	<li>Click on a cursor icon (Cursor A <img src="../images/Icon-cursorA.png" alt="Cursor A icon" width="20" border="0" class="inline"> or Cursor B <img src="../images/Icon-cursorB.png" alt="Cursor B icon" width="20" border="0" class="inline">).
+
+	<br>A circle with a cross hair is added the data plot of the currently selected channel. The x-coordinate shows either the acquisition time (absolute or relative) or the sample number, depending on the X-axis Display Mode setting. The y-coordinate shows the sample value.</li>
+
+	<li>Click on the other cursor icon to add a second cursor to the display.
+	<br>When two cursors are added, the display shows the time and amplitude deltas between the two cursors.</li>
+
+	<li>Click and drag one of the circles along the data plot to show the value of each data point on the plot. An <span style="color: Gray;"><strong>A</strong></span> or <span style="color: Gray;"><strong>B</strong></span> identifies the cursor on the display.</li>
+	<li>Click the unlock icon <img src="../images/Icon-lock-review.png" width="20" alt=""> to exit review mode and resume the acquisition, if one was running.</li>
+</ol>
+
+<p>The image below shows two cursors added to channel 0 on the Strip display.</p>
+
+<p style="text-align:center"><img src="../images/Cursors.png" alt="Cursor A and Cursor B data points" width="753" border="0"></p>
+
+<p>Click the cursor icon again to remove the cursor from the display.</p>
+
+<p>To show the value of the data points on a different channel, click the channel icon. The cursors move to the selected channel.</p>
+<h2>Zooming in and cursors</h2>
+<p>If you add cursors to a Strip or Block display and then zoom in on the data so that the cursors move outside the range of the displayed data, arrows (<img src="../images/CursA-arrow.png" alt="" width="21" height="10" border="0">, <img src="../images/CursB-arrow.png" alt="" width="21" height="10" border="0">)are added for each cursor to indicate their position relative to the current data view.<br><br>
+<img src="../images/Cursor-Zoom.png" alt="lock icon" width="715" border="0"></p>
+<!-- video link ======================================================================-->
+<h3>Video Demo</h3>
+<p>Click the <strong>Play</strong> button below to see a video showing how to show the value of a data point with a cursor.</p>
+
+<p align="center">
+<video width="480" controls>
+  <source src="../video/daqami-cursor.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video></p>
+
+<p>If you are unable to view this video, play the <a href="http://www.mccdaq.com/ondemand/video/daqami.mp4">DAQami Video Demo</a> for detailed information about how to set up a configuration and acquire data with DAQami.</p>
+
+</body>
+</html>
