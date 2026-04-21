@@ -89,12 +89,19 @@ class MaritimeButton(QPushButton):
         'amber_warning': '#FF8F00'
     }
     
-    def __init__(self, parent: Optional[QWidget] = None,
-                 text: str = "",
+    def __init__(self, text: str = "",
+                 parent: Optional[QWidget] = None,
                  icon: Optional[QIcon] = None,
                  variant: str = VARIANT_PRIMARY,
                  size: str = SIZE_MEDIUM,
                  full_width: bool = False):
+        # Compatibilite avec l'ancienne signature (parent, text, ...).
+        if isinstance(text, QWidget):
+            legacy_parent = text
+            legacy_text = parent if isinstance(parent, str) else ""
+            text = legacy_text
+            parent = legacy_parent
+
         super().__init__(text, parent)
         
         self.variant = variant

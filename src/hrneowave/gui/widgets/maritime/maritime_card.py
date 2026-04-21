@@ -15,17 +15,17 @@ from typing import Optional, Union
 
 try:
     from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame
-    from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Signal, QRect
+    from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Signal, QRect, QSize
     from PySide6.QtGui import QPainter, QPainterPath, QColor, QPen
     pyqtSignal = Signal
 except ImportError:
     try:
         from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame
-        from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, pyqtSignal, QRect
+        from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, pyqtSignal, QRect, QSize
         from PyQt6.QtGui import QPainter, QPainterPath, QColor, QPen
     except ImportError:
         from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame
-        from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, pyqtSignal, QRect
+        from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, pyqtSignal, QRect, QSize
         from PyQt5.QtGui import QPainter, QPainterPath, QColor, QPen
 
 # Import du système d'animations Phase 6
@@ -73,10 +73,17 @@ class MaritimeCard(QFrame):
         'emerald_success': '#4CAF50'
     }
     
-    def __init__(self, parent: Optional[QWidget] = None, 
-                 title: str = "", 
+    def __init__(self, title: str = "",
+                 parent: Optional[QWidget] = None,
                  elevated: bool = True,
                  clickable: bool = False):
+        # Compatibilite avec l'ancienne signature (parent, title, ...).
+        if isinstance(title, QWidget):
+            legacy_parent = title
+            legacy_title = parent if isinstance(parent, str) else ""
+            title = legacy_title
+            parent = legacy_parent
+
         super().__init__(parent)
         
         self.title = title
@@ -249,10 +256,29 @@ class MaritimeCard(QFrame):
     def add_widget(self, widget: QWidget):
         """Ajoute un widget au contenu de la card."""
         self.content_layout.addWidget(widget)
+
+    def add_content(self, widget: QWidget):
+        """Alias de compatibilite pour les vues existantes."""
+        self.add_widget(widget)
     
     def add_layout(self, layout):
         """Ajoute un layout au contenu de la card."""
         self.content_layout.addLayout(layout)
+
+    def add_content_layout(self, layout):
+        """Alias de compatibilite pour les vues existantes."""
+        self.add_layout(layout)
+
+    def set_content_widget(self, widget: QWidget):
+        """Remplace la zone de contenu interne par un widget fourni."""
+        if widget is self.content_widget:
+            return
+
+        self.main_layout.removeWidget(self.content_widget)
+        self.content_widget.deleteLater()
+        self.content_widget = widget
+        self.content_layout = widget.layout()
+        self.main_layout.addWidget(self.content_widget)
     
     def set_title(self, title: str):
         """Définit ou met à jour le titre de la card."""
@@ -350,15 +376,7 @@ class MaritimeCard(QFrame):
         """Taille suggérée basée sur le Golden Ratio."""
         base_width = 323  # Basé sur Golden Ratio
         base_height = int(base_width / self.GOLDEN_RATIO)
-        return super().sizeHint().expandedTo(self.size().expandedTo(
-            self.minimumSize().expandedTo(
-                self.sizeHint().expandedTo(
-                    self.size().expandedTo(
-                        self.minimumSizeHint()
-                    )
-                )
-            )
-        ))
+        return super().sizeHint().expandedTo(QSize(base_width, base_height))
     
     def minimumSizeHint(self):
         """Taille minimale suggérée."""

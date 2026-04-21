@@ -1,319 +1,277 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Fenêtre principale pour CHNeoWave
-Gestion des signaux de projet et coordination des vues
-"""
+"""Fenetre principale de CHNeoWave."""
 
 import logging
-from PySide6.QtWidgets import QMainWindow, QMessageBox
-from PySide6.QtCore import Signal, Slot, QTimer
+from pathlib import Path
+from typing import Dict, Optional
 
-logger = logging.getLogger(__name__)
-from hrneowave.core.signal_bus import get_error_bus, ErrorLevel
-from .view_manager import ViewManager
-from .widgets.main_sidebar import MainSidebar
-from .components.breadcrumbs import BreadcrumbsWidget, WorkflowStep
-from .preferences import PreferencesDialog, get_user_preferences
-from .components.help_system import HelpPanel, get_help_system, install_help_on_widget
-from .components.status_indicators import SystemStatusWidget, StatusLevel
-from .components.notification_system import get_notification_center, show_success, show_error, show_info
-
-# Import du système d'animations Phase 6
-try:
-    from .animations import PageTransitionManager, TransitionType, MaritimeAnimator
-except ImportError:
-    PageTransitionManager = None
-    TransitionType = None
-    MaritimeAnimator = None
-    logger.warning("Système d'animations Phase 6 non disponible")
-
-# Import des vues v2 et configurations
-from .views import (
-    DashboardViewMaritime,
-    WelcomeView,
-    get_calibration_view,
-    get_acquisition_view,
-    get_analysis_view,
-    get_export_view,
-    get_settings_view,
-    VIEWS_CONFIG,
-    NAVIGATION_ORDER
+from PySide6.QtCore import Signal, Slot
+from PySide6.QtWidgets import (
+    QApplication,
+    QHBoxLayout,
+    QMainWindow,
+    QSplitter,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
+from hrneowave.core.project_manager import get_project_manager
+
+from .components.breadcrumbs import BreadcrumbsWidget, WorkflowStep
+from .components.help_system import HelpPanel, install_help_on_widget
+from .components.notification_system import show_error, show_info, show_success
+from .components.status_indicators import StatusLevel, SystemStatusWidget
+from .preferences import get_user_preferences
+from .view_manager import ViewManager
+from .views import DashboardViewMaritime, VIEWS_CONFIG, WelcomeView
+from .widgets.main_sidebar import MainSidebar
+
+logger = logging.getLogger(__name__)
+
+
 class MainWindow(QMainWindow):
-    """Fenêtre principale de l'application CHNeoWave"""
-    
-    projectCreated = Signal()          # nouveau signal
-    
+    """Fenetre principale de l'application."""
+
+    projectCreated = Signal()
+
     def __init__(self, config=None, parent=None):
-        # Import des classes Qt seulement quand nécessaire
-        from PySide6.QtWidgets import QStackedWidget, QVBoxLayout, QWidget
-        from PySide6.QtCore import Qt
-        
         super().__init__(parent)
-        print("🔍 DEBUG: __init__ MainWindow - Début")
         self.setWindowTitle("CHNeoWave")
         self.setMinimumSize(1024, 768)
-        
-        # Configuration
-        self.config = config or {}
-        
-        # Préférences utilisateur
-        self.user_preferences = get_user_preferences()
-        
-        # Métadonnées du projet
-        self.project_meta = {}
-        
-        # État de l'application
-        self.is_acquiring = False
-        self.acquisition_controller = None
-        self.analysis_controller = None
-        self.project_controller = None
-        
-        # Système d'animations Phase 6
-        self.transition_manager = None
-        self.maritime_animator = None
-        if PageTransitionManager and MaritimeAnimator:
-            self.maritime_animator = MaritimeAnimator()
-            logger.info("Système d'animations Phase 6 initialisé")
-        
-        # Construction de l'interface
-        logger.info("Début de la construction de l'interface...")
-        print("🔍 DEBUG: __init__ MainWindow - Avant _build_ui")
-        self._build_ui()
-        print("🔍 DEBUG: __init__ MainWindow - Après _build_ui")
-        logger.info("Interface construite avec succès")
-        
-        logger.info("Configuration des connexions...")
-        self._setup_connections()
-        logger.info("Connexions configurées avec succès")
-        
-        # Configurer les nouveaux composants UX
-        logger.info("Configuration des indicateurs de statut...")
-        self._setup_status_indicators()
-        logger.info("Indicateurs de statut configurés avec succès")
-        
-        logger.info("Installation de l'aide contextuelle...")
-        self._install_contextual_help()
-        logger.info("Aide contextuelle installée avec succès")
-        
-        logger.info("Interface utilisateur v2 chargée avec succès")
 
-        # Connecter la barre de navigation
+        self.config = config or {}
+        self.user_preferences = get_user_preferences()
+        self.project_manager = get_project_manager()
+
+        self.project_meta: Dict[str, object] = {}
+        self.project_dir: Optional[Path] = None
+
+        self._build_ui()
+        self._create_and_register_views()
+        self._setup_connections()
+        self._setup_status_indicators()
+        self._install_contextual_help()
+
         self.sidebar.navigation_requested.connect(self._on_navigation_requested)
-        
-        # FORCER L'AFFICHAGE (CRITIQUE)
+
         self.show()
         self.raise_()
         self.activateWindow()
-        
-        # DEBUG : Confirmer création
-        logger.info("✅ MainWindow créée et affichée")
-        logger.info(f"✅ Géométrie : {self.geometry()}")
-        logger.info(f"✅ Visible : {self.isVisible()}")
-    
-    @Slot(str)
-    def _on_navigation_requested(self, view_name):
-        """Change la vue affichée en réponse à la barre de navigation latérale."""
-        if view_name in VIEWS_CONFIG:
-            # Utiliser les transitions animées si disponibles
-            if self.transition_manager:
-                current_view = self.view_manager.get_current_view_name()
-                transition_type = self.transition_manager.get_contextual_transition(
-                    current_view, view_name
-                )
-                self.transition_manager.transition_to_view(
-                    view_name, transition_type
-                )
-            else:
-                self.view_manager.switch_to_view(view_name)
-            
-            logger.info(f"Navigation vers la vue: '{view_name}'")
-            self._update_breadcrumbs_for_view(view_name)
-        else:
-            logger.warning(f"Tentative de naviguer vers une vue inconnue: '{view_name}'")
-    
-    def _build_ui(self):
-        """Construit l'interface utilisateur principale avec une barre latérale et breadcrumbs."""
-        from PySide6.QtWidgets import QStackedWidget, QHBoxLayout, QVBoxLayout, QWidget, QSplitter
-        from PySide6.QtCore import Qt
 
+        logger.info("MainWindow initialisee")
+
+    def _build_ui(self) -> None:
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
+
         main_layout = QHBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Zone principale avec splitter
-        main_splitter = QSplitter(Qt.Horizontal)
-        
-        # Barre latérale
+        splitter = QSplitter()
+        main_layout.addWidget(splitter)
+
         self.sidebar = MainSidebar()
         self.sidebar.setFixedWidth(280)
-        main_splitter.addWidget(self.sidebar)
+        splitter.addWidget(self.sidebar)
 
-        # Zone de contenu principal avec breadcrumbs
         content_widget = QWidget()
         content_layout = QVBoxLayout(content_widget)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
-        
-        # Breadcrumbs
+
         self.breadcrumbs = BreadcrumbsWidget()
         self.breadcrumbs.setFixedHeight(48)
         self.breadcrumbs.step_selected.connect(self._on_breadcrumb_step_selected)
         content_layout.addWidget(self.breadcrumbs)
 
-        # Contenu principal (Stack)
         self.stack_widget = QStackedWidget()
         self.stack_widget.setObjectName("mainContent")
         content_layout.addWidget(self.stack_widget)
-        
-        main_splitter.addWidget(content_widget)
-        main_splitter.setSizes([280, 1200])
-        
-        main_layout.addWidget(main_splitter)
 
-        # Composants d'aide et de statut
+        splitter.addWidget(content_widget)
+        splitter.setSizes([280, 1200])
+
         self.help_panel = HelpPanel()
         self.status_widget = SystemStatusWidget()
         self.status_widget.status_updated.connect(self._on_system_status_updated)
-
-        # Initialiser le gestionnaire de vues
         self.view_manager = ViewManager(self.stack_widget)
-        
-        # Initialiser le gestionnaire de transitions Phase 6
-        if PageTransitionManager:
-            self.transition_manager = PageTransitionManager(self.stack_widget)
-            logger.info("Gestionnaire de transitions de pages initialisé")
-        
-        print("🔍 DEBUG: __init__ MainWindow - Avant _create_and_register_views")
-        self._create_and_register_views()
-        print("🔍 DEBUG: __init__ MainWindow - Après _create_and_register_views")
-        print("🔍 DEBUG: __init__ MainWindow - Terminé avec succès")
-    
-    def _create_and_register_views(self):
-        print("🔍 DEBUG: _create_and_register_views - Début")
-        print("🔍 DEBUG: _create_and_register_views - Étape 1: Import des vues")
-        """Crée et enregistre les vues v2 auprès du ViewManager"""
-        logger.info("Création et enregistrement des vues v2")
 
-        # Vue d'accueil
-        print("🔍 DEBUG: _create_and_register_views - Étape 2: Création WelcomeView")
+    def _create_and_register_views(self) -> None:
+        logger.info("Creation et enregistrement des vues")
+
         welcome_view = WelcomeView(parent=None)
-        self.view_manager.register_view('welcome', welcome_view)
-        print("🔍 DEBUG: _create_and_register_views - WelcomeView enregistrée")
         welcome_view.projectCreationRequested.connect(self._handle_project_creation)
+        self.view_manager.register_view("welcome", welcome_view)
 
-        # Dashboard maritime
-        print("🔍 DEBUG: _create_and_register_views - Étape 3: Création DashboardViewMaritime")
         dashboard_view = DashboardViewMaritime(parent=None)
-        self.view_manager.register_view('dashboard', dashboard_view)
-        print("🔍 DEBUG: _create_and_register_views - DashboardViewMaritime enregistrée")
+        self.view_manager.register_view("dashboard", dashboard_view)
 
-        # Vues avec lazy loading
-        print("🔍 DEBUG: _create_and_register_views - Étape 4: Vues avec lazy loading")
-#         for view_name, config in VIEWS_CONFIG.items():
-#             if 'loader' in config:
-#                 view_instance = config['loader'](parent=None)
-#                 self.view_manager.register_view(view_name, view_instance)
-#                 logger.info(f"[VIEW REGISTRATION] '{view_name}' view registered with object ID: {id(view_instance)}")
+        for view_name, view_config in VIEWS_CONFIG.items():
+            if view_name in {"welcome", "dashboard"}:
+                continue
 
-        # Navigation initiale
-        print("🔍 DEBUG: _create_and_register_views - Étape 5: Navigation initiale")
-        self.view_manager.switch_to_view('welcome')
-        self._update_breadcrumbs_for_view('welcome')
+            loader = view_config.get("loader")
+            if loader is None:
+                continue
 
-        print("🔍 DEBUG: _create_and_register_views - Terminé avec succès")
-    def _update_breadcrumbs_for_view(self, view_name):
-        """Met à jour les breadcrumbs en fonction de la vue actuelle"""
-        # Mapping des noms de vues vers les WorkflowStep
+            try:
+                self.view_manager.register_view(view_name, loader(parent=None))
+            except Exception as exc:
+                logger.exception("Impossible d'instancier la vue '%s': %s", view_name, exc)
+
+        self._wire_runtime_flow()
+        self.view_manager.switch_to_view("welcome")
+        self._update_breadcrumbs_for_view("welcome")
+
+    def _setup_connections(self) -> None:
+        self.view_manager.view_changed.connect(self._update_breadcrumbs_for_view)
+        self.view_manager.view_changed.connect(self.sidebar.set_active_view)
+
+    def _setup_status_indicators(self) -> None:
+        self.status_widget.hide()
+
+    def _install_contextual_help(self) -> None:
+        install_help_on_widget(self.sidebar, "navigation-sidebar")
+
+    def _wire_runtime_flow(self) -> None:
+        acquisition_view = self.view_manager.get_view_widget("acquisition")
+        analysis_view = self.view_manager.get_view_widget("analysis")
+
+        if acquisition_view and hasattr(acquisition_view, "data_exported"):
+            acquisition_view.data_exported.connect(self._on_data_exported)
+        if acquisition_view and hasattr(acquisition_view, "calibration_completed"):
+            acquisition_view.calibration_completed.connect(self._on_calibration_completed)
+        if analysis_view and hasattr(analysis_view, "analysis_completed"):
+            analysis_view.analysis_completed.connect(self._on_analysis_completed)
+
+    def _push_project_context(self) -> None:
+        if not self.project_meta or not self.project_dir:
+            return
+
+        project_dir = str(self.project_dir)
+        for view_name in ("acquisition", "analysis", "export"):
+            view = self.view_manager.get_view_widget(view_name)
+            if view and hasattr(view, "set_project_context"):
+                view.set_project_context(self.project_meta, project_dir)
+
+    @Slot(str)
+    def _on_navigation_requested(self, view_name: str) -> None:
+        if not self.view_manager.has_view(view_name):
+            logger.warning("Tentative de navigation vers une vue inconnue: '%s'", view_name)
+            return
+        self.view_manager.switch_to_view(view_name)
+
+    def _update_breadcrumbs_for_view(self, view_name: str) -> None:
         view_to_step = {
-            'welcome': WorkflowStep.WELCOME,
-            'dashboard': WorkflowStep.PROJECT,
-            'calibration': WorkflowStep.CALIBRATION,
-            'acquisition': WorkflowStep.ACQUISITION,
-            'analysis': WorkflowStep.ANALYSIS,
-            'export': WorkflowStep.EXPORT
+            "welcome": WorkflowStep.WELCOME,
+            "dashboard": WorkflowStep.PROJECT,
+            "calibration": WorkflowStep.CALIBRATION,
+            "acquisition": WorkflowStep.ACQUISITION,
+            "analysis": WorkflowStep.ANALYSIS,
+            "export": WorkflowStep.EXPORT,
         }
-        
-        if view_name in view_to_step:
-            workflow_step = view_to_step[view_name]
+        workflow_step = view_to_step.get(view_name)
+        if workflow_step is not None:
             self.breadcrumbs.set_current_step(workflow_step)
 
     @Slot(object, str)
-    def _on_breadcrumb_step_selected(self, workflow_step, view_name):
-        """Gère la sélection d'une étape dans les breadcrumbs"""
-        # Mapping des WorkflowStep vers les noms de vues
+    def _on_breadcrumb_step_selected(self, workflow_step, view_name) -> None:
         step_to_view = {
-            WorkflowStep.WELCOME: 'welcome',
-            WorkflowStep.PROJECT: 'dashboard',
-            WorkflowStep.CALIBRATION: 'calibration',
-            WorkflowStep.ACQUISITION: 'acquisition',
-            WorkflowStep.ANALYSIS: 'analysis',
-            WorkflowStep.EXPORT: 'export'
+            WorkflowStep.WELCOME: "welcome",
+            WorkflowStep.PROJECT: "dashboard",
+            WorkflowStep.CALIBRATION: "calibration",
+            WorkflowStep.ACQUISITION: "acquisition",
+            WorkflowStep.ANALYSIS: "analysis",
+            WorkflowStep.EXPORT: "export",
         }
-        
-        if workflow_step in step_to_view:
-            target_view = step_to_view[workflow_step]
-            self.view_manager.switch_to_view(target_view)
-        else:
-            logger.warning(f"Étape de breadcrumb inconnue: {workflow_step}")
+        target_view = step_to_view.get(workflow_step)
+        if target_view is None:
+            logger.warning("Etape de breadcrumb inconnue: %s", workflow_step)
+            return
+        self.view_manager.switch_to_view(target_view)
 
-    def _setup_connections(self):
-        """Configure les connexions entre les composants"""
-        pass
+    def _handle_project_creation(self, project_metadata=None) -> None:
+        metadata = dict(project_metadata or {})
+        project_name = (metadata.get("name") or "Projet_CHNeoWave").strip()
+        description = (metadata.get("description") or "").strip()
+        manager = (metadata.get("manager") or "").strip()
+        laboratory = (metadata.get("laboratory") or "").strip()
 
-    def _setup_status_indicators(self):
-        """Configure les indicateurs de statut système"""
-        pass
+        try:
+            project_id = self.project_manager.create_project(
+                name=project_name,
+                description=description,
+                author=manager,
+                tags=[laboratory] if laboratory else [],
+            )
+            if not self.project_manager.load_project(project_id):
+                raise RuntimeError("Le projet cree n'a pas pu etre recharge.")
 
-    def _install_contextual_help(self):
-        """Installe le système d'aide contextuelle"""
-        pass
+            self.project_dir = self.project_manager.get_project_directory(project_id)
+            self.project_meta = {
+                **metadata,
+                "project_id": project_id,
+                "project_dir": str(self.project_dir),
+                "author": manager,
+            }
 
-    def _handle_project_creation(self):
-        """Gère la création d'un nouveau projet"""
-        self.projectCreated.emit()
-        self.view_manager.switch_to_view('dashboard')
+            self._push_project_context()
+            self.projectCreated.emit()
+            self.view_manager.switch_to_view("dashboard")
+            show_success("Projet", f"Projet cree: {project_name}")
+
+        except Exception as exc:
+            logger.exception("Erreur creation projet: %s", exc)
+            show_error("Projet", f"Creation projet impossible: {exc}")
+
+    @Slot(str)
+    def _on_data_exported(self, file_path: str) -> None:
+        analysis_view = self.view_manager.get_view_widget("analysis")
+        if analysis_view and hasattr(analysis_view, "load_data_file"):
+            if analysis_view.load_data_file(file_path):
+                self.view_manager.switch_to_view("analysis")
+                show_info("Analyse", f"Donnees chargees pour analyse: {file_path}")
+
+    @Slot(str, dict)
+    def _on_analysis_completed(self, analysis_type: str, payload: dict) -> None:
+        report_view = self.view_manager.get_view_widget("export")
+        if report_view and hasattr(report_view, "set_analysis_context"):
+            report_view.set_analysis_context(
+                payload.get("source_file"),
+                payload.get("results"),
+                extra_metadata={
+                    "analysis_type": analysis_type,
+                    "project_metadata": self.project_meta,
+                },
+            )
+            show_info("Rapport", "Rapport alimente avec les derniers resultats d'analyse")
+
+    @Slot(dict)
+    def _on_calibration_completed(self, payload: dict) -> None:
+        channels = payload.get("channels", {})
+        show_info("Calibration", f"Calibration terminee sur {len(channels)} canaux")
 
     @Slot(StatusLevel)
-    def _on_system_status_updated(self, status_level):
-        """Met à jour l'interface en fonction du statut système"""
-        logger.debug(f"Mise à jour du statut système: {status_level}")
+    def _on_system_status_updated(self, status_level) -> None:
+        logger.debug("Mise a jour du statut systeme: %s", status_level)
         if status_level == StatusLevel.ERROR:
-            show_error("Une erreur système est survenue")
+            show_error("Erreur systeme", "Une erreur systeme est survenue")
         elif status_level == StatusLevel.WARNING:
-            show_info("Attention: Le système nécessite votre attention")
+            show_info("Attention", "Le systeme necessite votre attention")
         elif status_level == StatusLevel.OK:
-            show_success("Le système fonctionne normalement")
-    def show_and_exec(self):
-        """Afficher la fenêtre et lancer la boucle d'événements"""
-        from PySide6.QtWidgets import QApplication
-        
+            show_success("Systeme", "Le systeme fonctionne normalement")
+
+    def show_and_exec(self) -> int:
         self.show()
         self.raise_()
         self.activateWindow()
-        
-        # Vérifier la visibilité
-        visible = self.isVisible()
-        print(f"✅ MainWindow visible: {visible}")
-        
-        if not visible:
-            print("⚠️ Fenêtre non visible, tentative de correction...")
-            self.showNormal()
-            self.show()
-            visible = self.isVisible()
-            print(f"✅ MainWindow visible après correction: {visible}")
-        
-        print("✅ Interface affichée avec succès")
-        print("🎉 CHNeoWave est maintenant opérationnel !")
-        print("🔍 Vérifiez que la fenêtre est visible sur votre écran")
-        
-        # Lancer la boucle d'événements
+
         app = QApplication.instance()
-        if app:
-            print("🔄 Lancement de la boucle d'événements...")
-            return app.exec()
-        return 0
+        if app is None:
+            return 0
+
+        exec_fn = getattr(app, "exec", None) or getattr(app, "exec_", None)
+        return exec_fn() if exec_fn else 0

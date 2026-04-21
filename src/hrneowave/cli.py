@@ -1,190 +1,160 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Interface en ligne de commande pour CHNeoWave
+Interface en ligne de commande pour CHNeoWave.
 """
 
+import argparse
+import logging
+import os
+import sys
+
+QApplication = None
+Qt = None
 
 
-# Import conditionnel des modules Qt
-def _ensure_qt_imports():
-    """Assure que les modules Qt sont importés correctement"""
+def _ensure_qt_imports() -> str | None:
+    """Charge un binding Qt compatible et retourne son nom."""
     global QApplication, Qt
+
     try:
-        from PySide6.QtWidgets import QApplication
-        from PySide6.QtCore import Qt
-        return True
+        from PySide6.QtWidgets import QApplication as _QApplication
+        from PySide6.QtCore import Qt as _Qt
+
+        QApplication = _QApplication
+        Qt = _Qt
+        return "PySide6"
     except ImportError:
         try:
-            from PyQt6.QtWidgets import QApplication
-            from PyQt6.QtCore import Qt
-            return True
-        except ImportError:
-            return False
+            from PyQt6.QtWidgets import QApplication as _QApplication
+            from PyQt6.QtCore import Qt as _Qt
 
-def run_gui():
+            QApplication = _QApplication
+            Qt = _Qt
+            return "PyQt6"
+        except ImportError:
+            return None
+
+
+def _set_qt_application_attributes() -> None:
+    """Active les attributs Qt utiles sans dépendre d'une API Qt précise."""
+    if QApplication is None or Qt is None:
+        return
+
+    app_attrs = getattr(Qt, "ApplicationAttribute", Qt)
+    for attr_name in ("AA_EnableHighDpiScaling", "AA_UseHighDpiPixmaps"):
+        attr = getattr(app_attrs, attr_name, None)
+        if attr is None:
+            attr = getattr(Qt, attr_name, None)
+        if attr is not None:
+            QApplication.setAttribute(attr, True)
+
+
+def _exec_application(app) -> int:
+    """Exécute la boucle Qt quelle que soit la variante d'API disponible."""
+    exec_fn = getattr(app, "exec", None)
+    if exec_fn is None:
+        exec_fn = getattr(app, "exec_", None)
+    if exec_fn is None:
+        raise RuntimeError("Aucune méthode d'exécution Qt disponible")
+    return exec_fn()
+
+
+def _ensure_project_root_on_path() -> None:
+    """Ajoute la racine du projet au PYTHONPATH local."""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(current_dir)
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+
+
+def _configure_logging(debug: bool = False) -> logging.Logger:
+    """Initialise un logging simple utilisable dès le bootstrap."""
+    logging.basicConfig(
+        level=logging.DEBUG if debug else logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        filename="chneowave_debug.log",
+        filemode="w",
+    )
+    return logging.getLogger(__name__)
+
+
+def run_gui() -> int:
     """
-    Lance l'interface graphique CHNeoWave
+    Lance l'interface graphique CHNeoWave.
     """
-    import sys
-    import os
-    import logging
     logger = logging.getLogger(__name__)
     logger.info("run_gui() started")
-    
-    # Ajouter le répertoire parent au path pour les imports
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    parent_dir = os.path.dirname(current_dir)
-    if parent_dir not in sys.path:
-        sys.path.insert(0, parent_dir)
-    
-    try:
-        # Assurer les imports Qt
-        if not _ensure_qt_imports():
-            logger.critical("Aucune bibliothèque Qt trouvée (PyQt5, PyQt6, ou PySide6)")
-            sys.exit(1)
-            
-        # Configuration de l'application Qt
-        QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-        QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
-        
+
+    _ensure_project_root_on_path()
+
+    binding_name = _ensure_qt_imports()
+    if not binding_name:
+        logger.critical("Aucune bibliothèque Qt trouvée (PySide6 ou PyQt6)")
+        raise RuntimeError("Qt non disponible")
+
+    _set_qt_application_attributes()
+
+    app = QApplication.instance()
+    if app is None:
         app = QApplication(sys.argv)
         app.setApplicationName("CHNeoWave")
         app.setApplicationVersion("1.0.0")
         app.setOrganizationName("Laboratoire Maritime")
-        
-        # Gestionnaire de thèmes
-        from hrneowave.gui.styles.theme_manager import ThemeManager
-        theme_manager = ThemeManager(app)
-        theme_manager.apply_theme('light')
 
-        # Import et lancement de la fenêtre principale
-        from hrneowave.gui.main_window import MainWindow
-        
-        logger.info("Creating MainWindow...")
-        window = MainWindow()
-        logger.info("Showing MainWindow...")
-        window.show()
-        
-        # Démarrage de la boucle d'événements
-        logger.info("Starting event loop...")
-        exit_code = app.exec_()
-        logger.info(f"Event loop finished with exit code {exit_code}")
-        sys.exit(exit_code)
-        
-    except ImportError as e:
-        logger.critical(f"Erreur d'import: {e}", exc_info=True)
-        
-        sys.exit(1)
-    except Exception as e:
-        logger.critical(f"Erreur lors du lancement: {e}", exc_info=True)
-        sys.exit(1)
+    from hrneowave.gui.styles.theme_manager import ThemeManager
+    from hrneowave.gui.main_window import MainWindow
 
-def run_cli():
+    logger.info("Qt binding chargé: %s", binding_name)
+
+    theme_manager = ThemeManager(app)
+    theme_manager.apply_theme("maritime_modern")
+
+    logger.info("Creating MainWindow...")
+    window = MainWindow()
+    logger.info("Showing MainWindow...")
+    window.show()
+
+    logger.info("Starting event loop...")
+    exit_code = _exec_application(app)
+    logger.info("Event loop finished with exit code %s", exit_code)
+    return exit_code
+
+
+def run_cli(argv: list[str] | None = None) -> int:
     """
-    Point d'entrée principal de l'interface en ligne de commande
+    Point d'entrée CLI.
+
+    Par défaut, CHNeoWave est une application desktop et lance la GUI.
     """
-
-
-    import argparse
-    import logging
-
-    # Configuration initiale pour capturer les erreurs de démarrage
-    try:
-        logging.basicConfig(
-            level=logging.DEBUG,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            filename='chneowave_debug.log',
-            filemode='w'
-        )
-        logger = logging.getLogger(__name__)
-        logger.info("run_cli() started and logging configured.")
-    except Exception as e:
-        print(f"CRITICAL: Failed to configure logging: {e}")
-        # Pas de sys.exit ici, car sys n'est pas encore importé
-
     parser = argparse.ArgumentParser(
         description="CHNeoWave - Logiciel d'acquisition et d'analyse de données maritimes",
-        prog="chneowave"
+        prog="chneowave",
     )
-    
     parser.add_argument(
-        "--version", 
-        action="version", 
-        version="CHNeoWave 1.0.0"
+        "--version",
+        action="version",
+        version="CHNeoWave 1.0.0",
     )
-    
     parser.add_argument(
-        "--gui", 
-        action="store_true", 
+        "--gui",
+        action="store_true",
         default=False,
-        help="Lance l'interface graphique"
+        help="Lance explicitement l'interface graphique",
     )
-    
     parser.add_argument(
-        "--debug", 
-        action="store_true", 
-        help="Active le mode debug"
+        "--debug",
+        action="store_true",
+        help="Active le mode debug",
     )
-    
-    args = parser.parse_args()
 
-    # La configuration du logging est maintenant faite au début de la fonction.
-    if args.debug:
-        logger.info("Mode debug activé")
-    else:
-        # Si le mode debug n'est pas activé, on remet le niveau à INFO
-        logging.getLogger().setLevel(logging.INFO)
+    args = parser.parse_args(argv)
+    logger = _configure_logging(debug=args.debug)
+    logger.info("run_cli() started")
 
-    if args.gui:
-        logger.info("--gui flag is set, calling run_gui()")
-        run_gui()
-    else:
-        logger.info("Aucun argument spécifié, fin du programme.")
-        # Comportement par défaut si --gui n'est pas spécifié
-        # Peut être étendu pour d'autres commandes CLI
-        pass
+    # Application desktop: sans sous-commande dédiée, la GUI reste le comportement par défaut.
+    return run_gui()
+
 
 if __name__ == "__main__":
-    import sys
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        description="CHNeoWave - Logiciel d'acquisition et d'analyse de données maritimes",
-        prog="chneowave"
-    )
-    
-    parser.add_argument(
-        "--gui", 
-        action="store_true", 
-        default=False,
-        help="Lance l'interface graphique"
-    )
-    
-    args = parser.parse_args()
-
-    if args.gui:
-        # Assurer les imports Qt
-        if not _ensure_qt_imports():
-            print("CRITICAL: Aucune bibliothèque Qt trouvée (PyQt5, PyQt6, ou PySide6)")
-            sys.exit(1)
-            
-        # Configuration de l'application Qt
-        QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-        QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
-        
-        app = QApplication(sys.argv)
-        app.setApplicationName("CHNeoWave")
-        app.setApplicationVersion("1.0.0")
-        app.setOrganizationName("Laboratoire Maritime")
-        
-        # Import et lancement de la fenêtre principale
-        from hrneowave.gui.main_window import MainWindow
-        
-        window = MainWindow()
-        window.show()
-        
-        # Démarrage de la boucle d'événements
-        sys.exit(app.exec_())
-    else:
-        run_cli()
+    sys.exit(run_cli())

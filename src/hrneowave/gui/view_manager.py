@@ -175,11 +175,12 @@ class ViewManager(QObject):
                 return
 
             widget_to_show = self.views[name]
+            previous_view = self.current_view
             self.stacked_widget.setCurrentWidget(widget_to_show)
             self.current_view = name
             self.view_changed.emit(name)
-            self.logger.info(f"[NAV SUCCESS] Navigation réussie: {self.current_view} → {name}")
-            self.logger.info(f"Vue '{name}' enregistrée")
+            self.logger.info(f"[NAV SUCCESS] Navigation reussie: {previous_view} -> {name}")
+            self.logger.info(f"Vue '{name}' activee")
         
         def _connect_unified_signals(self):
             """Connecte aux signaux unifiés si disponibles"""
@@ -241,11 +242,13 @@ class ViewManager(QObject):
         def switch_to_view(self, view_name: str) -> bool:
             """Change vers la vue spécifiée"""
             # 🔍 TRAÇAGE FIN - Ajouté pour diagnostic navigation
-            print(f"[NAV] {self.current_view} → {view_name}")
+            self.logger.debug(f"[NAV] {self.current_view} -> {view_name}")
             
             if view_name not in self.views:
                 self.logger.error(f"Vue '{view_name}' non trouvée")
-                print(f"[NAV ERROR] Vue '{view_name}' non trouvée dans {list(self.views.keys())}")
+                self.logger.error(
+                    f"[NAV ERROR] Vue '{view_name}' non trouvee dans {list(self.views.keys())}"
+                )
                 if self.error_bus and UNIFIED_SIGNALS_AVAILABLE:
                     self.error_bus.emit_error(
                         ErrorLevel.ERROR,
@@ -275,7 +278,7 @@ class ViewManager(QObject):
                 self.stacked_widget.setCurrentWidget(widget)
                 self.current_view = view_name
                 
-                print(f"[NAV SUCCESS] Navigation réussie: {previous_view} → {view_name}")
+                self.logger.info(f"[NAV SUCCESS] Navigation reussie: {previous_view} -> {view_name}")
                 
                 self.view_changed.emit(view_name)
                 self.logger.info(f"Changement vers la vue '{view_name}'")
@@ -291,7 +294,7 @@ class ViewManager(QObject):
             
             except Exception as e:
                 self.logger.error(f"Erreur lors du changement de vue: {e}")
-                print(f"[NAV EXCEPTION] Erreur lors du changement de vue: {e}")
+                self.logger.exception(f"[NAV EXCEPTION] Erreur lors du changement de vue: {e}")
                 if self.error_bus and UNIFIED_SIGNALS_AVAILABLE:
                     self.error_bus.emit_error(
                         ErrorLevel.ERROR,

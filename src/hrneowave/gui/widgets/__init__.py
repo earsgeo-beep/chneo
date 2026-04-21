@@ -6,12 +6,10 @@ Composants d'interface utilisateur avec design maritime et Golden Ratio
 
 from .kpi_card import KPICard
 from .main_sidebar import MainSidebar
-from .theme_toggle import ThemeToggle
 
 __all__ = [
     'KPICard',
-    'MainSidebar', 
-    'ThemeToggle'
+    'MainSidebar',
 ]
 
 # Version du module widgets

@@ -16,17 +16,17 @@ from typing import Optional
 
 try:
     from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QFrame, QSizePolicy
-    from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Signal, QTimer, QRect, Property
+    from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Signal, QTimer, QRect, Property, QSize
     from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QFont
     pyqtSignal = Signal
 except ImportError:
     try:
         from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QFrame, QSizePolicy
-        from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, pyqtSignal, QTimer, QRect
+        from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, pyqtSignal, QTimer, QRect, QSize
         from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QFont
     except ImportError:
         from PyQt5.QtWidgets import QWidget, QHBoxLayout, QLabel, QFrame, QSizePolicy
-        from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, pyqtSignal, QTimer, QRect
+        from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, pyqtSignal, QTimer, QRect, QSize
         from PyQt5.QtGui import QPainter, QColor, QPen, QBrush, QFont
 
 
@@ -51,6 +51,7 @@ class StatusBeacon(QWidget):
     STATUS_WARNING = "warning"
     STATUS_ERROR = "error"
     STATUS_INACTIVE = "inactive"
+    STATUS_PENDING = "pending"
     STATUS_CONNECTING = "connecting"
     STATUS_UNKNOWN = "unknown"
     
@@ -174,6 +175,7 @@ class StatusBeacon(QWidget):
             self.STATUS_WARNING: QColor(self.MARITIME_COLORS['amber_warning']),
             self.STATUS_ERROR: QColor(self.MARITIME_COLORS['coral_alert']),
             self.STATUS_INACTIVE: QColor(self.MARITIME_COLORS['slate_gray']),
+            self.STATUS_PENDING: QColor(self.MARITIME_COLORS['slate_gray']),
             self.STATUS_CONNECTING: QColor(self.MARITIME_COLORS['tidal_cyan']),
             self.STATUS_UNKNOWN: QColor(self.MARITIME_COLORS['purple_unknown'])
         }
@@ -345,17 +347,7 @@ class StatusBeacon(QWidget):
             width += label_width + self.FIBONACCI_SPACES[0]
         
         height = max(self.beacon_size + 4, 20)
-        return super().sizeHint().expandedTo(
-            self.size().expandedTo(
-                self.minimumSize().expandedTo(
-                    self.sizeHint().expandedTo(
-                        self.size().expandedTo(
-                            self.minimumSizeHint()
-                        )
-                    )
-                )
-            )
-        )
+        return super().sizeHint().expandedTo(QSize(width, height))
     
     def minimumSizeHint(self):
         """Taille minimale suggérée."""

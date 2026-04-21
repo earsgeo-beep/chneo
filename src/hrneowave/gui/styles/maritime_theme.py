@@ -24,6 +24,27 @@ class MaritimeTheme(QObject):
     
     # Constante du nombre d'or
     PHI = (1 + math.sqrt(5)) / 2
+
+    # Compatibilite avec les vues qui utilisent MaritimeTheme comme namespace.
+    SPACE_XS = 8
+    SPACE_SM = 13
+    SPACE_MD = 21
+    SPACE_LG = 34
+    SPACE_XL = 55
+    SPACE_XXL = 89
+
+    OCEAN_DEEP = "#0A1929"
+    HARBOR_BLUE = "#1565C0"
+    STEEL_BLUE = "#1976D2"
+    TIDAL_CYAN = "#00BCD4"
+    FOAM_WHITE = "#FAFBFC"
+    FROST_LIGHT = "#F5F7FA"
+    STORM_GRAY = "#37474F"
+    SLATE_GRAY = "#546E7A"
+    CORAL_ALERT = "#FF5722"
+    EMERALD_SUCCESS = "#4CAF50"
+    AMBER_WARNING = "#FF9800"
+    AZURE_INFO = "#2196F3"
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -181,15 +202,14 @@ class MaritimeTheme(QObject):
     def _define_spacing(self):
         """Définit les espacements basés sur le nombre d'or"""
         
-        base_spacing = 8
         self.spacing = {
-            'xs': int(base_spacing / (self.PHI * self.PHI)),  # ~2px
-            'sm': int(base_spacing / self.PHI),               # ~5px
-            'base': base_spacing,                             # 8px
-            'md': int(base_spacing * self.PHI / 2),          # ~6px
-            'lg': int(base_spacing * self.PHI),              # ~13px
-            'xl': int(base_spacing * self.PHI * self.PHI),   # ~21px
-            'xxl': int(base_spacing * self.PHI * self.PHI * self.PHI), # ~34px
+            'xs': self.SPACE_XS,
+            'sm': self.SPACE_SM,
+            'base': self.SPACE_XS,
+            'md': self.SPACE_MD,
+            'lg': self.SPACE_LG,
+            'xl': self.SPACE_XL,
+            'xxl': self.SPACE_XXL,
         }
         
         # Rayons de bordure

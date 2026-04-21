@@ -1,4 +1,0 @@
-[console_scripts]
-hr-config-optimizer = hrneowave.config.optimization_config:main
-hr-doc-generator = hrneowave.utils.doc_generator:main
-hr-lab-config = hrneowave.tools.lab_config:main

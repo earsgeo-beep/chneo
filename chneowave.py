@@ -1,61 +1,61 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Script de lancement principal pour CHNeoWave
+Script de lancement principal pour CHNeoWave.
 """
 
-import sys
-import os
 import argparse
+import logging
+import os
+import sys
 
-# Ajouter le répertoire src au path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-src_dir = os.path.join(current_dir, 'src')
-if src_dir not in sys.path:
-    sys.path.insert(0, src_dir)
 
-def main():
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+SRC_DIR = os.path.join(CURRENT_DIR, "src")
+if SRC_DIR not in sys.path:
+    sys.path.insert(0, SRC_DIR)
+
+
+def main(argv: list[str] | None = None) -> int:
     """
-    Point d'entrée principal
+    Point d'entree principal.
     """
+    from hrneowave import __version__
+
     parser = argparse.ArgumentParser(
-        description="CHNeoWave - Logiciel d'acquisition et d'analyse de données maritimes",
-        prog="chneowave"
+        description="CHNeoWave - Logiciel d'acquisition et d'analyse de donnees maritimes",
+        prog="chneowave",
     )
-    
     parser.add_argument(
-        "--version", 
-        action="version", 
-        version="CHNeoWave 1.0.0"
+        "--version",
+        action="version",
+        version=f"CHNeoWave {__version__}",
     )
-    
     parser.add_argument(
-        "--gui", 
-        action="store_true", 
+        "--gui",
+        action="store_true",
         default=True,
-        help="Lance l'interface graphique (par défaut)"
+        help="Lance l'interface graphique (comportement par defaut)",
     )
-    
     parser.add_argument(
-        "--debug", 
-        action="store_true", 
-        help="Active le mode debug"
+        "--debug",
+        action="store_true",
+        help="Active le mode debug",
     )
-    
-    args = parser.parse_args()
-    
+    args = parser.parse_args(argv)
+
     if args.debug:
-        import logging
         logging.basicConfig(level=logging.DEBUG)
-        print("Mode debug activé")
-    
-    # Lancer l'interface graphique
+        print("Mode debug active")
+
     try:
-        import main
-        main.main()
-    except Exception as e:
-        print(f"Erreur lors du lancement: {e}")
-        sys.exit(1)
+        from hrneowave.cli import run_gui
+
+        return run_gui()
+    except Exception as exc:
+        print(f"Erreur lors du lancement: {exc}")
+        return 1
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

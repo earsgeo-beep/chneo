@@ -8,6 +8,8 @@ Date: 2025-01-26
 Version: 1.1.0
 """
 
+import logging
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit, 
     QPushButton, QDateEdit, QTextEdit, QFrame, QScrollArea, QGridLayout
@@ -21,6 +23,9 @@ from ..components.animated_button import AnimatedButton
 from ..components.theme_toggle import ThemeToggle
 from ..layouts.golden_ratio_layout import GoldenRatioLayout
 from ..styles.maritime_theme import MaritimeTheme
+
+
+logger = logging.getLogger(__name__)
 
 
 class WelcomeView(QWidget):
@@ -272,34 +277,24 @@ class WelcomeView(QWidget):
     
     def _setup_connections(self):
         """Configuration des connexions de signaux"""
-        try:
-            # Vérifier que les widgets existent et sont valides avant d'établir les connexions
-            if (hasattr(self, 'project_name') and 
-                self.project_name is not None and 
-                self.project_name.isWidgetType()):
-                self.project_name.textChanged.connect(self._validate_form)
-            
-            if (hasattr(self, 'project_manager') and 
-                self.project_manager is not None and 
-                self.project_manager.isWidgetType()):
-                self.project_manager.textChanged.connect(self._validate_form)
-            
-            if (hasattr(self, 'laboratory') and 
-                self.laboratory is not None and 
-                self.laboratory.isWidgetType()):
-                self.laboratory.textChanged.connect(self._validate_form)
-        except RuntimeError as e:
-            # Ignorer les erreurs de widget supprimé
-            print(f"⚠️ Erreur de connexion widget (ignorée): {e}")
-            pass
-        
-        # Bouton de création
-        if hasattr(self, 'create_button') and self.create_button is not None:
-            self.create_button.clicked.connect(self._create_project)
-        
-        # Toggle de thème
-        if hasattr(self, 'theme_toggle') and self.theme_toggle is not None:
-            self.theme_toggle.theme_changed.connect(self._on_theme_changed)
+        def safe_connect(widget_name, signal_name, handler):
+            widget = getattr(self, widget_name, None)
+            if widget is None:
+                return
+
+            try:
+                signal = getattr(widget, signal_name, None)
+                if signal is not None:
+                    signal.connect(handler)
+            except RuntimeError as exc:
+                # Un QTimer peut se declencher apres destruction de la vue.
+                logger.debug("Connexion ignoree sur widget supprime %s: %s", widget_name, exc)
+
+        safe_connect("project_name", "textChanged", self._validate_form)
+        safe_connect("project_manager", "textChanged", self._validate_form)
+        safe_connect("laboratory", "textChanged", self._validate_form)
+        safe_connect("create_button", "clicked", self._create_project)
+        safe_connect("theme_toggle", "theme_changed", self._on_theme_changed)
     
     def _apply_theme(self):
         """Applique le thème maritime moderne"""

@@ -1,262 +1,101 @@
-# Guide d'Installation CHNeoWave v1.0.0
+# Installation
 
-## Prérequis Système
+Ce guide correspond au depot actuel, pas a un ancien executable autonome.
 
-### Configuration Minimale
-- **OS**: Windows 10/11 (64-bit)
-- **RAM**: 4 GB minimum, 8 GB recommandé
-- **Espace disque**: 500 MB pour l'installation
-- **Python**: 3.8+ (pour installation depuis les sources)
+## Plateforme cible
 
-### Configuration Recommandée
-- **OS**: Windows 11 (64-bit)
-- **RAM**: 16 GB ou plus
-- **Espace disque**: 2 GB (données + logs)
-- **Processeur**: Intel i5/AMD Ryzen 5 ou supérieur
-- **Résolution**: 1920x1080 minimum
+- Windows 10/11
+- Python 3.10 ou plus recent recommande
+- environnement de bureau avec Qt
 
-## Installation Rapide (Exécutable)
+## Installation rapide
 
-### Option 1: Exécutable Standalone
+```powershell
+git clone https://github.com/Gameminde/Chneowave.git
+cd Chneowave
 
-1. **Téléchargement**
-   ```
-   Téléchargez chneowave.exe depuis la release v1.0.0
-   ```
+python -m venv .venv
+.venv\Scripts\Activate.ps1
 
-2. **Installation**
-   ```
-   # Créez un répertoire dédié
-   mkdir C:\CHNeoWave
-   
-   # Copiez l'exécutable
-   copy chneowave.exe C:\CHNeoWave\
-   ```
-
-3. **Premier lancement**
-   ```
-   cd C:\CHNeoWave
-   chneowave.exe --simulate --fs 32 --channels 8
-   ```
-
-### Option 2: Installation avec Configuration
-
-1. **Structure recommandée**
-   ```
-   C:\CHNeoWave\
-   ├── chneowave.exe
-   ├── config\
-   │   ├── app_config.yaml
-   │   └── sensors.yaml
-   ├── data\
-   └── logs\
-   ```
-
-2. **Fichiers de configuration**
-   - Copiez les fichiers de configuration depuis `config/examples/`
-   - Adaptez selon votre matériel
-
-## Installation Développeur (Sources)
-
-### Prérequis
-```bash
-# Python 3.8+
-python --version
-
-# Git
-git --version
+python -m pip install --upgrade pip
+pip install PySide6 numpy pandas h5py
 ```
 
-### Installation
+## Dependances optionnelles
 
-1. **Clonage du repository**
-   ```bash
-   git clone https://github.com/votre-org/chneowave.git
-   cd chneowave
-   ```
+- `reportlab` : utile pour certaines briques PDF annexes hors flux GUI principal
+- DLLs Measurement Computing : requises uniquement pour l'acquisition MCC reelle
 
-2. **Environnement virtuel**
-   ```bash
-   python -m venv venv
-   venv\Scripts\activate
-   ```
+## Verification minimale
 
-3. **Installation des dépendances**
-   ```bash
-   pip install -e .
-   ```
-
-4. **Installation des dépendances de développement**
-   ```bash
-   pip install -e ".[dev]"
-   ```
-
-5. **Vérification**
-   ```bash
-   python -m pytest tests/
-   chneowave --version
-   ```
-
-## Configuration Initiale
-
-### 1. Configuration de Base
-
-Créez `config/app_config.yaml`:
-```yaml
-app:
-  name: "CHNeoWave"
-  version: "1.0.0"
-  debug: false
-  
-acquisition:
-  default_fs: 1000
-  buffer_size: 8192
-  max_channels: 16
-  
-analysis:
-  fft_window: "hann"
-  overlap: 0.5
-  nfft: 2048
-  
-ui:
-  theme: "default"
-  auto_save: true
-  save_interval: 300
+```powershell
+python chneowave.py --version
+python -m compileall src\hrneowave
+python chneowave.py
 ```
 
-### 2. Configuration Capteurs
+## Points d'entree disponibles
 
-Créez `config/sensors.yaml`:
-```yaml
-sensors:
-  - name: "WG1"
-    type: "wave_gauge"
-    channel: 0
-    calibration: 1.0
-    units: "m"
-    
-  - name: "WG2"
-    type: "wave_gauge"
-    channel: 1
-    calibration: 1.0
-    units: "m"
+```powershell
+python chneowave.py
+python main.py
+python -m hrneowave
+CHNeoWave.bat
 ```
 
-### 3. Répertoires de Données
+## Support MCC
 
-```bash
-# Créez les répertoires nécessaires
-mkdir data\raw
-mkdir data\processed
-mkdir data\exports
-mkdir logs
+Le depot conserve le dossier `Measurement Computing` parce que le wrapper MCC le recherche encore. Sans carte ou sans DLLs compatibles:
+
+- l'application peut demarrer
+- l'acquisition reelle n'est pas disponible
+- le controleur bascule en mode simulation
+
+## Stockage des projets
+
+Les projets sont crees par defaut dans:
+
+```text
+%USERPROFILE%\CHNeoWave_Projects
 ```
 
-## Vérification de l'Installation
+Chaque projet contient:
 
-### Tests de Base
-
-1. **Test de démarrage**
-   ```bash
-   chneowave --version
-   # Sortie attendue: CHNeoWave v1.0.0
-   ```
-
-2. **Test simulation**
-   ```bash
-   chneowave --simulate --fs 32 --channels 4 --duration 10
-   ```
-
-3. **Test interface graphique**
-   ```bash
-   chneowave
-   # L'interface doit s'ouvrir sans erreur
-   ```
-
-### Diagnostic Automatique
-
-```bash
-# Exécutez le diagnostic intégré
-chneowave --diagnose
+```text
+data/
+sessions/
+exports/
+analysis/
+calibration/
+project_metadata.json
 ```
 
-Cette commande vérifie:
-- Configuration système
-- Dépendances Python
-- Fichiers de configuration
-- Permissions d'écriture
-- Matériel d'acquisition (si connecté)
+## Probleme frequents
 
-## Résolution de Problèmes
+### `PySide6 n'est pas installe`
 
-### Problèmes Courants
-
-#### 1. Erreur "Module not found"
-```bash
-# Réinstallez les dépendances
-pip install --force-reinstall -e .
+```powershell
+pip install PySide6
 ```
 
-#### 2. Erreur d'acquisition
-```bash
-# Vérifiez les permissions
-# Exécutez en tant qu'administrateur si nécessaire
+### `No module named pandas`
+
+```powershell
+pip install pandas
 ```
 
-#### 3. Interface ne s'affiche pas
-```bash
-# Vérifiez les pilotes graphiques
-# Testez avec --no-gui
-chneowave --no-gui --simulate
+### Export HDF5 indisponible
+
+```powershell
+pip install h5py
 ```
 
-### Logs de Diagnostic
+### Acquisition MCC non detectee
 
-Les logs sont disponibles dans:
-- `logs/chneowave.log` (logs généraux)
-- `logs/acquisition.log` (logs d'acquisition)
-- `logs/analysis.log` (logs d'analyse)
+Verifier:
 
-### Support
+- la presence des DLLs Measurement Computing
+- l'installation pilote MCC
+- la detection de la carte sur la machine cible
 
-- **Documentation**: `docs/_build/html/index.html`
-- **Guide technique**: `docs/_build/html/technical_guide.html`
-- **Issues**: GitHub Issues
-- **Email**: support@chneowave.org
-
-## Mise à Jour
-
-### Exécutable
-1. Sauvegardez vos configurations
-2. Téléchargez la nouvelle version
-3. Remplacez l'exécutable
-4. Restaurez vos configurations
-
-### Sources
-```bash
-git pull origin main
-pip install -e . --upgrade
-```
-
-## Désinstallation
-
-### Exécutable
-```bash
-# Supprimez le répertoire d'installation
-rmdir /s C:\CHNeoWave
-```
-
-### Sources
-```bash
-# Désactivez l'environnement virtuel
-deactivate
-
-# Supprimez le répertoire
-rmdir /s chneowave
-```
-
----
-
-**CHNeoWave v1.0.0** - Logiciel d'acquisition et d'analyse de données maritimes
-
-Pour plus d'informations, consultez la documentation complète dans `docs/`.
+Sans cela, utiliser le mode simulation pour le developpement et les tests GUI.

@@ -23,8 +23,8 @@ REM Aller dans le répertoire du script
 cd /d "%~dp0"
 
 REM Vérifier si le fichier principal existe
-if not exist "lancer_chneowave_corrige.py" (
-    echo ERREUR: Fichier lancer_chneowave_corrige.py introuvable
+if not exist "chneowave.py" (
+    echo ERREUR: Fichier chneowave.py introuvable
     echo Verifiez que vous etes dans le bon repertoire
     pause
     exit /b 1
@@ -34,7 +34,7 @@ echo Lancement de CHNeoWave...
 echo.
 
 REM Lancer CHNeoWave
-python lancer_chneowave_corrige.py
+python chneowave.py --gui
 
 REM Vérifier le code de sortie
 if errorlevel 1 (

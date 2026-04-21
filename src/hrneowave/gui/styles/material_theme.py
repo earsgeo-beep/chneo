@@ -21,8 +21,10 @@ try:
 except ImportError:
     # Fallback pour la transition
     from PySide6.QtCore import QObject, Signal
-from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QApplication
+    from PySide6.QtGui import QColor, QPalette
+    from PySide6.QtWidgets import QApplication
+
+    pyqtSignal = Signal
 
 from ..components.material_components import MaterialTheme, MaterialColor
 
@@ -246,7 +248,7 @@ class MaterialThemeManager(QObject):
         }}
         
         /* Classes Material-3 personnalisées */
-        .btn-accent {
+        .btn-accent {{
             background-color: {self._current_theme.primary};
             color: {self._current_theme.on_primary};
             border: none;
@@ -255,17 +257,17 @@ class MaterialThemeManager(QObject):
             font-weight: 500;
         }}
         
-        .btn-accent:hover {
+        .btn-accent:hover {{
             background-color: {self._current_theme.primary_container};
             color: {self._current_theme.on_primary_container};
         }}
         
-        .btn-accent:pressed {
+        .btn-accent:pressed {{
             background-color: {self._current_theme.primary};
             color: {self._current_theme.on_primary};
         }}
         
-        .dock-card {
+        .dock-card {{
             background-color: {self._current_theme.surface};
             color: {self._current_theme.on_surface};
             border: 1px solid {self._current_theme.outline_variant};
@@ -273,7 +275,7 @@ class MaterialThemeManager(QObject):
             padding: 16px;
         }}
         
-        .dock-card:hover {
+        .dock-card:hover {{
             /* Effet de survol sans box-shadow */
         }}
         """

@@ -9,14 +9,15 @@ Version: 1.0.0
 """
 
 import logging
-import numpy as np
+import json
 import threading
 import time
-from datetime import datetime
-from typing import Optional, Dict, List, Callable, Any
 from dataclasses import dataclass, field
-from queue import Queue, Empty
-import json
+from datetime import datetime
+from queue import Queue
+from typing import Optional, Dict, List, Callable, Any
+
+import numpy as np
 
 from .mcc_daq_wrapper import MCCDAQ_USB1608FS, MCCRanges, scan_available_boards
 
@@ -88,6 +89,7 @@ class AcquisitionController:
         # Buffer pour données
         self.data_buffer = []
         self.buffer_size = 10000
+        self.last_exported_path: Optional[str] = None
         
         self._initialize_system()
         
@@ -552,40 +554,93 @@ class AcquisitionController:
             
         try:
             if format.lower() == 'csv':
-                return self._export_csv(file_path)
+                success = self._export_csv(file_path)
             elif format.lower() == 'json':
-                return self._export_json(file_path)
+                success = self._export_json(file_path)
+            elif format.lower() == 'hdf5':
+                success = self._export_hdf5(file_path)
             else:
                 logger.error(f"Format d'export non supporté: {format}")
                 return False
-                
+
+            if success:
+                self.last_exported_path = file_path
+            return success
         except Exception as e:
             logger.error(f"Erreur lors de l'export: {e}")
             return False
-            
+
+    def _build_export_matrix(self) -> np.ndarray:
+        """Construit une matrice [samples, channels] à partir du buffer courant."""
+        if not self.data_buffer:
+            return np.empty((0, 0))
+
+        chunks = [entry['processed_data'] for entry in self.data_buffer if 'processed_data' in entry]
+        if not chunks:
+            return np.empty((0, 0))
+
+        return np.vstack(chunks)
+
+    def _build_time_vector(self, sample_count: int) -> np.ndarray:
+        """Construit l'axe temporel associé aux échantillons exportés."""
+        if sample_count <= 0:
+            return np.array([])
+
+        sample_rate = self.current_session.sampling_rate if self.current_session else 1.0
+        if sample_rate <= 0:
+            sample_rate = 1.0
+
+        return np.arange(sample_count, dtype=float) / sample_rate
+
     def _export_csv(self, file_path: str) -> bool:
-        """Exporte en format CSV"""
+        """Exporte en format CSV compatible avec le post-traitement."""
         import csv
-        
+
+        data_matrix = self._build_export_matrix()
+        if data_matrix.size == 0:
+            logger.error("Aucune donnée consolidée disponible pour l'export CSV")
+            return False
+
+        time_vector = self._build_time_vector(data_matrix.shape[0])
+        channel_keys = [f"channel_{config.channel:02d}" for config in self.current_session.channels]
+
         with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
             writer = csv.writer(csvfile)
-            
-            # En-têtes
-            headers = ['timestamp'] + [ch.label for ch in self.current_session.channels]
+
+            headers = ['time'] + channel_keys
             writer.writerow(headers)
-            
-            # Données
-            for entry in self.data_buffer:
-                timestamp = entry['timestamp'].isoformat()
-                for row in entry['processed_data']:
-                    writer.writerow([timestamp] + row.tolist())
-                    
+
+            for index, row in enumerate(data_matrix):
+                writer.writerow([float(time_vector[index])] + row.tolist())
+
         logger.info(f"Données exportées en CSV: {file_path}")
         return True
-        
+
     def _export_json(self, file_path: str) -> bool:
-        """Exporte en format JSON"""
+        """Exporte en format JSON compatible avec le post-traitement."""
+        data_matrix = self._build_export_matrix()
+        if data_matrix.size == 0:
+            logger.error("Aucune donnée consolidée disponible pour l'export JSON")
+            return False
+
+        time_vector = self._build_time_vector(data_matrix.shape[0])
+        channels_payload = {}
+
+        for index, channel in enumerate(self.current_session.channels):
+            channel_key = f"channel_{channel.channel:02d}"
+            channels_payload[channel_key] = data_matrix[:, index].tolist()
+
         export_data = {
+            'metadata': {
+                'sample_rate': self.current_session.sampling_rate,
+                'project_name': self.current_session.project_name,
+                'session_id': self.current_session.session_id,
+                'channel_labels': [ch.label for ch in self.current_session.channels],
+                'channel_units': [ch.physical_units for ch in self.current_session.channels],
+                'hardware_available': self.is_hardware_available()
+            },
+            'time': time_vector.tolist(),
+            'channels': channels_payload,
             'session': {
                 'session_id': self.current_session.session_id,
                 'project_name': self.current_session.project_name,
@@ -594,7 +649,7 @@ class AcquisitionController:
                 'sampling_rate': self.current_session.sampling_rate,
                 'total_samples': self.current_session.total_samples
             },
-            'channels': [
+            'channel_metadata': [
                 {
                     'channel': ch.channel,
                     'sensor_type': ch.sensor_type,
@@ -607,13 +662,57 @@ class AcquisitionController:
             'statistics': self.stats,
             'data_entries': len(self.data_buffer)
         }
-        
+
         with open(file_path, 'w', encoding='utf-8') as jsonfile:
             json.dump(export_data, jsonfile, indent=2, ensure_ascii=False)
-            
-        logger.info(f"Métadonnées exportées en JSON: {file_path}")
+
+        logger.info(f"Données exportées en JSON: {file_path}")
         return True
-        
+
+    def _export_hdf5(self, file_path: str) -> bool:
+        """Exporte en HDF5 via ExportManager avec contrat aligné sur le post-traitement."""
+        from hrneowave.core.export_manager import create_export_config, create_export_manager
+
+        data_matrix = self._build_export_matrix()
+        if data_matrix.size == 0:
+            logger.error("Aucune donnée consolidée disponible pour l'export HDF5")
+            return False
+
+        export_manager = create_export_manager()
+        session_info = {
+            'session_id': self.current_session.session_id,
+            'project_name': self.current_session.project_name,
+            'sample_rate': self.current_session.sampling_rate,
+            'sampling_rate': self.current_session.sampling_rate,
+            'start_time': self.current_session.start_time.isoformat(),
+            'end_time': self.current_session.end_time.isoformat() if self.current_session.end_time else "",
+            'channels_count': len(self.current_session.channels),
+        }
+        metadata = {
+            'channel_labels': json.dumps([ch.label for ch in self.current_session.channels], ensure_ascii=False),
+            'channel_units': json.dumps([ch.physical_units for ch in self.current_session.channels], ensure_ascii=False),
+            'sensor_types': json.dumps([ch.sensor_type for ch in self.current_session.channels], ensure_ascii=False),
+        }
+        calibration_info = {
+            f"channel_{config.channel:02d}": {
+                'offset': config.calibration_offset,
+                'scale': config.calibration_scale,
+                'sensitivity': config.sensor_sensitivity,
+            }
+            for config in self.current_session.channels
+        }
+
+        config = create_export_config(
+            'hdf5',
+            file_path,
+            session_info=session_info,
+            metadata=metadata,
+        )
+        config.calibration_info = calibration_info
+
+        # ExportManager attend [n_channels, n_samples]
+        return export_manager.export_session_data(data_matrix.T, config)
+
     def _simulation_mode(self) -> bool:
         """Vérifie si on est en mode simulation"""
         return not self.is_hardware_available()

@@ -485,5 +485,8 @@ class DashboardViewMaritime(QWidget):
     def hideEvent(self, event):
         """Événement de masquage"""
         super().hideEvent(event)
-        if self.update_timer:
-            self.update_timer.stop()
+        try:
+            if self.update_timer:
+                self.update_timer.stop()
+        except RuntimeError:
+            pass

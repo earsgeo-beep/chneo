@@ -4,9 +4,7 @@
    Palette Maritime Professionnelle - Recherches Design Maritime 2025
    ============================================================================= */
 
-/* @import directives removed - not supported by Qt QSS */
-/* @import "phase5_finitions.qss"; */
-/* @import "golden_ratio.qss"; */
+/* Feuille autonome chargée directement par ThemeManager */
 
 /* =============================================================================
    STYLES GLOBAUX - PALETTE MARITIME PROFESSIONNELLE

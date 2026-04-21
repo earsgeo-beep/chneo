@@ -38,6 +38,28 @@ yarn-error.log*
 .idea/
 *.swp
 *.swo
+.cursor/
+.windsurf/
+.vercel/
 
 # MindsDB
 mindsdb/
+
+# Generated docs and packaging
+docs/_build/
+*.egg-info/
+*.backup*
+*.bak
+*.log
+cov.xml
+
+# Local scratch areas kept out of the core product
+/backup/
+/debug/
+/EYE/
+/html/
+/i-prototype-tailwind/
+/mcpserveur/
+/servers/
+/base de donner/
+/chneowave_phase4_*/

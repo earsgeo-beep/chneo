@@ -25,11 +25,11 @@ def get_calibration_view(parent=None):
     return _calibration_view(parent=parent)
 
 def get_acquisition_view(parent=None):
-    """Retourne une instance de AcquisitionView"""
+    """Retourne une instance de AcquisitionConfigView"""
     global _acquisition_view
     if _acquisition_view is None:
-        from .acquisition_view import AcquisitionView
-        _acquisition_view = AcquisitionView
+        from .acquisition_config_view import AcquisitionConfigView
+        _acquisition_view = AcquisitionConfigView
     return _acquisition_view(parent=parent)
 
 def get_analysis_view(parent=None):
@@ -92,7 +92,7 @@ VIEWS_CONFIG = {
         'loader': get_calibration_view
     },
     'acquisition': {
-        'class': 'AcquisitionView',
+        'class': 'AcquisitionConfigView',
         'title': '📊 Acquisition',
         'icon': '📊', 
         'description': 'Acquisition de données en temps réel',

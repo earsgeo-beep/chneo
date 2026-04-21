@@ -210,10 +210,10 @@ class MaterialTheme(QObject):
                     font-weight: 500;
                     /* transition not supported in Qt */
                 }}
-                QPushButton:hover {
+                QPushButton:hover {{
                     background-color: {palette['primary_variant']};
                 }}
-                QPushButton:pressed {
+                QPushButton:pressed {{
                     background-color: {palette['primary_variant']};
                 }}
                 QPushButton:disabled {{
@@ -275,7 +275,7 @@ class MaterialTheme(QObject):
                 {shadow}
                 /* transition not supported in Qt */
             }}
-            QWidget:hover {
+            QWidget:hover {{
                 border-color: {palette['outline']};
             }}
         """
@@ -322,7 +322,7 @@ class MaterialTheme(QObject):
                 font-weight: 500;
                 /* transition not supported in Qt */
             }}
-            QPushButton#nav-item:hover {
+            QPushButton#nav-item:hover {{
                 background-color: {palette['hover']};
             }}
             QPushButton#nav-item:pressed {{
