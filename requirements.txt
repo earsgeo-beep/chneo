@@ -1,0 +1,7 @@
+# CHNeoWave runtime dependencies.
+# Keep this file minimal: only packages required by the active desktop
+# acquisition, export, and post-processing flow.
+PySide6>=6.8
+numpy>=2.0
+pandas>=2.2
+h5py>=3.12

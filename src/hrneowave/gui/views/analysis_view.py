@@ -1,8 +1,6 @@
-# -*- coding: utf-8 -*-
 """Vue d'analyse CHNeoWave."""
 
 from pathlib import Path
-from typing import Dict, Optional
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -14,8 +12,10 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QFrame,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -29,14 +29,9 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
-    QHeaderView,
 )
 
 from ...core.post_processor import PostProcessor
-
-
-FIBONACCI_SPACING = [8, 13, 21, 34, 55, 89]
-GOLDEN_RATIO = 1.618
 
 
 class AnalysisToolsPanel(QFrame):
@@ -52,21 +47,24 @@ class AnalysisToolsPanel(QFrame):
 
     def _build_ui(self) -> None:
         self.setObjectName("analysis_tools_panel")
-        self.setMinimumWidth(320)
+        self.setMinimumWidth(290)
+        self.setMaximumWidth(360)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(FIBONACCI_SPACING[2], FIBONACCI_SPACING[2], FIBONACCI_SPACING[2], FIBONACCI_SPACING[2])
-        layout.setSpacing(FIBONACCI_SPACING[2])
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(14)
 
-        title = QLabel("Outils d'analyse")
-        title.setStyleSheet("font-size: 20px; font-weight: 700; color: #0A1929;")
+        title = QLabel("Source et méthode")
+        title.setObjectName("sectionTitle")
         layout.addWidget(title)
 
-        files_group = QGroupBox("Fichiers de donnees")
+        files_group = QGroupBox("Données de la campagne")
         files_layout = QVBoxLayout(files_group)
         self.data_list = QListWidget()
-        self.load_button = QPushButton("Charger")
+        self.data_list.setMaximumHeight(130)
+        self.load_button = QPushButton("Charger un fichier")
         self.refresh_button = QPushButton("Actualiser")
+        self.refresh_button.setProperty("kind", "secondary")
 
         buttons_layout = QHBoxLayout()
         buttons_layout.addWidget(self.load_button)
@@ -75,10 +73,8 @@ class AnalysisToolsPanel(QFrame):
         files_layout.addLayout(buttons_layout)
         layout.addWidget(files_group)
 
-        analysis_group = QGroupBox("Analyses")
+        analysis_group = QGroupBox("Analyse spectrale")
         analysis_layout = QFormLayout(analysis_group)
-        self.analysis_type_combo = QComboBox()
-        self.analysis_type_combo.addItem("Analyse complete", "complete")
         self.segment_length_combo = QComboBox()
         self.segment_length_combo.addItems(["256", "512", "1024", "2048", "4096", "8192"])
         self.segment_length_combo.setCurrentText("1024")
@@ -95,11 +91,11 @@ class AnalysisToolsPanel(QFrame):
         self.max_frequency_spin.setDecimals(4)
         self.max_frequency_spin.setSpecialValueText("Nyquist")
         self.max_frequency_spin.setSuffix(" Hz")
-        self.detrend_check = QCheckBox("Retirer moyenne et derive lineaire")
+        self.detrend_check = QCheckBox("Retirer moyenne et dérive linéaire")
         self.detrend_check.setChecked(True)
-        self.run_button = QPushButton("Lancer l'analyse")
+        self.run_button = QPushButton("Lancer l'analyse complète")
+        self.run_button.setProperty("kind", "primaryLarge")
         self.run_button.clicked.connect(self._emit_analysis_request)
-        analysis_layout.addRow("Methode:", self.analysis_type_combo)
         analysis_layout.addRow("Segment Welch:", self.segment_length_combo)
         analysis_layout.addRow("Recouvrement:", self.overlap_spin)
         analysis_layout.addRow("Frequence min:", self.min_frequency_spin)
@@ -108,37 +104,26 @@ class AnalysisToolsPanel(QFrame):
         analysis_layout.addRow("", self.run_button)
         layout.addWidget(analysis_group)
 
-        export_group = QGroupBox("Exports")
-        export_layout = QVBoxLayout(export_group)
+        export_group = QGroupBox("Exporter les résultats")
+        export_layout = QGridLayout(export_group)
         for label, export_type in (
-            ("Export CSV", "csv"),
-            ("Export JSON", "json"),
-            ("Export HDF5", "hdf5"),
-            ("Rapport TXT", "txt"),
+            ("CSV", "csv"),
+            ("JSON", "json"),
+            ("HDF5", "hdf5"),
+            ("Texte", "txt"),
         ):
             button = QPushButton(label)
+            button.setProperty("kind", "secondary")
             button.clicked.connect(lambda checked=False, kind=export_type: self.export_requested.emit(kind))
-            export_layout.addWidget(button)
+            index = export_layout.count()
+            export_layout.addWidget(button, index // 2, index % 2)
         layout.addWidget(export_group)
         layout.addStretch()
-
-        self.setStyleSheet("""
-            QFrame#analysis_tools_panel {
-                background-color: #F5FBFF;
-                border-right: 1px solid #D7E3EE;
-            }
-            QGroupBox {
-                font-weight: 600;
-            }
-            QPushButton {
-                min-height: 34px;
-            }
-        """)
 
     def _emit_analysis_request(self) -> None:
         max_frequency = self.max_frequency_spin.value()
         self.analysis_requested.emit(
-            self.analysis_type_combo.currentData(),
+            "complete",
             {
                 "window_size": int(self.segment_length_combo.currentText()),
                 "overlap": self.overlap_spin.value() / 100.0,
@@ -160,19 +145,36 @@ class AnalysisResultsArea(QFrame):
         self.setObjectName("analysis_results_area")
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(FIBONACCI_SPACING[2], FIBONACCI_SPACING[2], FIBONACCI_SPACING[2], FIBONACCI_SPACING[2])
-        layout.setSpacing(FIBONACCI_SPACING[2])
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(14)
 
         header_layout = QHBoxLayout()
-        title = QLabel("Resultats d'analyse")
-        title.setStyleSheet("font-size: 22px; font-weight: 700; color: #0A1929;")
-        self.analysis_status_label = QLabel("Pret")
+        title = QLabel("Résultats scientifiques")
+        title.setObjectName("sectionTitle")
+        self.analysis_status_label = QLabel("PRÊT")
+        self.analysis_status_label.setProperty("state", "neutral")
         self.analysis_count_label = QLabel("0 analyses")
+        self.analysis_count_label.setObjectName("mutedText")
         header_layout.addWidget(title)
         header_layout.addStretch()
         header_layout.addWidget(self.analysis_status_label)
         header_layout.addWidget(self.analysis_count_label)
         layout.addLayout(header_layout)
+
+        metrics = QHBoxLayout()
+        metrics.setSpacing(10)
+        self.source_metric = self._metric_card("SOURCE", "Aucune")
+        self.channels_metric = self._metric_card("CANAUX", "0")
+        self.rate_metric = self._metric_card("ÉCHANTILLONNAGE", "—")
+        self.quality_metric = self._metric_card("QUALITÉ", "Non évaluée")
+        for metric in (
+            self.source_metric,
+            self.channels_metric,
+            self.rate_metric,
+            self.quality_metric,
+        ):
+            metrics.addWidget(metric)
+        layout.addLayout(metrics)
 
         self.tab_widget = QTabWidget()
 
@@ -196,11 +198,28 @@ class AnalysisResultsArea(QFrame):
 
         layout.addWidget(self.tab_widget)
 
-        self.setStyleSheet("""
-            QFrame#analysis_results_area {
-                background-color: white;
-            }
-        """)
+    @staticmethod
+    def _metric_card(label: str, value: str) -> QFrame:
+        card = QFrame()
+        card.setObjectName("metricCard")
+        card.setMinimumHeight(70)
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(12, 9, 12, 9)
+        card_layout.setSpacing(2)
+        label_widget = QLabel(label)
+        label_widget.setObjectName("metricLabel")
+        value_widget = QLabel(value)
+        value_widget.setObjectName("metricValue")
+        value_widget.setProperty("metricValue", True)
+        card_layout.addWidget(label_widget)
+        card_layout.addWidget(value_widget)
+        return card
+
+    @staticmethod
+    def _set_metric(card: QFrame, value: str) -> None:
+        label = card.findChild(QLabel, "metricValue")
+        if label is not None:
+            label.setText(value)
 
     def update_analysis_status(self, status: str, count: int = 0) -> None:
         self.analysis_status_label.setText(status)
@@ -219,10 +238,10 @@ class AnalysisView(QWidget):
         self.is_dark_mode = False
         self.analysis_count = 0
         self.post_processor = PostProcessor()
-        self.current_project_dir: Optional[Path] = None
-        self.current_project_metadata: Dict[str, object] = {}
-        self.current_data_file: Optional[str] = None
-        self.current_analysis_result: Optional[Dict[str, object]] = None
+        self.current_project_dir: Path | None = None
+        self.current_project_metadata: dict[str, object] = {}
+        self.current_data_file: str | None = None
+        self.current_analysis_result: dict[str, object] | None = None
 
         self._build_ui()
         self._setup_connections()
@@ -230,14 +249,15 @@ class AnalysisView(QWidget):
     def _build_ui(self) -> None:
         self.setObjectName("analysis_view")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(0)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.tools_panel = AnalysisToolsPanel()
         self.results_area = AnalysisResultsArea()
         splitter.addWidget(self.tools_panel)
         splitter.addWidget(self.results_area)
-        splitter.setSizes([int(280 * GOLDEN_RATIO), int(450 * GOLDEN_RATIO)])
+        splitter.setSizes([310, 900])
         layout.addWidget(splitter)
 
     def _setup_connections(self) -> None:
@@ -293,7 +313,19 @@ class AnalysisView(QWidget):
 
         self.current_data_file = file_path
         self._add_or_select_file_item(file_path)
-        self.results_area.update_analysis_status(f"Fichier charge: {Path(file_path).name}", self.analysis_count)
+        source_name = Path(file_path).name
+        if len(source_name) > 20:
+            source_name = f"{source_name[:17]}…"
+        self.results_area._set_metric(self.results_area.source_metric, source_name)
+        self.results_area._set_metric(
+            self.results_area.channels_metric,
+            str(len((self.post_processor.current_data or {}).get("channel_keys", []))),
+        )
+        self.results_area._set_metric(
+            self.results_area.rate_metric,
+            f"{self.post_processor.sample_rate:g} Hz",
+        )
+        self.results_area.update_analysis_status("DONNÉES CHARGÉES", self.analysis_count)
         return True
 
     def on_analysis_requested(self, analysis_type: str, params: dict) -> None:
@@ -314,7 +346,16 @@ class AnalysisView(QWidget):
 
         self.current_analysis_result = self.post_processor.current_analysis
         self._update_results_views()
-        self.results_area.update_analysis_status("Analyse terminee", self.analysis_count)
+        quality = self.current_analysis_result.get("quality", {})
+        warning_count = sum(len(item.get("warnings", [])) for item in quality.values())
+        quality_text = "Validée" if warning_count == 0 else f"{warning_count} alerte(s)"
+        self.results_area._set_metric(self.results_area.quality_metric, quality_text)
+        self.results_area.analysis_status_label.setProperty(
+            "state", "success" if warning_count == 0 else "warning"
+        )
+        self.results_area.analysis_status_label.style().unpolish(self.results_area.analysis_status_label)
+        self.results_area.analysis_status_label.style().polish(self.results_area.analysis_status_label)
+        self.results_area.update_analysis_status("ANALYSE TERMINÉE", self.analysis_count)
         self.analysis_completed.emit(
             analysis_type,
             {
@@ -340,7 +381,10 @@ class AnalysisView(QWidget):
             "hdf5": "Fichiers HDF5 (*.h5 *.hdf5)",
             "txt": "Fichiers texte (*.txt)",
         }
-        default_path = self._get_default_export_directory() / f"analysis_results.{suffix_map.get(export_type, export_type)}"
+        default_path = (
+            self._get_default_export_directory()
+            / f"analysis_results.{suffix_map.get(export_type, export_type)}"
+        )
 
         file_path, _ = QFileDialog.getSaveFileName(
             self,
@@ -362,11 +406,8 @@ class AnalysisView(QWidget):
             QMessageBox.warning(self, "Export", "L'export des resultats a echoue.")
 
     def set_theme(self, is_dark: bool) -> None:
+        # Le thème de production est centralisé au niveau de l'application.
         self.is_dark_mode = is_dark
-        if is_dark:
-            self.setStyleSheet("QWidget#analysis_view { background-color: #0A1929; color: #F5FBFF; }")
-        else:
-            self.setStyleSheet("QWidget#analysis_view { background-color: #F5FBFF; color: #0A1929; }")
 
     def get_analysis_results(self) -> dict:
         return {
@@ -413,7 +454,7 @@ class AnalysisView(QWidget):
             return analysis_dir
         return Path.cwd()
 
-    def _find_file_item(self, file_path: str) -> Optional[QListWidgetItem]:
+    def _find_file_item(self, file_path: str) -> QListWidgetItem | None:
         target = str(Path(file_path))
         for index in range(self.tools_panel.data_list.count()):
             item = self.tools_panel.data_list.item(index)
@@ -436,37 +477,45 @@ class AnalysisView(QWidget):
         basic_stats = results.get("basic_stats", {})
         wave_parameters = results.get("wave_parameters", {})
         channels = list(basic_stats.keys())
-        metrics = ["mean", "std", "min", "max", "rms", "skewness", "kurtosis"]
+        metrics = (
+            ("mean", "Moyenne"),
+            ("std", "Écart-type"),
+            ("min", "Minimum"),
+            ("max", "Maximum"),
+            ("rms", "Valeur RMS"),
+            ("skewness", "Asymétrie"),
+            ("kurtosis", "Aplatissement"),
+        )
 
         self.results_area.stats_table.clearContents()
         self.results_area.stats_table.setColumnCount(len(channels) + 1)
         self.results_area.stats_table.setHorizontalHeaderLabels(["Parametre"] + channels)
         self.results_area.stats_table.setRowCount(len(metrics))
 
-        for row, metric in enumerate(metrics):
-            self.results_area.stats_table.setItem(row, 0, QTableWidgetItem(metric))
+        for row, (metric, metric_label) in enumerate(metrics):
+            self.results_area.stats_table.setItem(row, 0, QTableWidgetItem(metric_label))
             for col, channel in enumerate(channels, start=1):
                 value = basic_stats.get(channel, {}).get(metric, "")
                 if isinstance(value, float):
                     value = f"{value:.6f}"
                 self.results_area.stats_table.setItem(row, col, QTableWidgetItem(str(value)))
 
-        wave_metrics = [
-            "H1_3",
-            "Hm0",
-            "H_max",
-            "Tp",
-            "Tm01",
-            "Tm02",
-            "T_mean",
-            "n_waves",
-        ]
+        wave_metrics = (
+            ("H1_3", "H1/3 temporel"),
+            ("Hm0", "Hm0 spectral"),
+            ("H_max", "Hauteur maximale"),
+            ("Tp", "Période de pic Tp (s)"),
+            ("Tm01", "Période Tm01 (s)"),
+            ("Tm02", "Période Tm02 (s)"),
+            ("T_mean", "Période moyenne (s)"),
+            ("n_waves", "Vagues détectées"),
+        )
         self.results_area.wave_table.clearContents()
         self.results_area.wave_table.setColumnCount(len(channels) + 1)
         self.results_area.wave_table.setHorizontalHeaderLabels(["Parametre"] + channels)
         self.results_area.wave_table.setRowCount(len(wave_metrics))
-        for row, metric in enumerate(wave_metrics):
-            self.results_area.wave_table.setItem(row, 0, QTableWidgetItem(metric))
+        for row, (metric, metric_label) in enumerate(wave_metrics):
+            self.results_area.wave_table.setItem(row, 0, QTableWidgetItem(metric_label))
             for col, channel in enumerate(channels, start=1):
                 value = wave_parameters.get(channel, {}).get(metric, "")
                 if isinstance(value, float):
@@ -484,17 +533,29 @@ class AnalysisView(QWidget):
         figure = self.results_area.spectrum_figure
         figure.clear()
         axis = figure.add_subplot(111)
+        figure.set_facecolor("#FFFFFF")
+        axis.set_facecolor("#FFFFFF")
         for channel, values in spectral.items():
             frequencies = np.asarray(values.get("frequencies", []), dtype=float)
             density = np.asarray(values.get("psd", []), dtype=float)
             valid = (frequencies > 0) & np.isfinite(density) & (density > 0)
             if np.any(valid):
-                axis.semilogy(frequencies[valid], density[valid], label=channel)
-        axis.set_xlabel("Frequence (Hz)")
-        axis.set_ylabel("Densite spectrale")
-        axis.grid(True, which="both", alpha=0.25)
+                axis.semilogy(
+                    frequencies[valid],
+                    density[valid],
+                    label=channel,
+                    linewidth=1.35,
+                )
+        axis.set_xlabel("Fréquence (Hz)", color="#405965")
+        axis.set_ylabel("Densité spectrale", color="#405965")
+        axis.tick_params(colors="#667C88", labelsize=9)
+        axis.grid(True, which="both", color="#DCE5EA", linewidth=0.7, alpha=0.8)
+        axis.spines["top"].set_visible(False)
+        axis.spines["right"].set_visible(False)
+        axis.spines["bottom"].set_color("#B7C6CD")
+        axis.spines["left"].set_color("#B7C6CD")
         if spectral:
-            axis.legend(loc="best")
+            axis.legend(loc="best", frameon=False, fontsize=8)
         self.results_area.spectrum_canvas.draw_idle()
 
     def _build_report_text(self) -> str:
@@ -524,7 +585,9 @@ class AnalysisView(QWidget):
                 lines.append(f"  Hm0 spectral: {waves[channel].get('Hm0', 0):.6f}")
                 lines.append(f"  Hmax: {waves[channel].get('H_max', 0):.6f}")
                 lines.append(f"  Tp: {waves[channel].get('Tp', 0):.6f} s")
-                lines.append(f"  Tm01/Tm02: {waves[channel].get('Tm01', 0):.6f} / {waves[channel].get('Tm02', 0):.6f} s")
+                tm01 = waves[channel].get("Tm01", 0)
+                tm02 = waves[channel].get("Tm02", 0)
+                lines.append(f"  Tm01/Tm02: {tm01:.6f} / {tm02:.6f} s")
                 lines.append(f"  vagues detectees: {waves[channel].get('n_waves', 0)}")
             channel_warnings = quality.get(channel, {}).get("warnings", [])
             for warning in channel_warnings:

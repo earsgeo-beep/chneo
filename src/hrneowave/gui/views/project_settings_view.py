@@ -10,11 +10,10 @@ Version: 1.1.0
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit, 
-    QPushButton, QSpinBox, QDoubleSpinBox, QComboBox, QCheckBox, QGroupBox,
-    QTabWidget, QScrollArea, QFrame, QSlider, QProgressBar
+    QSpinBox, QDoubleSpinBox, QComboBox, QCheckBox, QTabWidget, QScrollArea, QFrame, QSlider
 )
-from PySide6.QtCore import Signal, Qt, QPropertyAnimation, QEasingCurve, QTimer
-from PySide6.QtGui import QFont, QPainter, QLinearGradient, QColor
+from PySide6.QtCore import Signal, Qt, QPropertyAnimation, QEasingCurve
+from PySide6.QtGui import QFont
 
 # Import des composants modernes
 from ..components.modern_card import ModernCard
@@ -57,8 +56,8 @@ class ProjectSettingsView(QWidget):
         """Configuration de l'interface utilisateur moderne"""
         # Layout principal avec Golden Ratio
         main_layout = GoldenRatioLayout(self)
-        main_layout.setContentsMargins(30, 30, 30, 30)
-        main_layout.setSpacing(25)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(14)
         
         # En-tête
         self._create_header(main_layout)
@@ -72,19 +71,19 @@ class ProjectSettingsView(QWidget):
     def _create_header(self, layout):
         """Crée l'en-tête avec titre et KPIs"""
         header_frame = QFrame()
-        header_frame.setObjectName("settingsHeader")
+        header_frame.setObjectName("operationalHeader")
         header_layout = QHBoxLayout(header_frame)
         
         # Titre et description
         title_layout = QVBoxLayout()
         
         title_label = QLabel("Paramètres du Projet")
-        title_label.setObjectName("settingsTitle")
+        title_label.setObjectName("viewTitle")
         title_font = QFont("Segoe UI", 24, QFont.Bold)
         title_label.setFont(title_font)
         
         subtitle_label = QLabel("Configuration avancée de l'acquisition maritime")
-        subtitle_label.setObjectName("settingsSubtitle")
+        subtitle_label.setObjectName("mutedText")
         subtitle_font = QFont("Segoe UI", 12)
         subtitle_label.setFont(subtitle_font)
         
@@ -435,13 +434,14 @@ class ProjectSettingsView(QWidget):
     def _create_action_bar(self, layout):
         """Crée la barre d'actions"""
         action_frame = QFrame()
-        action_frame.setObjectName("actionBar")
+        action_frame.setObjectName("surface")
         action_layout = QHBoxLayout(action_frame)
         action_layout.setSpacing(15)
         
         # Bouton de réinitialisation
         self.reset_button = AnimatedButton("Réinitialiser")
         self.reset_button.setObjectName("warningButton")
+        self.reset_button.setProperty("kind", "danger")
         action_layout.addWidget(self.reset_button)
         
         # Espacement
@@ -455,11 +455,13 @@ class ProjectSettingsView(QWidget):
         # Bouton d'annulation
         self.cancel_button = AnimatedButton("Annuler")
         self.cancel_button.setObjectName("secondaryButton")
+        self.cancel_button.setProperty("kind", "secondary")
         action_layout.addWidget(self.cancel_button)
         
         # Bouton de sauvegarde
         self.save_button = AnimatedButton("Sauvegarder")
         self.save_button.setObjectName("primaryButton")
+        self.save_button.setProperty("kind", "primaryLarge")
         self.save_button.setEnabled(False)
         action_layout.addWidget(self.save_button)
         
@@ -525,6 +527,9 @@ class ProjectSettingsView(QWidget):
     
     def _apply_theme(self):
         """Applique le thème maritime moderne"""
+        # La palette de production est centralisée dans ThemeManager.
+        self.setStyleSheet("")
+        return
         self.setStyleSheet(f"""
             QWidget {{
                 background-color: {self.theme.colors['background']};

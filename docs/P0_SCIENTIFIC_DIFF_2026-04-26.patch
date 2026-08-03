@@ -1,0 +1,1870 @@
+﻿diff --git a/src/hrneowave/acquisition/acquisition_controller.py b/src/hrneowave/acquisition/acquisition_controller.py
+index bf1b0bd..3d1ac60 100644
+--- a/src/hrneowave/acquisition/acquisition_controller.py
++++ b/src/hrneowave/acquisition/acquisition_controller.py
+@@ -19,6 +19,16 @@ from typing import Optional, Dict, List, Callable, Any
+ 
+ import numpy as np
+ 
++from hrneowave.core.session_schema import (
++    CLOCK_DOMAIN,
++    DATA_KIND_PHYSICAL,
++    DATA_KIND_RAW,
++    SCHEMA_VERSION,
++    build_channel_metadata,
++    build_csv_metadata_row,
++    build_session_metadata,
++)
++
+ from .mcc_daq_wrapper import MCCDAQ_USB1608FS, MCCRanges, scan_available_boards
+ 
+ # Configuration du logging
+@@ -37,6 +47,11 @@ class MaritimeChannelConfig:
+     physical_units: str = "m"  # Unités physiques finales
+     sensor_sensitivity: float = 1.0  # V/unité physique
+     enabled: bool = True
++    calibration_id: Optional[str] = None
++    calibration_date: Optional[str] = None
++    calibration_method: str = "configured_coefficients"
++    calibration_uncertainty: Optional[float] = None
++    calibration_status: str = "unverified"
+ 
+ @dataclass
+ class AcquisitionSession:
+@@ -90,6 +105,8 @@ class AcquisitionController:
+         self.data_buffer = []
+         self.buffer_size = 10000
+         self.last_exported_path: Optional[str] = None
++        self._simulation_sample_index = 0
++        self._simulation_channel_state = {}
+         
+         self._initialize_system()
+         
+@@ -147,6 +164,10 @@ class AcquisitionController:
+             logger.error(f"Numéro de canal invalide: {channel}")
+             return False
+             
++        if sensor_sensitivity <= 0:
++            logger.error(f"Sensibilite capteur invalide pour le canal {channel}: {sensor_sensitivity}")
++            return False
++
+         # Conversion de la plage de tension
+         range_mapping = {
+             10.0: MCCRanges.BIP10VOLTS,
+@@ -200,7 +221,12 @@ class AcquisitionController:
+             'sensor_sensitivity': config.sensor_sensitivity,
+             'enabled': config.enabled,
+             'calibration_offset': config.calibration_offset,
+-            'calibration_scale': config.calibration_scale
++            'calibration_scale': config.calibration_scale,
++            'calibration_id': config.calibration_id,
++            'calibration_date': config.calibration_date,
++            'calibration_method': config.calibration_method,
++            'calibration_uncertainty': config.calibration_uncertainty,
++            'calibration_status': config.calibration_status
+         }
+         
+     def start_acquisition_session(self,
+@@ -250,6 +276,8 @@ class AcquisitionController:
+                 'hardware_available': self.is_hardware_available()
+             }
+         )
++        self._simulation_sample_index = 0
++        self._simulation_channel_state = {}
+         
+         # Démarrage de l'acquisition
+         try:
+@@ -311,7 +339,7 @@ class AcquisitionController:
+                     data = self._generate_simulation_data()
+                     self._process_acquired_data(data)
+                     samples_since_last_update += data.shape[0]
+-                    time.sleep(0.01)  # Simulation du timing
++                    time.sleep(data.shape[0] / self.current_session.sampling_rate)
+                     
+                 # Mise à jour des statistiques
+                 current_time = time.time()
+@@ -366,16 +394,23 @@ class AcquisitionController:
+     def _convert_to_physical_units(self, raw_data: np.ndarray) -> np.ndarray:
+         """Convertit les données en unités physiques"""
+         if self.current_session is None:
+-            return raw_data
++            return np.asarray(raw_data, dtype=float)
+             
+-        processed_data = np.zeros_like(raw_data)
++        raw_data = np.asarray(raw_data, dtype=float)
++        processed_data = np.zeros_like(raw_data, dtype=float)
+         
+         for i, channel_config in enumerate(self.current_session.channels):
+             if i < raw_data.shape[1]:
+                 # Application de la calibration et de la sensibilité
++                sensitivity = float(channel_config.sensor_sensitivity)
++                scale = float(channel_config.calibration_scale)
++                if sensitivity <= 0:
++                    raise ValueError(f"Sensibilite invalide pour le canal {channel_config.channel}")
++                if scale <= 0:
++                    raise ValueError(f"Echelle de calibration invalide pour le canal {channel_config.channel}")
+                 channel_data = raw_data[:, i]
+-                channel_data = (channel_data + channel_config.calibration_offset) * channel_config.calibration_scale
+-                channel_data = channel_data / channel_config.sensor_sensitivity
++                channel_data = (channel_data + channel_config.calibration_offset) * scale
++                channel_data = channel_data / sensitivity
+                 processed_data[:, i] = channel_data
+                 
+         return processed_data
+@@ -388,39 +423,55 @@ class AcquisitionController:
+         num_channels = len(self.current_session.channels)
+         num_samples = 100
+         
+-        # Génération de signaux simulés
+-        t = np.linspace(0, 1, num_samples)
+-        data = np.zeros((num_samples, num_channels))
++        # Generation de signaux physiques continus, puis conversion inverse en volts.
++        sample_rate = self.current_session.sampling_rate
++        if sample_rate <= 0:
++            raise ValueError("Frequence d'echantillonnage invalide pour la simulation")
++        sample_indices = np.arange(num_samples, dtype=float) + self._simulation_sample_index
++        t = sample_indices / sample_rate
++        physical_data = np.zeros((num_samples, num_channels))
+         
+         for i, channel_config in enumerate(self.current_session.channels):
++            state = self._simulation_channel_state.setdefault(channel_config.channel, {})
+             if channel_config.sensor_type == 'wave_height':
+                 # Signal de houle sinusoïdal avec bruit
+-                frequency = 0.1 + np.random.random() * 0.5  # 0.1-0.6 Hz
+-                amplitude = 0.5 + np.random.random() * 1.5   # 0.5-2.0 m
+-                phase = np.random.random() * 2 * np.pi
++                frequency = state.setdefault('frequency', 0.1 + np.random.random() * 0.5)
++                amplitude = state.setdefault('amplitude', 0.5 + np.random.random() * 1.5)
++                phase = state.setdefault('phase', np.random.random() * 2 * np.pi)
+                 wave_signal = amplitude * np.sin(2 * np.pi * frequency * t + phase)
+                 noise = 0.1 * np.random.normal(0, 1, num_samples)
+-                data[:, i] = wave_signal + noise
++                physical_data[:, i] = wave_signal + noise
+                 
+             elif channel_config.sensor_type == 'pressure':
+-                # Signal de pression hydrostatique
+-                base_pressure = 1013.25  # hPa
+-                variation = 10 * np.sin(2 * np.pi * 0.05 * t)  # Variation lente
++                # Pression relative (gauge) compatible avec la plage DAQ.
++                base_pressure = 0.0  # hPa
++                phase = state.setdefault('phase', np.random.random() * 2 * np.pi)
++                variation = 10 * np.sin(2 * np.pi * 0.05 * t + phase)  # Variation lente
+                 noise = 0.5 * np.random.normal(0, 1, num_samples)
+-                data[:, i] = base_pressure + variation + noise
++                physical_data[:, i] = base_pressure + variation + noise
+                 
+             elif channel_config.sensor_type == 'accelerometer':
+                 # Signal d'accélération
+                 gravity = 9.81
+-                vibration = 0.5 * np.sin(2 * np.pi * 2.0 * t)  # Vibration 2 Hz
++                phase = state.setdefault('phase', np.random.random() * 2 * np.pi)
++                vibration = 0.5 * np.sin(2 * np.pi * 2.0 * t + phase)  # Vibration 2 Hz
+                 noise = 0.1 * np.random.normal(0, 1, num_samples)
+-                data[:, i] = gravity + vibration + noise
++                physical_data[:, i] = gravity + vibration + noise
+                 
+             else:
+                 # Signal générique
+-                data[:, i] = np.random.normal(0, 1, num_samples)
++                physical_data[:, i] = np.random.normal(0, 1, num_samples)
+                 
+-        return data
++        raw_data = np.zeros_like(physical_data, dtype=float)
++        for i, channel_config in enumerate(self.current_session.channels):
++            sensitivity = float(channel_config.sensor_sensitivity)
++            scale = float(channel_config.calibration_scale)
++            if sensitivity <= 0 or scale <= 0:
++                raise ValueError(f"Calibration invalide pour le canal {channel_config.channel}")
++            raw_data[:, i] = (physical_data[:, i] * sensitivity / scale) - float(channel_config.calibration_offset)
++
++        self._simulation_sample_index += num_samples
++        return raw_data
+         
+     def stop_acquisition(self) -> bool:
+         """
+@@ -527,7 +578,8 @@ class AcquisitionController:
+         from datetime import timedelta
+         base_time = datetime.now()
+         time_interval = timedelta(seconds=1.0 / self.current_session.sampling_rate)
+-        timestamps = [base_time - i * time_interval for i in range(all_data.shape[0])]
++        start_time = base_time - (all_data.shape[0] - 1) * time_interval
++        timestamps = [start_time + i * time_interval for i in range(all_data.shape[0])]
+         
+         return {
+             'data': all_data,
+@@ -571,94 +623,146 @@ class AcquisitionController:
+             return False
+ 
+     def _build_export_matrix(self) -> np.ndarray:
+-        """Construit une matrice [samples, channels] à partir du buffer courant."""
++        """Construit une matrice physique [samples, channels] pour compatibilite."""
++        _, physical_matrix = self._build_export_matrices()
++        return physical_matrix
++
++    def _build_export_matrices(self) -> tuple[np.ndarray, np.ndarray]:
++        """Construit les matrices brute et physique [samples, channels]."""
+         if not self.data_buffer:
+-            return np.empty((0, 0))
++            empty = np.empty((0, 0))
++            return empty, empty
+ 
+-        chunks = [entry['processed_data'] for entry in self.data_buffer if 'processed_data' in entry]
+-        if not chunks:
+-            return np.empty((0, 0))
++        raw_chunks = [np.asarray(entry['raw_data'], dtype=float) for entry in self.data_buffer if 'raw_data' in entry]
++        physical_chunks = [
++            np.asarray(entry['processed_data'], dtype=float)
++            for entry in self.data_buffer
++            if 'processed_data' in entry
++        ]
++        if not raw_chunks or not physical_chunks:
++            empty = np.empty((0, 0))
++            return empty, empty
+ 
+-        return np.vstack(chunks)
++        return np.vstack(raw_chunks), np.vstack(physical_chunks)
+ 
+     def _build_time_vector(self, sample_count: int) -> np.ndarray:
+         """Construit l'axe temporel associé aux échantillons exportés."""
+         if sample_count <= 0:
+             return np.array([])
+ 
+-        sample_rate = self.current_session.sampling_rate if self.current_session else 1.0
+-        if sample_rate <= 0:
+-            sample_rate = 1.0
++        if not self.current_session or self.current_session.sampling_rate <= 0:
++            raise ValueError("Frequence d'echantillonnage absente ou invalide")
++
++        sample_rate = self.current_session.sampling_rate
+ 
+         return np.arange(sample_count, dtype=float) / sample_rate
+ 
++    def _build_export_metadata_payload(self, sample_count: int) -> Dict[str, Any]:
++        """Construit le contrat scientifique partage par JSON, HDF5 et sidecar CSV."""
++        session_metadata = build_session_metadata(
++            self.current_session,
++            hardware_available=self.is_hardware_available(),
++            sample_count=sample_count,
++        )
++        channel_metadata = build_channel_metadata(self.current_session.channels)
++        warnings = []
++        if any(item.get("calibration_status") != "valid" for item in channel_metadata):
++            warnings.append("CALIBRATION_NOT_PERFORMED: results are not metrologically validated.")
++
++        metadata = {
++            **session_metadata,
++            'data_kind': DATA_KIND_PHYSICAL,
++            'channel_labels': [ch.label for ch in self.current_session.channels],
++            'channel_units': [ch.physical_units for ch in self.current_session.channels],
++            'sensor_types': [ch.sensor_type for ch in self.current_session.channels],
++            'warnings': warnings,
++        }
++        return {
++            'metadata': metadata,
++            'channel_metadata': channel_metadata,
++            'processing_config': {
++                'conversion_formula': 'physical = ((raw_voltage + offset_volts) * scale) / sensitivity_v_per_unit',
++                'shape_convention': '[samples, channels]',
++            },
++        }
++
++    def _write_csv_metadata_sidecar(self, file_path: str, metadata_payload: Dict[str, Any]) -> None:
++        with open(f"{file_path}.metadata.json", "w", encoding="utf-8") as handle:
++            json.dump(metadata_payload, handle, indent=2, ensure_ascii=False)
++
+     def _export_csv(self, file_path: str) -> bool:
+         """Exporte en format CSV compatible avec le post-traitement."""
+         import csv
+ 
+-        data_matrix = self._build_export_matrix()
++        _, data_matrix = self._build_export_matrices()
+         if data_matrix.size == 0:
+             logger.error("Aucune donnée consolidée disponible pour l'export CSV")
+             return False
+ 
+         time_vector = self._build_time_vector(data_matrix.shape[0])
+         channel_keys = [f"channel_{config.channel:02d}" for config in self.current_session.channels]
++        metadata_row = build_csv_metadata_row(
++            self.current_session.sampling_rate,
++            DATA_KIND_PHYSICAL,
++            sample_count=data_matrix.shape[0],
++        )
++        metadata_headers = list(metadata_row.keys())
++        metadata_payload = self._build_export_metadata_payload(data_matrix.shape[0])
+ 
+         with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
+             writer = csv.writer(csvfile)
+ 
+-            headers = ['time'] + channel_keys
++            headers = metadata_headers + ['time'] + channel_keys
+             writer.writerow(headers)
+ 
+             for index, row in enumerate(data_matrix):
+-                writer.writerow([float(time_vector[index])] + row.tolist())
++                writer.writerow(
++                    [metadata_row[key] for key in metadata_headers]
++                    + [float(time_vector[index])]
++                    + row.tolist()
++                )
+ 
++        self._write_csv_metadata_sidecar(file_path, metadata_payload)
+         logger.info(f"Données exportées en CSV: {file_path}")
+         return True
+ 
+     def _export_json(self, file_path: str) -> bool:
+         """Exporte en format JSON compatible avec le post-traitement."""
+-        data_matrix = self._build_export_matrix()
++        raw_matrix, data_matrix = self._build_export_matrices()
+         if data_matrix.size == 0:
+             logger.error("Aucune donnée consolidée disponible pour l'export JSON")
+             return False
+ 
+         time_vector = self._build_time_vector(data_matrix.shape[0])
+         channels_payload = {}
++        raw_channels_payload = {}
+ 
+         for index, channel in enumerate(self.current_session.channels):
+             channel_key = f"channel_{channel.channel:02d}"
+             channels_payload[channel_key] = data_matrix[:, index].tolist()
++            if raw_matrix.size:
++                raw_channels_payload[channel_key] = raw_matrix[:, index].tolist()
++
++        metadata_payload = self._build_export_metadata_payload(data_matrix.shape[0])
++        session_metadata = metadata_payload['metadata']
++        channel_metadata = metadata_payload['channel_metadata']
+ 
+         export_data = {
+-            'metadata': {
+-                'sample_rate': self.current_session.sampling_rate,
+-                'project_name': self.current_session.project_name,
+-                'session_id': self.current_session.session_id,
+-                'channel_labels': [ch.label for ch in self.current_session.channels],
+-                'channel_units': [ch.physical_units for ch in self.current_session.channels],
+-                'hardware_available': self.is_hardware_available()
+-            },
++            'metadata': session_metadata,
+             'time': time_vector.tolist(),
+             'channels': channels_payload,
++            'raw_channels': raw_channels_payload,
+             'session': {
+                 'session_id': self.current_session.session_id,
+                 'project_name': self.current_session.project_name,
+                 'start_time': self.current_session.start_time.isoformat(),
+                 'end_time': self.current_session.end_time.isoformat() if self.current_session.end_time else None,
++                'sample_rate_hz': self.current_session.sampling_rate,
+                 'sampling_rate': self.current_session.sampling_rate,
+                 'total_samples': self.current_session.total_samples
+             },
+-            'channel_metadata': [
+-                {
+-                    'channel': ch.channel,
+-                    'sensor_type': ch.sensor_type,
+-                    'label': ch.label,
+-                    'physical_units': ch.physical_units,
+-                    'sensor_sensitivity': ch.sensor_sensitivity
+-                }
+-                for ch in self.current_session.channels
+-            ],
++            'channel_metadata': channel_metadata,
++            'processing_config': metadata_payload['processing_config'],
+             'statistics': self.stats,
+             'data_entries': len(self.data_buffer)
+         }
+@@ -670,48 +774,79 @@ class AcquisitionController:
+         return True
+ 
+     def _export_hdf5(self, file_path: str) -> bool:
+-        """Exporte en HDF5 via ExportManager avec contrat aligné sur le post-traitement."""
+-        from hrneowave.core.export_manager import create_export_config, create_export_manager
++        """Exporte en HDF5 avec contrat session explicite."""
++        try:
++            import h5py
++        except ImportError:
++            logger.error("h5py requis pour l'export HDF5")
++            return False
+ 
+-        data_matrix = self._build_export_matrix()
++        raw_matrix, data_matrix = self._build_export_matrices()
+         if data_matrix.size == 0:
+             logger.error("Aucune donnée consolidée disponible pour l'export HDF5")
+             return False
+ 
+-        export_manager = create_export_manager()
+-        session_info = {
+-            'session_id': self.current_session.session_id,
+-            'project_name': self.current_session.project_name,
+-            'sample_rate': self.current_session.sampling_rate,
+-            'sampling_rate': self.current_session.sampling_rate,
+-            'start_time': self.current_session.start_time.isoformat(),
+-            'end_time': self.current_session.end_time.isoformat() if self.current_session.end_time else "",
+-            'channels_count': len(self.current_session.channels),
+-        }
+-        metadata = {
+-            'channel_labels': json.dumps([ch.label for ch in self.current_session.channels], ensure_ascii=False),
+-            'channel_units': json.dumps([ch.physical_units for ch in self.current_session.channels], ensure_ascii=False),
+-            'sensor_types': json.dumps([ch.sensor_type for ch in self.current_session.channels], ensure_ascii=False),
+-        }
+-        calibration_info = {
+-            f"channel_{config.channel:02d}": {
+-                'offset': config.calibration_offset,
+-                'scale': config.calibration_scale,
+-                'sensitivity': config.sensor_sensitivity,
+-            }
+-            for config in self.current_session.channels
+-        }
++        time_vector = self._build_time_vector(data_matrix.shape[0])
++        metadata_payload = self._build_export_metadata_payload(data_matrix.shape[0])
++        session_metadata = metadata_payload['metadata']
++        channel_metadata = metadata_payload['channel_metadata']
+ 
+-        config = create_export_config(
+-            'hdf5',
+-            file_path,
+-            session_info=session_info,
+-            metadata=metadata,
+-        )
+-        config.calibration_info = calibration_info
++        def write_attrs(target, values: Dict[str, Any]) -> None:
++            for key, value in values.items():
++                if value is None:
++                    target.attrs[key] = ""
++                elif isinstance(value, (str, int, float, bool)):
++                    target.attrs[key] = value
++                else:
++                    target.attrs[key] = json.dumps(value, ensure_ascii=False)
++
++        with h5py.File(file_path, 'w') as h5_file:
++            write_attrs(h5_file, session_metadata)
++            h5_file.attrs['schema_version'] = SCHEMA_VERSION
++            h5_file.attrs['clock_domain'] = CLOCK_DOMAIN
++
++            metadata_group = h5_file.create_group('metadata')
++            write_attrs(metadata_group, session_metadata)
++
++            session_group = metadata_group.create_group('session')
++            write_attrs(session_group, session_metadata)
++
++            processing_group = metadata_group.create_group('processing_config')
++            write_attrs(processing_group, metadata_payload['processing_config'])
++
++            channel_metadata_group = metadata_group.create_group('channels')
++            for item in channel_metadata:
++                channel_group = channel_metadata_group.create_group(item['key'])
++                write_attrs(channel_group, item)
++
++            acquisition_group = h5_file.create_group('acquisition_data')
++            acquisition_group.attrs['data_kind'] = DATA_KIND_PHYSICAL
++            acquisition_group.attrs['sample_rate_hz'] = self.current_session.sampling_rate
++            acquisition_group.create_dataset('time', data=time_vector, compression='gzip', compression_opts=6)
+ 
+-        # ExportManager attend [n_channels, n_samples]
+-        return export_manager.export_session_data(data_matrix.T, config)
++            raw_group = h5_file.create_group('raw_data')
++            raw_group.attrs['data_kind'] = DATA_KIND_RAW
++            raw_group.attrs['sample_rate_hz'] = self.current_session.sampling_rate
++
++            for index, channel in enumerate(self.current_session.channels):
++                channel_key = f"channel_{channel.channel:02d}"
++                physical_dataset = acquisition_group.create_dataset(
++                    channel_key,
++                    data=data_matrix[:, index],
++                    compression='gzip',
++                    compression_opts=6,
++                )
++                raw_dataset = raw_group.create_dataset(
++                    channel_key,
++                    data=raw_matrix[:, index],
++                    compression='gzip',
++                    compression_opts=6,
++                )
++                write_attrs(physical_dataset, channel_metadata[index])
++                write_attrs(raw_dataset, channel_metadata[index])
++
++        logger.info(f"Données exportées en HDF5: {file_path}")
++        return True
+ 
+     def _simulation_mode(self) -> bool:
+         """Vérifie si on est en mode simulation"""
+@@ -724,30 +859,47 @@ class AcquisitionController:
+         Returns:
+             Résultats de calibration
+         """
++        warnings = []
+         if not self.is_hardware_available():
+-            logger.warning("Calibration en mode simulation")
+-            
++            logger.warning("Calibration non realisee: materiel indisponible")
++            warnings.append("hardware_unavailable")
++        else:
++            logger.warning("Calibration materielle non implementee")
++            warnings.append("hardware_calibration_not_implemented")
++
+         results = {
+             'timestamp': datetime.now().isoformat(),
++            'calibration_valid': False,
++            'calibration_status': 'not_performed',
++            'conversion_formula': 'physical = ((raw_voltage + offset_volts) * scale) / sensitivity_v_per_unit',
++            'warnings': warnings,
+             'channels': {},
+-            'system_status': 'ok'
++            'system_status': 'not_calibrated'
+         }
+-        
++
+         for channel, config in self.channels_config.items():
+-            # Simulation de calibration
++            calibration_id = config.calibration_id or f"unverified_channel_{channel:02d}"
+             results['channels'][channel] = {
+                 'channel': channel,
+                 'label': config.label,
+                 'sensor_type': config.sensor_type,
+-                'calibration_status': 'ok',
+-                'offset_correction': np.random.normal(0, 0.001),
+-                'scale_correction': 1.0 + np.random.normal(0, 0.01),
+-                'noise_level': np.random.uniform(0.001, 0.01)
++                'calibration_id': calibration_id,
++                'calibration_status': 'not_performed',
++                'calibration_date': config.calibration_date,
++                'calibration_method': config.calibration_method,
++                'calibration_uncertainty': config.calibration_uncertainty,
++                'offset_volts': float(config.calibration_offset),
++                'scale': float(config.calibration_scale),
++                'sensitivity_v_per_unit': float(config.sensor_sensitivity),
++                'physical_units': config.physical_units,
++                'voltage_units': config.units,
++                'valid': False,
++                'warning': 'current coefficients are configured values, not a performed calibration'
+             }
+-            
+-        logger.info("Calibration système terminée")
++
++        logger.warning("Calibration systeme non realisee: contrat metrologique retourne sans faux statut OK")
+         return results
+-        
++
+     def close(self):
+         """Ferme le contrôleur et libère les ressources"""
+         if self.is_acquiring:
+diff --git a/src/hrneowave/core/optimized_goda_analyzer.py b/src/hrneowave/core/optimized_goda_analyzer.py
+index 4f981c8..d1a6523 100644
+--- a/src/hrneowave/core/optimized_goda_analyzer.py
++++ b/src/hrneowave/core/optimized_goda_analyzer.py
+@@ -212,8 +212,9 @@ class OptimizedGodaAnalyzer:
+             Solution [Ai, Ar] (amplitudes incidente et réfléchie)
+         """
+         # Pseudo-inverse via SVD: A⁺ = V @ diag(1/s) @ Uᵀ
++        # The propagation matrix is complex; use Hermitian transpose.
+         s_inv = 1.0 / s
+-        A_pinv = Vt.T @ np.diag(s_inv) @ U.T
++        A_pinv = Vt.conj().T @ np.diag(s_inv) @ U.conj().T
+ 
+         # Solution des moindres carrés
+         solution = A_pinv @ measurements
+diff --git a/src/hrneowave/core/post_processor.py b/src/hrneowave/core/post_processor.py
+index 6498d90..7884bcc 100644
+--- a/src/hrneowave/core/post_processor.py
++++ b/src/hrneowave/core/post_processor.py
+@@ -1,10 +1,13 @@
+ # post_processor.py - Module de post-traitement pour l'analyse des donnees de houle
+ import json
++import math
+ import os
+-from typing import Dict, Optional
++from typing import Dict, List, Optional
+ 
+ import numpy as np
+ 
++from hrneowave.core.session_schema import CLOCK_DOMAIN, CSV_METADATA_COLUMNS, SCHEMA_VERSION, extract_sample_rate
++
+ 
+ QObject = None
+ Signal = None
+@@ -47,7 +50,7 @@ class PostProcessor(QObject):
+         self.config = self._load_config(config_path)
+         self.current_data = None
+         self.current_analysis = None
+-        self.sample_rate = 32.0
++        self.sample_rate = None
+ 
+     def _load_config(self, config_path: Optional[str]) -> Dict:
+         default_config = {
+@@ -57,7 +60,14 @@ class PostProcessor(QObject):
+                 "detrend": True,
+                 "apply_window": True,
+             },
+-            "goda": {
++            "zero_crossing": {
++                "crossing": "up",
++                "remove_mean": True,
++                "min_wave_height": 0.0,
++                "min_period_s": 0.0,
++                "max_period_s": None,
++            },
++            "wave_metrics": {
+                 "significant_wave_height": True,
+                 "peak_period": True,
+                 "mean_period": True,
+@@ -110,6 +120,7 @@ class PostProcessor(QObject):
+                 self.errorOccurred.emit(f"Format non supporte: {extension}")
+                 return False
+ 
++            data = self._validate_loaded_data(data)
+             self.current_data = data
+             self.dataLoaded.emit(data)
+             print(f"Donnees chargees: {file_path}")
+@@ -126,20 +137,61 @@ class PostProcessor(QObject):
+ 
+         frame = pd.read_csv(file_path)
+         metadata = {}
++        channel_metadata = []
+ 
+-        if "sample_rate" in frame.columns:
+-            self.sample_rate = float(frame["sample_rate"].iloc[0])
+-            metadata["sample_rate"] = self.sample_rate
++        for column in CSV_METADATA_COLUMNS:
++            if column in frame.columns and len(frame[column]) > 0:
++                metadata[column] = self._normalize_metadata_value(frame[column].iloc[0])
+ 
+-        time_columns = [column for column in frame.columns if "time" in column.lower()]
+-        data_columns = [column for column in frame.columns if column.startswith("channel_") or column.startswith("probe_")]
++        sidecar_path = f"{file_path}.metadata.json"
++        if os.path.exists(sidecar_path):
++            with open(sidecar_path, "r", encoding="utf-8") as handle:
++                sidecar = json.load(handle)
++            metadata.update({
++                key: self._normalize_metadata_value(value)
++                for key, value in sidecar.get("metadata", {}).items()
++            })
++            channel_metadata = sidecar.get("channel_metadata", [])
++
++        time_column = self._select_time_column(frame.columns)
++        time_values = frame[time_column].to_numpy(dtype=float) if time_column else None
++        sample_rate = extract_sample_rate(metadata)
++        if sample_rate is None and time_values is not None:
++            sample_rate = self._infer_sample_rate_from_time(time_values)
++            if sample_rate is not None:
++                metadata["sample_rate_hz"] = sample_rate
++                metadata["sample_rate_inferred"] = True
++        if sample_rate is None:
++            raise ValueError("CSV sans sample_rate explicite ni axe temps regulier")
++
++        self.sample_rate = sample_rate
++        metadata["sample_rate_hz"] = sample_rate
++        metadata["sample_rate"] = sample_rate
++
++        data_columns = [
++            column
++            for column in frame.columns
++            if (column.startswith("channel_") and column[8:].isdigit()) or column.startswith("probe_")
++        ]
+ 
+         return {
+             "metadata": metadata,
+-            "time": frame[time_columns[0]].to_numpy() if time_columns else np.arange(len(frame)) / self.sample_rate,
++            "time": time_values if time_values is not None else np.arange(len(frame)) / sample_rate,
+             "channels": {column: frame[column].to_numpy() for column in data_columns},
++            "channel_metadata": channel_metadata,
+         }
+ 
++    def _select_time_column(self, columns) -> Optional[str]:
++        """Select only a real time-axis column, never metadata such as time_start."""
++        for column in columns:
++            if str(column).lower() == "time":
++                return column
++        accepted_aliases = {"t", "time_s", "timestamp_s"}
++        for column in columns:
++            if str(column).lower() in accepted_aliases:
++                return column
++        return None
++
+     def _load_json(self, file_path: str) -> Dict:
+         with open(file_path, "r", encoding="utf-8") as handle:
+             data = json.load(handle)
+@@ -148,6 +200,10 @@ class PostProcessor(QObject):
+             for channel, values in data["channels"].items():
+                 data["channels"][channel] = np.array(values)
+ 
++        if "raw_channels" in data:
++            for channel, values in data["raw_channels"].items():
++                data["raw_channels"][channel] = np.array(values)
++
+         if "time" in data:
+             data["time"] = np.array(data["time"])
+ 
+@@ -157,13 +213,21 @@ class PostProcessor(QObject):
+                 for key, value in data["metadata"].items()
+             }
+ 
+-        sample_rate = None
+-        if "metadata" in data:
+-            sample_rate = data["metadata"].get("sample_rate") or data["metadata"].get("sampling_rate")
+-        if sample_rate is None and "session" in data:
+-            sample_rate = data["session"].get("sample_rate") or data["session"].get("sampling_rate")
+-        if sample_rate is not None:
+-            self.sample_rate = float(sample_rate)
++        metadata = data.get("metadata", {})
++        session = data.get("session", {})
++        sample_rate = extract_sample_rate(metadata, session)
++        if sample_rate is None and "time" in data:
++            sample_rate = self._infer_sample_rate_from_time(data["time"])
++            if sample_rate is not None:
++                metadata["sample_rate_hz"] = sample_rate
++                metadata["sample_rate_inferred"] = True
++        if sample_rate is None:
++            raise ValueError("JSON sans sample_rate exploitable")
++
++        self.sample_rate = sample_rate
++        data.setdefault("metadata", metadata)
++        data["metadata"]["sample_rate_hz"] = sample_rate
++        data["metadata"]["sample_rate"] = sample_rate
+ 
+         return data
+ 
+@@ -173,7 +237,7 @@ class PostProcessor(QObject):
+         except ImportError as exc:
+             raise ImportError("h5py requis pour les fichiers HDF5") from exc
+ 
+-        data = {"channels": {}, "metadata": {}}
++        data = {"channels": {}, "raw_channels": {}, "metadata": {}, "channel_metadata": []}
+ 
+         with h5py.File(file_path, "r") as handle:
+             data["metadata"].update({
+@@ -202,6 +266,16 @@ class PostProcessor(QObject):
+                         for key, value in metadata_group["calibration"].attrs.items()
+                     }
+ 
++                if "channels" in metadata_group:
++                    channels_group = metadata_group["channels"]
++                    data["channel_metadata"] = [
++                        {
++                            key: self._normalize_metadata_value(value)
++                            for key, value in channels_group[channel_key].attrs.items()
++                        }
++                        for channel_key in sorted(channels_group.keys())
++                    ]
++
+             if "acquisition_data" in handle:
+                 acquisition_group = handle["acquisition_data"]
+                 for key in acquisition_group.keys():
+@@ -210,6 +284,23 @@ class PostProcessor(QObject):
+                     elif key.startswith("channel_") or key.startswith("probe_"):
+                         data["channels"][key] = acquisition_group[key][:]
+ 
++            if "raw_data" in handle:
++                raw_group = handle["raw_data"]
++                for key in raw_group.keys():
++                    if key.startswith("channel_") or key.startswith("probe_"):
++                        data["raw_channels"][key] = raw_group[key][:]
++
++            if "raw" in handle:
++                raw_dataset = handle["raw"][:]
++                if raw_dataset.ndim == 1:
++                    raw_dataset = raw_dataset.reshape(-1, 1)
++                for index in range(raw_dataset.shape[1]):
++                    key = f"channel_{index:02d}"
++                    data["raw_channels"][key] = raw_dataset[:, index]
++                    if key not in data["channels"]:
++                        data["channels"][key] = raw_dataset[:, index]
++                data["metadata"].setdefault("data_kind", "raw_legacy")
++
+             if "time" in handle and "time" not in data:
+                 data["time"] = handle["time"][:]
+ 
+@@ -217,28 +308,122 @@ class PostProcessor(QObject):
+                 if key.startswith("channel_") or key.startswith("probe_"):
+                     data["channels"][key] = handle[key][:]
+ 
+-        sample_rate = data["metadata"].get("sample_rate") or data["metadata"].get("sampling_rate")
+-        if sample_rate is not None:
+-            self.sample_rate = float(sample_rate)
++        sample_rate = extract_sample_rate(data["metadata"], data.get("session", {}))
++        if sample_rate is None and "time" in data:
++            sample_rate = self._infer_sample_rate_from_time(data["time"])
++            if sample_rate is not None:
++                data["metadata"]["sample_rate_inferred"] = True
++        if sample_rate is None:
++            raise ValueError("HDF5 sans sample_rate exploitable")
+ 
+         if "time" not in data and data["channels"]:
+             first_channel = next(iter(data["channels"].values()))
+-            data["time"] = np.arange(len(first_channel), dtype=float) / self.sample_rate
++            data["time"] = np.arange(len(first_channel), dtype=float) / sample_rate
++
++        self.sample_rate = sample_rate
++        data["metadata"]["sample_rate_hz"] = sample_rate
++        data["metadata"]["sample_rate"] = sample_rate
++        if not data.get("channel_metadata") and isinstance(data["metadata"].get("channel_metadata"), list):
++            data["channel_metadata"] = data["metadata"]["channel_metadata"]
+ 
+         return data
+ 
++    def _infer_sample_rate_from_time(self, time_values: np.ndarray) -> Optional[float]:
++        values = np.asarray(time_values, dtype=float)
++        if values.size < 2:
++            return None
++        diffs = np.diff(values)
++        diffs = diffs[np.isfinite(diffs) & (diffs > 0)]
++        if diffs.size == 0:
++            return None
++        median_dt = float(np.median(diffs))
++        if median_dt <= 0:
++            return None
++        jitter = float(np.max(np.abs(diffs - median_dt)) / median_dt)
++        if jitter > 0.01:
++            return None
++        return 1.0 / median_dt
++
++    def _validate_loaded_data(self, data: Dict) -> Dict:
++        channels = data.get("channels", {})
++        if not channels:
++            raise ValueError("Aucun canal de donnees charge")
++
++        sample_rate = extract_sample_rate(data.get("metadata", {}), data.get("session", {}))
++        if sample_rate is None or sample_rate <= 0:
++            raise ValueError("Frequence d'echantillonnage absente ou invalide")
++
++        self.sample_rate = sample_rate
++        data.setdefault("metadata", {})
++        data["metadata"]["sample_rate_hz"] = sample_rate
++        data["metadata"]["sample_rate"] = sample_rate
++
++        lengths = set()
++        for channel, values in channels.items():
++            array = self._require_finite_signal(channel, values)
++            if array.size == 0:
++                raise ValueError(f"Canal vide: {channel}")
++            channels[channel] = array
++            lengths.add(array.shape[0])
++        if len(lengths) != 1:
++            raise ValueError("Les canaux n'ont pas tous la meme longueur")
++
++        sample_count = next(iter(lengths))
++        if "time" in data:
++            data["time"] = np.asarray(data["time"], dtype=float)
++            if data["time"].shape[0] != sample_count:
++                raise ValueError("Longueur de l'axe temps incoherente avec les canaux")
++            self._validate_time_axis(data["time"], sample_rate)
++        else:
++            data["time"] = np.arange(sample_count, dtype=float) / sample_rate
++
++        return data
++
++    def _validate_time_axis(self, time_values: np.ndarray, sample_rate: float, tolerance: float = 0.01) -> None:
++        values = np.asarray(time_values, dtype=float)
++        if values.size < 2:
++            raise ValueError("Axe temps trop court")
++        diffs = np.diff(values)
++        if not np.all(np.isfinite(diffs)):
++            raise ValueError("Axe temps contient des valeurs non finies")
++        if not np.all(diffs > 0):
++            raise ValueError("Axe temps non strictement monotone")
++
++        expected_dt = 1.0 / sample_rate
++        median_dt = float(np.median(diffs))
++        relative_error = abs(median_dt - expected_dt) / expected_dt
++        if relative_error > tolerance:
++            raise ValueError(f"Incoherence temps/Fs: dt={median_dt}, attendu={expected_dt}")
++
++        max_relative_error = float(np.max(np.abs(diffs - expected_dt) / expected_dt))
++        if max_relative_error > tolerance:
++            raise ValueError(
++                f"Axe temps irregulier: erreur relative max={max_relative_error}, tolerance={tolerance}"
++            )
++
+     def run_analysis(self) -> bool:
+         if self.current_data is None:
+             self.errorOccurred.emit("Aucune donnee chargee")
+             return False
++        if self.sample_rate is None or self.sample_rate <= 0:
++            self.errorOccurred.emit("Frequence d'echantillonnage invalide")
++            return False
+ 
+         try:
++            scientific_warnings = [
++                "goda_metrics is a deprecated compatibility alias for zero_crossing_metrics; "
++                "it is not a Goda incident/reflected wave separation.",
++            ]
+             analysis_results = {
++                "metadata": self._build_analysis_metadata(scientific_warnings),
+                 "basic_stats": self._compute_basic_stats(),
+                 "spectral_analysis": self._compute_spectral_analysis(),
+-                "goda_metrics": self._compute_goda_metrics(),
+                 "timestamp": np.datetime64("now").astype(str),
+             }
++            zero_crossing_metrics = self._compute_zero_crossing_metrics()
++            analysis_results["zero_crossing_metrics"] = zero_crossing_metrics
++            analysis_results["goda_metrics"] = zero_crossing_metrics
++            analysis_results["scientific_warnings"] = scientific_warnings
+             self.current_analysis = analysis_results
+             self.analysisCompleted.emit(analysis_results)
+             print("Analyse terminee")
+@@ -250,9 +435,62 @@ class PostProcessor(QObject):
+             print(error_msg)
+             return False
+ 
++    def _build_analysis_metadata(self, warnings: Optional[List[str]] = None) -> Dict:
++        channels = self.current_data.get("channels", {}) if self.current_data else {}
++        time_values = np.asarray(self.current_data.get("time", []), dtype=float) if self.current_data else np.array([])
++        sample_count = len(next(iter(channels.values()))) if channels else 0
++        dt_seconds = 1.0 / self.sample_rate
++        if time_values.size:
++            time_start = float(time_values[0])
++            time_end = float(time_values[-1])
++        else:
++            time_start = 0.0
++            time_end = (sample_count - 1) * dt_seconds if sample_count > 0 else 0.0
++
++        source_metadata = self.current_data.get("metadata", {}) if self.current_data else {}
++        channel_metadata = self.current_data.get("channel_metadata", []) if self.current_data else []
++        if not channel_metadata:
++            channel_metadata = [
++                {
++                    "key": channel,
++                    "sensor_id": channel,
++                    "physical_units": "",
++                    "calibration_status": "unverified",
++                    "calibration_coefficients": {},
++                }
++                for channel in channels
++            ]
++
++        metadata_warnings = list(warnings or [])
++        if any(item.get("calibration_status", "unverified") != "valid" for item in channel_metadata if isinstance(item, dict)):
++            metadata_warnings.append(
++                "CALIBRATION_NOT_PERFORMED: results are not metrologically validated."
++            )
++
++        return {
++            "schema_version": SCHEMA_VERSION,
++            "sample_rate_hz": float(self.sample_rate),
++            "dt_seconds": dt_seconds,
++            "n_samples": int(sample_count),
++            "duration_s": sample_count / self.sample_rate if sample_count > 0 else 0.0,
++            "time_start": time_start,
++            "time_end": time_end,
++            "clock_domain": source_metadata.get("clock_domain", CLOCK_DOMAIN),
++            "channels": list(channels.keys()),
++            "units": source_metadata.get("channel_units", {}),
++            "channel_metadata": channel_metadata,
++            "processing_method": "post_processor.run_analysis",
++            "psd_method": "one_sided_periodogram_psd",
++            "window": "hann" if self.config["analysis"].get("apply_window", True) else "rectangular",
++            "overlap": float(self.config["analysis"].get("overlap", 0.0)),
++            "detrend": bool(self.config["analysis"].get("detrend", True)),
++            "warnings": metadata_warnings,
++        }
++
+     def _compute_basic_stats(self) -> Dict:
+         stats = {}
+         for channel, values in self.current_data["channels"].items():
++            values = self._require_finite_signal(channel, values)
+             stats[channel] = {
+                 "mean": float(np.mean(values)),
+                 "std": float(np.std(values)),
+@@ -267,27 +505,96 @@ class PostProcessor(QObject):
+     def _compute_spectral_analysis(self) -> Dict:
+         spectral_results = {}
+         for channel, values in self.current_data["channels"].items():
+-            n_fft = self.config["analysis"]["window_size"]
+-            freqs = np.fft.fftfreq(n_fft, 1 / self.sample_rate)[: n_fft // 2]
+-            if self.config["analysis"]["apply_window"]:
+-                window = np.hanning(len(values))
+-                values = values * window
+-            fft_data = np.fft.fft(values, n_fft)
+-            power_spectrum = np.abs(fft_data[: n_fft // 2]) ** 2
++            values = self._require_finite_signal(channel, values)
++            if values.size < 2:
++                raise ValueError(f"Signal trop court pour analyse spectrale: {channel}")
++
++            if self.config["analysis"].get("detrend", True):
++                values = values - np.mean(values)
++
++            requested_n_fft = int(self.config["analysis"].get("window_size", values.size))
++            n_fft = max(2, requested_n_fft, values.size)
++            window = self._build_fft_window(values.size)
++            windowed_values = values * window
++            window_power = float(np.sum(window ** 2))
++            if window_power <= 0:
++                raise ValueError("Fenetre FFT invalide")
++
++            freqs = np.fft.rfftfreq(n_fft, 1 / self.sample_rate)
++            fft_data = np.fft.rfft(windowed_values, n_fft)
++            psd = (np.abs(fft_data) ** 2) / (self.sample_rate * window_power)
++            if psd.size > 2:
++                if n_fft % 2 == 0:
++                    psd[1:-1] *= 2.0
++                else:
++                    psd[1:] *= 2.0
++
++            positive_indices = freqs > 0
++            if np.any(positive_indices):
++                positive_freqs = freqs[positive_indices]
++                positive_psd = psd[positive_indices]
++                peak_frequency = float(positive_freqs[np.argmax(positive_psd)])
++            else:
++                peak_frequency = 0.0
++
++            moments = self._compute_spectral_moments(freqs, psd)
+             spectral_results[channel] = {
+                 "frequencies": freqs.tolist(),
+-                "power_spectrum": power_spectrum.tolist(),
+-                "peak_frequency": float(freqs[np.argmax(power_spectrum)]),
+-                "total_energy": float(np.sum(power_spectrum)),
++                "psd": psd.tolist(),
++                "power_spectrum": psd.tolist(),
++                "peak_frequency": peak_frequency,
++                "peak_period": float(1.0 / peak_frequency) if peak_frequency > 0 else 0.0,
++                "m0": moments["m0"],
++                "m1": moments["m1"],
++                "m2": moments["m2"],
++                "Hm0": moments["Hm0"],
++                "Tm01": moments["Tm01"],
++                "Tm02": moments["Tm02"],
++                "total_energy": moments["m0"],
++                "energy_definition": "m0_variance_from_one_sided_psd",
++                "method": "one_sided_periodogram_psd",
++                "detrend": bool(self.config["analysis"].get("detrend", True)),
++                "window": "hann" if self.config["analysis"].get("apply_window", True) else "rectangular",
++                "n_fft": int(n_fft),
++                "sample_count": int(values.size),
+             }
+         return spectral_results
+ 
+-    def _compute_goda_metrics(self) -> Dict:
+-        goda_results = {}
++    def _build_fft_window(self, length: int) -> np.ndarray:
++        if not self.config["analysis"].get("apply_window", True):
++            return np.ones(length, dtype=float)
++        if length < 2:
++            return np.ones(length, dtype=float)
++        return np.hanning(length)
++
++    def _require_finite_signal(self, channel: str, values: np.ndarray) -> np.ndarray:
++        array = np.asarray(values, dtype=float)
++        if not np.all(np.isfinite(array)):
++            raise ValueError(
++                f"Canal {channel} contient NaN/Inf: analyse refusee sans interpolation explicite"
++            )
++        return array
++
++    def _compute_spectral_moments(self, freqs: np.ndarray, psd: np.ndarray) -> Dict[str, float]:
++        if freqs.size == 0 or psd.size == 0:
++            return {"m0": 0.0, "m1": 0.0, "m2": 0.0, "Hm0": 0.0, "Tm01": 0.0, "Tm02": 0.0}
++
++        m0 = float(np.trapezoid(psd, freqs))
++        m1 = float(np.trapezoid(freqs * psd, freqs))
++        m2 = float(np.trapezoid((freqs ** 2) * psd, freqs))
++        hm0 = float(4.0 * math.sqrt(m0)) if m0 > 0 else 0.0
++        tm01 = float(m0 / m1) if m1 > 0 else 0.0
++        tm02 = float(math.sqrt(m0 / m2)) if m2 > 0 else 0.0
++        return {"m0": m0, "m1": m1, "m2": m2, "Hm0": hm0, "Tm01": tm01, "Tm02": tm02}
++
++    def _compute_zero_crossing_metrics(self) -> Dict:
++        wave_results = {}
+         for channel, values in self.current_data["channels"].items():
+-            wave_heights = self._extract_wave_heights(values)
++            waves = self._extract_zero_crossing_waves(values)
++            wave_heights = np.array([wave["height"] for wave in waves], dtype=float)
++            wave_periods = np.array([wave["period"] for wave in waves], dtype=float)
+             if len(wave_heights) == 0:
+-                goda_results[channel] = {
++                wave_results[channel] = {
+                     "Hs": 0.0,
+                     "H_max": 0.0,
+                     "H_mean": 0.0,
+@@ -295,51 +602,131 @@ class PostProcessor(QObject):
+                     "n_waves": 0,
+                     "Tp": 0.0,
+                     "Tm": 0.0,
++                    "method": "zero_upcrossing",
++                    "mean_water_level": float(np.mean(values)) if len(values) else 0.0,
+                 }
+                 continue
+ 
+             sorted_heights = np.sort(wave_heights)[::-1]
+             n_waves = len(sorted_heights)
+-            goda_results[channel] = {
+-                "Hs": float(np.mean(sorted_heights[: max(1, n_waves // 3)])),
++            n_significant = max(1, int(math.ceil(n_waves / 3)))
++            wave_results[channel] = {
++                "Hs": float(np.mean(sorted_heights[:n_significant])),
+                 "H_max": float(np.max(sorted_heights)),
+                 "H_mean": float(np.mean(sorted_heights)),
+                 "H_rms": float(np.sqrt(np.mean(sorted_heights ** 2))),
+                 "n_waves": int(n_waves),
+                 "Tp": self._compute_peak_period(values),
+-                "Tm": self._compute_mean_period(values),
++                "Tm": float(np.mean(wave_periods)) if wave_periods.size else 0.0,
++                "T_max": float(np.max(wave_periods)) if wave_periods.size else 0.0,
++                "T_min": float(np.min(wave_periods)) if wave_periods.size else 0.0,
++                "method": "zero_upcrossing",
++                "mean_water_level": float(np.mean(values)),
+             }
+-        return goda_results
++        return wave_results
++
++    def _compute_goda_metrics(self) -> Dict:
++        return self._compute_zero_crossing_metrics()
+ 
+     def _extract_wave_heights(self, values: np.ndarray) -> np.ndarray:
+-        zero_crossings = np.where(np.diff(np.sign(values)))[0]
+-        wave_heights = []
+-        for index in range(0, len(zero_crossings) - 1, 2):
+-            if index + 1 >= len(zero_crossings):
+-                break
+-            start_idx = zero_crossings[index]
+-            end_idx = zero_crossings[index + 1]
+-            segment = values[start_idx:end_idx]
+-            if len(segment) > 0:
+-                wave_heights.append(np.max(segment) - np.min(segment))
+-        return np.array(wave_heights)
++        waves = self._extract_zero_crossing_waves(values)
++        return np.array([wave["height"] for wave in waves], dtype=float)
++
++    def _extract_zero_crossing_waves(self, values: np.ndarray) -> List[Dict[str, float]]:
++        raw_values = self._require_finite_signal("zero_crossing_input", values)
++        if raw_values.size < 3:
++            return []
++
++        zero_config = self.config.get("zero_crossing", {})
++        remove_mean = zero_config.get("remove_mean", True)
++        mean_level = float(np.mean(raw_values)) if remove_mean else 0.0
++        centered = raw_values - mean_level
++        crossing_type = zero_config.get("crossing", "up")
++        crossing_positions = self._find_zero_crossings(centered, crossing_type)
++        if len(crossing_positions) < 2:
++            return []
++
++        min_height = float(zero_config.get("min_wave_height", 0.0) or 0.0)
++        min_period = float(zero_config.get("min_period_s", 0.0) or 0.0)
++        max_period_value = zero_config.get("max_period_s")
++        max_period = float(max_period_value) if max_period_value is not None else None
++
++        waves = []
++        for start_pos, end_pos in zip(crossing_positions[:-1], crossing_positions[1:]):
++            period = float((end_pos - start_pos) / self.sample_rate)
++            if period <= 0 or period < min_period:
++                continue
++            if max_period is not None and period > max_period:
++                continue
++
++            start_index = max(0, int(math.floor(start_pos)))
++            end_index = min(raw_values.size, int(math.ceil(end_pos)) + 1)
++            segment = raw_values[start_index:end_index]
++            if segment.size < 2:
++                continue
++            height = float(np.max(segment) - np.min(segment))
++            if height < min_height:
++                continue
++            waves.append({
++                "height": height,
++                "period": period,
++                "start_index": float(start_pos),
++                "end_index": float(end_pos),
++            })
++        return waves
++
++    def _find_zero_crossings(self, centered_values: np.ndarray, crossing_type: str = "up") -> List[float]:
++        values = np.asarray(centered_values, dtype=float)
++        signs = np.sign(values)
++        nonzero_indices = np.flatnonzero(signs)
++        if nonzero_indices.size < 2:
++            return []
++
++        crossing_type = crossing_type.lower()
++        crossings = []
++        for left_index, right_index in zip(nonzero_indices[:-1], nonzero_indices[1:]):
++            left_sign = signs[left_index]
++            right_sign = signs[right_index]
++            if left_sign == right_sign:
++                continue
++            if crossing_type == "up" and not (left_sign < 0 < right_sign):
++                continue
++            if crossing_type == "down" and not (left_sign > 0 > right_sign):
++                continue
++            if crossing_type not in {"up", "down"}:
++                continue
++
++            left_value = values[left_index]
++            right_value = values[right_index]
++            if right_index == left_index:
++                crossing = float(left_index)
++            elif right_value == left_value:
++                crossing = float((left_index + right_index) / 2.0)
++            else:
++                crossing = float(left_index - left_value * (right_index - left_index) / (right_value - left_value))
++            crossings.append(crossing)
++        return crossings
+ 
+     def _compute_peak_period(self, values: np.ndarray) -> float:
+-        freqs = np.fft.fftfreq(len(values), 1 / self.sample_rate)
+-        fft_data = np.fft.fft(values)
++        values = self._require_finite_signal("peak_period_input", values)
++        if values.size < 2:
++            return 0.0
++        if self.config["analysis"].get("detrend", True):
++            values = values - np.mean(values)
++        freqs = np.fft.rfftfreq(values.size, 1 / self.sample_rate)
++        fft_data = np.fft.rfft(values)
+         power_spectrum = np.abs(fft_data) ** 2
+         valid_indices = freqs > 0
+-        if np.any(valid_indices):
+-            peak_freq = freqs[valid_indices][np.argmax(power_spectrum[valid_indices])]
+-            return float(1.0 / peak_freq) if peak_freq > 0 else 0.0
+-        return 0.0
++        if not np.any(valid_indices):
++            return 0.0
++        peak_freq = freqs[valid_indices][np.argmax(power_spectrum[valid_indices])]
++        return float(1.0 / peak_freq) if peak_freq > 0 else 0.0
+ 
+     def _compute_mean_period(self, values: np.ndarray) -> float:
+-        zero_crossings = np.where(np.diff(np.sign(values)))[0]
+-        if len(zero_crossings) > 1:
+-            periods = np.diff(zero_crossings) / self.sample_rate * 2
+-            return float(np.mean(periods))
+-        return 0.0
++        waves = self._extract_zero_crossing_waves(values)
++        if not waves:
++            return 0.0
++        return float(np.mean([wave["period"] for wave in waves]))
+ 
+     def _compute_skewness(self, values: np.ndarray) -> float:
+         mean = np.mean(values)
+@@ -377,6 +764,15 @@ class PostProcessor(QObject):
+         import pandas as pd
+ 
+         rows = []
++        for metric, value in self.current_analysis.get("metadata", {}).items():
++            if isinstance(value, (dict, list)):
++                value = json.dumps(value, ensure_ascii=False)
++            rows.append({
++                "channel": "",
++                "category": "metadata",
++                "metric": metric,
++                "value": value,
++            })
+         for channel, stats in self.current_analysis["basic_stats"].items():
+             for metric, value in stats.items():
+                 rows.append({
+@@ -385,14 +781,22 @@ class PostProcessor(QObject):
+                     "metric": metric,
+                     "value": value,
+                 })
+-        for channel, goda in self.current_analysis["goda_metrics"].items():
+-            for metric, value in goda.items():
++        for channel, metrics in self.current_analysis.get("zero_crossing_metrics", {}).items():
++            for metric, value in metrics.items():
+                 rows.append({
+                     "channel": channel,
+-                    "category": "goda_metrics",
++                    "category": "zero_crossing_metrics",
+                     "metric": metric,
+                     "value": value,
+                 })
++        for channel, spectral in self.current_analysis.get("spectral_analysis", {}).items():
++            for metric in ("peak_frequency", "peak_period", "m0", "Hm0", "Tm01", "Tm02"):
++                rows.append({
++                    "channel": channel,
++                    "category": "spectral_analysis",
++                    "metric": metric,
++                    "value": spectral.get(metric, 0),
++                })
+         pd.DataFrame(rows).to_csv(output_path, index=False)
+ 
+     def _export_json(self, output_path: str) -> None:
+@@ -406,20 +810,44 @@ class PostProcessor(QObject):
+             raise ImportError("h5py requis pour l'export HDF5") from exc
+ 
+         with h5py.File(output_path, "w") as handle:
+-            handle.attrs["timestamp"] = self.current_analysis["timestamp"]
+-            handle.attrs["sample_rate"] = self.sample_rate
++            def write_attr(target, key, value):
++                if isinstance(value, str):
++                    target.attrs[key] = np.bytes_(value)
++                elif isinstance(value, (np.integer, np.floating)):
++                    target.attrs[key] = value.item()
++                elif value is None:
++                    target.attrs[key] = ""
++                elif isinstance(value, (dict, list)):
++                    target.attrs[key] = np.bytes_(json.dumps(value, ensure_ascii=False))
++                else:
++                    target.attrs[key] = value
++
++            write_attr(handle, "timestamp", self.current_analysis["timestamp"])
++            write_attr(handle, "sample_rate", self.sample_rate)
++            write_attr(handle, "sample_rate_hz", self.sample_rate)
++            metadata_group = handle.create_group("metadata")
++            for metric, value in self.current_analysis.get("metadata", {}).items():
++                write_attr(metadata_group, metric, value)
+ 
+             stats_group = handle.create_group("basic_stats")
+             for channel, stats in self.current_analysis["basic_stats"].items():
+                 channel_group = stats_group.create_group(channel)
+                 for metric, value in stats.items():
+-                    channel_group.attrs[metric] = value
+-
+-            goda_group = handle.create_group("goda_metrics")
+-            for channel, goda in self.current_analysis["goda_metrics"].items():
+-                channel_group = goda_group.create_group(channel)
+-                for metric, value in goda.items():
+-                    channel_group.attrs[metric] = value
++                    write_attr(channel_group, metric, value)
++
++            zero_group = handle.create_group("zero_crossing_metrics")
++            for channel, metrics in self.current_analysis.get("zero_crossing_metrics", {}).items():
++                channel_group = zero_group.create_group(channel)
++                for metric, value in metrics.items():
++                    write_attr(channel_group, metric, value)
++
++            spectral_group = handle.create_group("spectral_analysis")
++            for channel, spectral in self.current_analysis.get("spectral_analysis", {}).items():
++                channel_group = spectral_group.create_group(channel)
++                channel_group.create_dataset("frequencies", data=np.asarray(spectral["frequencies"], dtype=float))
++                channel_group.create_dataset("psd", data=np.asarray(spectral["psd"], dtype=float))
++                for metric in ("peak_frequency", "peak_period", "m0", "m1", "m2", "Hm0", "Tm01", "Tm02"):
++                    write_attr(channel_group, metric, spectral.get(metric, 0))
+ 
+     def _prepare_json_data(self, data):
+         if isinstance(data, dict):
+@@ -439,13 +867,13 @@ class PostProcessor(QObject):
+             "channels_analyzed": list(self.current_analysis["basic_stats"].keys()),
+             "sample_rate": self.sample_rate,
+         }
+-        if "goda_metrics" in self.current_analysis:
+-            summary["goda_summary"] = {}
+-            for channel, goda in self.current_analysis["goda_metrics"].items():
+-                summary["goda_summary"][channel] = {
+-                    "Hs": goda.get("Hs", 0),
+-                    "H_max": goda.get("H_max", 0),
+-                    "Tp": goda.get("Tp", 0),
+-                    "n_waves": goda.get("n_waves", 0),
++        if "zero_crossing_metrics" in self.current_analysis:
++            summary["zero_crossing_summary"] = {}
++            for channel, metrics in self.current_analysis["zero_crossing_metrics"].items():
++                summary["zero_crossing_summary"][channel] = {
++                    "Hs": metrics.get("Hs", 0),
++                    "H_max": metrics.get("H_max", 0),
++                    "Tp": metrics.get("Tp", 0),
++                    "n_waves": metrics.get("n_waves", 0),
+                 }
+         return summary
+diff --git a/src/hrneowave/core/session_schema.py b/src/hrneowave/core/session_schema.py
+new file mode 100644
+index 0000000..8f3c3b4
+--- /dev/null
++++ b/src/hrneowave/core/session_schema.py
+@@ -0,0 +1,184 @@
++"""Canonical acquisition-session contract helpers.
++
++This module keeps the scientific invariants shared by acquisition, export, and
++post-processing: explicit sample rate, explicit time base, channel metadata, and
++clear raw-vs-physical data separation.
++"""
++
++from __future__ import annotations
++
++import json
++import math
++from typing import Any, Dict, Iterable, Mapping, Optional
++
++SCHEMA_VERSION = "1.0.0"
++CLOCK_DOMAIN = "relative_monotonic_seconds"
++DATA_KIND_PHYSICAL = "physical"
++DATA_KIND_RAW = "raw"
++
++SAMPLE_RATE_KEYS = (
++    "sample_rate_hz",
++    "sampling_rate_hz",
++    "sample_rate",
++    "sampling_rate",
++    "fs",
++    "Sample_Rate",
++)
++
++CSV_METADATA_COLUMNS = {
++    "schema_version",
++    "sample_rate_hz",
++    "sampling_rate_hz",
++    "sample_rate",
++    "sampling_rate",
++    "fs",
++    "clock_domain",
++    "data_kind",
++    "dt_seconds",
++    "duration_s",
++    "n_samples",
++    "time_start",
++    "time_end",
++    "warnings",
++}
++
++
++def coerce_float(value: Any) -> Optional[float]:
++    """Return a finite float if possible, otherwise None."""
++    if value is None:
++        return None
++    if isinstance(value, bytes):
++        value = value.decode("utf-8", errors="replace")
++    if isinstance(value, str):
++        stripped = value.strip()
++        if not stripped:
++            return None
++        if stripped.startswith("[") or stripped.startswith("{"):
++            try:
++                value = json.loads(stripped)
++            except json.JSONDecodeError:
++                value = stripped
++        else:
++            value = stripped
++    if isinstance(value, (list, tuple)) and len(value) == 1:
++        value = value[0]
++    try:
++        numeric = float(value)
++    except (TypeError, ValueError):
++        return None
++    if not math.isfinite(numeric):
++        return None
++    return numeric
++
++
++def extract_sample_rate(*containers: Optional[Mapping[str, Any]]) -> Optional[float]:
++    """Extract a positive sample rate from known metadata keys."""
++    for container in containers:
++        if not container:
++            continue
++        for key in SAMPLE_RATE_KEYS:
++            sample_rate = coerce_float(container.get(key))
++            if sample_rate is not None and sample_rate > 0:
++                return sample_rate
++    return None
++
++
++def require_sample_rate(*containers: Optional[Mapping[str, Any]]) -> float:
++    """Extract a positive sample rate or fail loudly."""
++    sample_rate = extract_sample_rate(*containers)
++    if sample_rate is None:
++        raise ValueError("Missing explicit sample rate in acquisition metadata")
++    return sample_rate
++
++
++def build_channel_metadata(channels: Iterable[Any]) -> list[Dict[str, Any]]:
++    """Normalize channel configuration objects into serializable metadata."""
++    channel_metadata = []
++    for index, channel in enumerate(channels):
++        channel_number = int(getattr(channel, "channel", index))
++        range_type = getattr(channel, "range_type", "")
++        range_name = getattr(range_type, "name", str(range_type))
++        channel_metadata.append({
++            "channel": channel_number,
++            "key": f"channel_{channel_number:02d}",
++            "label": getattr(channel, "label", f"Channel {channel_number}"),
++            "sensor_id": getattr(channel, "sensor_id", None) or f"sensor_channel_{channel_number:02d}",
++            "sensor_type": getattr(channel, "sensor_type", "unknown"),
++            "voltage_units": getattr(channel, "units", "V"),
++            "physical_units": getattr(channel, "physical_units", ""),
++            "range": range_name,
++            "sensor_sensitivity": float(getattr(channel, "sensor_sensitivity", 1.0)),
++            "calibration_offset": float(getattr(channel, "calibration_offset", 0.0)),
++            "calibration_scale": float(getattr(channel, "calibration_scale", 1.0)),
++            "calibration_id": getattr(channel, "calibration_id", None)
++            or f"unverified_channel_{channel_number:02d}",
++            "calibration_date": getattr(channel, "calibration_date", None),
++            "calibration_method": getattr(channel, "calibration_method", "configured_coefficients"),
++            "calibration_uncertainty": getattr(channel, "calibration_uncertainty", None),
++            "calibration_status": getattr(channel, "calibration_status", "unverified"),
++            "calibration_coefficients": {
++                "offset_volts": float(getattr(channel, "calibration_offset", 0.0)),
++                "scale": float(getattr(channel, "calibration_scale", 1.0)),
++                "sensitivity_v_per_unit": float(getattr(channel, "sensor_sensitivity", 1.0)),
++            },
++            "conversion_formula": "physical = ((raw_voltage + offset_volts) * scale) / sensitivity_v_per_unit",
++            "enabled": bool(getattr(channel, "enabled", True)),
++        })
++    return channel_metadata
++
++
++def build_session_metadata(
++    session: Any,
++    *,
++    hardware_available: bool,
++    sample_count: Optional[int] = None,
++) -> Dict[str, Any]:
++    """Build session metadata shared by all export formats."""
++    sample_rate = float(getattr(session, "sampling_rate"))
++    n_samples = int(sample_count if sample_count is not None else getattr(session, "total_samples", 0))
++    dt_seconds = 1.0 / sample_rate
++    metadata = {
++        "schema_version": SCHEMA_VERSION,
++        "sample_rate_hz": sample_rate,
++        "sample_rate": sample_rate,
++        "sampling_rate": sample_rate,
++        "dt_seconds": dt_seconds,
++        "n_samples": n_samples,
++        "duration_s": n_samples / sample_rate if n_samples > 0 else 0.0,
++        "time_start": 0.0,
++        "time_end": (n_samples - 1) * dt_seconds if n_samples > 0 else 0.0,
++        "clock_domain": CLOCK_DOMAIN,
++        "project_name": getattr(session, "project_name", ""),
++        "session_id": getattr(session, "session_id", ""),
++        "start_time": getattr(session, "start_time").isoformat(),
++        "end_time": getattr(session, "end_time").isoformat()
++        if getattr(session, "end_time", None)
++        else None,
++        "total_samples": int(getattr(session, "total_samples", 0)),
++        "channels_count": len(getattr(session, "channels", [])),
++        "hardware_available": bool(hardware_available),
++    }
++    if getattr(session, "metadata", None):
++        metadata.update(session.metadata)
++    return metadata
++
++
++def build_csv_metadata_row(
++    sample_rate: float,
++    data_kind: str = DATA_KIND_PHYSICAL,
++    sample_count: Optional[int] = None,
++) -> Dict[str, Any]:
++    """Metadata columns repeated per CSV row for self-describing tabular export."""
++    n_samples = int(sample_count or 0)
++    dt_seconds = 1.0 / float(sample_rate)
++    return {
++        "schema_version": SCHEMA_VERSION,
++        "sample_rate_hz": float(sample_rate),
++        "dt_seconds": dt_seconds,
++        "n_samples": n_samples,
++        "duration_s": n_samples / float(sample_rate) if n_samples > 0 else 0.0,
++        "time_start": 0.0,
++        "time_end": (n_samples - 1) * dt_seconds if n_samples > 0 else 0.0,
++        "clock_domain": CLOCK_DOMAIN,
++        "data_kind": data_kind,
++    }
+diff --git a/tests/test_scientific_p0.py b/tests/test_scientific_p0.py
+new file mode 100644
+index 0000000..d1cd41b
+--- /dev/null
++++ b/tests/test_scientific_p0.py
+@@ -0,0 +1,324 @@
++import math
++import json
++import tempfile
++import unittest
++from datetime import datetime
++from pathlib import Path
++
++import numpy as np
++
++from hrneowave.acquisition.acquisition_controller import (
++    AcquisitionController,
++    AcquisitionSession,
++    create_default_maritime_config,
++)
++from hrneowave.core.session_schema import build_channel_metadata
++from hrneowave.core.optimized_goda_analyzer import OptimizedGodaAnalyzer, ProbeGeometry
++from hrneowave.core.post_processor import PostProcessor
++
++
++class ScientificP0Tests(unittest.TestCase):
++    def _build_export_controller(self):
++        controller = AcquisitionController.__new__(AcquisitionController)
++        controller.daq = None
++        controller.data_buffer = []
++        controller.last_exported_path = None
++        controller.stats = {
++            "samples_acquired": 5,
++            "acquisition_rate": 0.0,
++            "last_update": None,
++            "errors": 0,
++            "buffer_overruns": 0,
++        }
++        configs = create_default_maritime_config()
++        channels = [configs[0], configs[1]]
++        controller.current_session = AcquisitionSession(
++            session_id="scientific_p0_export",
++            project_name="scientific_p0_export",
++            start_time=datetime.now(),
++            sampling_rate=50.0,
++            total_samples=5,
++            channels=channels,
++        )
++        raw_data = np.array(
++            [
++                [0.0, 0.0],
++                [0.1, 0.2],
++                [0.2, 0.4],
++                [0.3, 0.6],
++                [0.4, 0.8],
++            ],
++            dtype=float,
++        )
++        controller.data_buffer.append({
++            "timestamp": datetime.now(),
++            "raw_data": raw_data,
++            "processed_data": controller._convert_to_physical_units(raw_data),
++            "sample_count": raw_data.shape[0],
++        })
++        return controller
++
++    def test_zero_crossing_returns_full_wave_height_for_sine(self):
++        processor = PostProcessor()
++        processor.sample_rate = 100.0
++        time = np.arange(0.0, 10.0, 1.0 / processor.sample_rate)
++        signal = np.sin(2.0 * np.pi * time)
++
++        heights = processor._extract_wave_heights(signal)
++        mean_period = processor._compute_mean_period(signal)
++
++        self.assertGreaterEqual(len(heights), 8)
++        self.assertTrue(np.allclose(heights, 2.0, atol=1e-12))
++        self.assertAlmostEqual(mean_period, 1.0, places=12)
++
++    def test_zero_crossing_removes_mean_level_and_ignores_exact_zero_artifacts(self):
++        processor = PostProcessor()
++        processor.sample_rate = 100.0
++        time = np.arange(0.0, 10.0, 1.0 / processor.sample_rate)
++        offset_signal = 1.2 + np.sin(2.0 * np.pi * time)
++        quantized_signal = np.round(np.sin(2.0 * np.pi * time), 1)
++
++        offset_heights = processor._extract_wave_heights(offset_signal)
++        quantized_heights = processor._extract_wave_heights(quantized_signal)
++
++        self.assertGreaterEqual(len(offset_heights), 8)
++        self.assertGreaterEqual(len(quantized_heights), 8)
++        self.assertTrue(np.allclose(offset_heights, 2.0, atol=1e-12))
++        self.assertTrue(np.allclose(quantized_heights, 2.0, atol=1e-12))
++        self.assertAlmostEqual(processor._compute_mean_period(quantized_signal), 1.0, places=12)
++
++    def test_psd_m0_is_variance_for_unit_sine(self):
++        for duration in (4.0, 8.0, 16.0):
++            processor = PostProcessor()
++            processor.sample_rate = 100.0
++            time = np.arange(0.0, duration, 1.0 / processor.sample_rate)
++            signal = np.sin(2.0 * np.pi * 2.0 * time)
++            processor.current_data = {"channels": {"eta": signal}}
++
++            spectrum = processor._compute_spectral_analysis()["eta"]
++
++            self.assertAlmostEqual(spectrum["m0"], 0.5, places=5)
++            self.assertAlmostEqual(spectrum["Hm0"], 4.0 * math.sqrt(0.5), places=5)
++            self.assertAlmostEqual(spectrum["peak_frequency"], 2.0, delta=0.1)
++            self.assertEqual(spectrum["method"], "one_sided_periodogram_psd")
++
++    def test_complex_goda_svd_recovers_incident_and_reflected_components(self):
++        geometry = ProbeGeometry(
++            positions=np.array([0.0, 0.4, 0.9, 1.4]),
++            water_depth=1.0,
++            frequency_range=(0.1, 5.0),
++        )
++        analyzer = OptimizedGodaAnalyzer(geometry, enable_cache=False)
++        frequency = 0.8
++        wave_number = analyzer._solve_dispersion_relation(2.0 * np.pi * frequency)
++        matrix = np.column_stack(
++            [
++                np.exp(1j * wave_number * geometry.positions),
++                np.exp(-1j * wave_number * geometry.positions),
++            ]
++        )
++        true_components = np.array([1.0 + 0.3j, 0.25 - 0.2j])
++
++        result = analyzer.analyze_frequency(matrix @ true_components, frequency)
++
++        self.assertAlmostEqual(result.incident_amplitude, abs(true_components[0]), places=12)
++        self.assertAlmostEqual(result.reflected_amplitude, abs(true_components[1]), places=12)
++        self.assertAlmostEqual(
++            result.reflection_coefficient,
++            abs(true_components[1]) / abs(true_components[0]),
++            places=12,
++        )
++
++    def test_pressure_simulation_stays_inside_default_daq_range(self):
++        controller = AcquisitionController.__new__(AcquisitionController)
++        controller._simulation_sample_index = 0
++        controller._simulation_channel_state = {}
++        configs = create_default_maritime_config()
++        controller.current_session = AcquisitionSession(
++            session_id="scientific_p0",
++            project_name="scientific_p0",
++            start_time=datetime.now(),
++            sampling_rate=100.0,
++            channels=[configs[index] for index in sorted(configs)],
++        )
++
++        raw_data = controller._generate_simulation_data()
++        pressure_raw = raw_data[:, 2]
++
++        self.assertFalse(np.any(pressure_raw < -5.0))
++        self.assertFalse(np.any(pressure_raw > 5.0))
++
++    def test_calibration_contract_does_not_return_fake_ok_coefficients(self):
++        controller = AcquisitionController.__new__(AcquisitionController)
++        controller.daq = None
++        configs = create_default_maritime_config()
++        controller.channels_config = {0: configs[0]}
++
++        result = controller.calibrate_system()
++        channel_result = result["channels"][0]
++
++        self.assertFalse(result["calibration_valid"])
++        self.assertEqual(result["calibration_status"], "not_performed")
++        self.assertEqual(result["system_status"], "not_calibrated")
++        self.assertEqual(channel_result["calibration_status"], "not_performed")
++        self.assertIn("sensitivity_v_per_unit", channel_result)
++        self.assertNotIn("offset_correction", channel_result)
++        self.assertNotIn("scale_correction", channel_result)
++
++    def test_time_vector_monotonic_and_dt(self):
++        controller = self._build_export_controller()
++        time_vector = controller._build_time_vector(5)
++
++        self.assertTrue(np.all(np.diff(time_vector) > 0.0))
++        self.assertTrue(np.allclose(np.diff(time_vector), 1.0 / 50.0))
++        self.assertAlmostEqual(time_vector[0], 0.0)
++        self.assertAlmostEqual(time_vector[-1], 4.0 / 50.0)
++
++    def test_export_contains_sample_rate_units_and_calibration_metadata(self):
++        controller = self._build_export_controller()
++
++        with tempfile.TemporaryDirectory() as tmp:
++            output_dir = Path(tmp)
++            json_path = output_dir / "session.json"
++            hdf5_path = output_dir / "session.h5"
++            csv_path = output_dir / "session.csv"
++
++            self.assertTrue(controller._export_json(str(json_path)))
++            self.assertTrue(controller._export_hdf5(str(hdf5_path)))
++            self.assertTrue(controller._export_csv(str(csv_path)))
++
++            payload = json.loads(json_path.read_text(encoding="utf-8"))
++            metadata = payload["metadata"]
++            channel_metadata = payload["channel_metadata"][0]
++
++            self.assertEqual(metadata["sample_rate_hz"], 50.0)
++            self.assertEqual(metadata["dt_seconds"], 1.0 / 50.0)
++            self.assertEqual(metadata["n_samples"], 5)
++            self.assertEqual(metadata["duration_s"], 5.0 / 50.0)
++            self.assertEqual(metadata["time_start"], 0.0)
++            self.assertEqual(metadata["time_end"], 4.0 / 50.0)
++            self.assertIn("channel_units", metadata)
++            self.assertIn("sensor_id", channel_metadata)
++            self.assertIn("calibration_status", channel_metadata)
++            self.assertIn("calibration_coefficients", channel_metadata)
++
++            import h5py
++
++            with h5py.File(hdf5_path, "r") as handle:
++                self.assertEqual(handle.attrs["sample_rate_hz"], 50.0)
++                self.assertEqual(handle.attrs["dt_seconds"], 1.0 / 50.0)
++                self.assertEqual(handle.attrs["n_samples"], 5)
++                self.assertIn("metadata", handle)
++                self.assertIn("channels", handle["metadata"])
++
++            csv_text = csv_path.read_text(encoding="utf-8")
++            self.assertIn("sample_rate_hz", csv_text.splitlines()[0])
++            self.assertIn("dt_seconds", csv_text.splitlines()[0])
++            self.assertIn("n_samples", csv_text.splitlines()[0])
++            sidecar_path = Path(f"{csv_path}.metadata.json")
++            self.assertTrue(sidecar_path.exists())
++            sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
++            self.assertIn("channel_metadata", sidecar)
++            self.assertIn("calibration_status", sidecar["channel_metadata"][0])
++
++    def test_analysis_export_contains_processing_metadata_and_warnings(self):
++        processor = PostProcessor()
++        processor.sample_rate = 100.0
++        time = np.arange(0.0, 2.0, 1.0 / processor.sample_rate)
++        processor.current_data = {
++            "metadata": {"sample_rate_hz": processor.sample_rate},
++            "time": time,
++            "channels": {"eta": np.sin(2.0 * np.pi * time)},
++            "channel_metadata": build_channel_metadata([create_default_maritime_config()[0]]),
++        }
++
++        self.assertTrue(processor.run_analysis())
++        metadata = processor.current_analysis["metadata"]
++
++        self.assertEqual(metadata["schema_version"], "1.0.0")
++        self.assertEqual(metadata["sample_rate_hz"], 100.0)
++        self.assertEqual(metadata["dt_seconds"], 0.01)
++        self.assertEqual(metadata["n_samples"], len(time))
++        self.assertEqual(metadata["processing_method"], "post_processor.run_analysis")
++        self.assertEqual(metadata["psd_method"], "one_sided_periodogram_psd")
++        self.assertEqual(metadata["window"], "hann")
++        self.assertTrue(metadata["detrend"])
++        self.assertTrue(any("CALIBRATION_NOT_PERFORMED" in warning for warning in metadata["warnings"]))
++
++    def test_schema_requires_calibration_metadata(self):
++        config = create_default_maritime_config()[0]
++        metadata = build_channel_metadata([config])[0]
++
++        self.assertIn("sensor_id", metadata)
++        self.assertIn("calibration_id", metadata)
++        self.assertIn("calibration_status", metadata)
++        self.assertIn("calibration_coefficients", metadata)
++        self.assertIn("conversion_formula", metadata)
++        self.assertEqual(metadata["calibration_status"], "unverified")
++
++    def test_csv_round_trip_uses_exact_time_column_not_time_start(self):
++        controller = self._build_export_controller()
++
++        with tempfile.TemporaryDirectory() as tmp:
++            csv_path = Path(tmp) / "session.csv"
++            self.assertTrue(controller._export_csv(str(csv_path)))
++
++            processor = PostProcessor()
++            self.assertTrue(processor.load_data_file(str(csv_path)))
++
++            expected_time = np.arange(5, dtype=float) / 50.0
++            self.assertTrue(np.allclose(processor.current_data["time"], expected_time))
++            self.assertEqual(processor.current_data["metadata"]["sample_rate_hz"], 50.0)
++            self.assertTrue(processor.current_data["channel_metadata"])
++            self.assertIn("calibration_status", processor.current_data["channel_metadata"][0])
++
++    def test_loader_rejects_sample_rate_inconsistent_with_time_axis(self):
++        with tempfile.TemporaryDirectory() as tmp:
++            csv_path = Path(tmp) / "bad_time.csv"
++            csv_path.write_text(
++                "\n".join([
++                    "schema_version,sample_rate_hz,dt_seconds,n_samples,duration_s,time_start,time_end,clock_domain,data_kind,time,channel_00",
++                    "1.0.0,100,0.01,3,0.03,0,0.02,relative_monotonic_seconds,physical,0.00,0.0",
++                    "1.0.0,100,0.01,3,0.03,0,0.02,relative_monotonic_seconds,physical,0.02,1.0",
++                    "1.0.0,100,0.01,3,0.03,0,0.02,relative_monotonic_seconds,physical,0.04,0.0",
++                ]),
++                encoding="utf-8",
++            )
++
++            processor = PostProcessor()
++            self.assertFalse(processor.load_data_file(str(csv_path)))
++
++    def test_analysis_rejects_nan_without_silent_time_compression(self):
++        processor = PostProcessor()
++        processor.sample_rate = 100.0
++        values = np.sin(2.0 * np.pi * np.arange(0.0, 2.0, 0.01))
++        values[50] = np.nan
++        processor.current_data = {
++            "metadata": {"sample_rate_hz": processor.sample_rate},
++            "time": np.arange(values.size) / processor.sample_rate,
++            "channels": {"eta": values},
++        }
++
++        self.assertFalse(processor.run_analysis())
++
++    def test_hdf5_round_trip_preserves_channel_calibration_metadata(self):
++        controller = self._build_export_controller()
++
++        with tempfile.TemporaryDirectory() as tmp:
++            hdf5_path = Path(tmp) / "session.h5"
++            self.assertTrue(controller._export_hdf5(str(hdf5_path)))
++
++            processor = PostProcessor()
++            self.assertTrue(processor.load_data_file(str(hdf5_path)))
++
++            channel_metadata = processor.current_data["channel_metadata"]
++            self.assertTrue(channel_metadata)
++            self.assertIn("sensor_id", channel_metadata[0])
++            self.assertIn("calibration_id", channel_metadata[0])
++            self.assertIn("calibration_status", channel_metadata[0])
++            self.assertIn("calibration_coefficients", channel_metadata[0])
++            self.assertEqual(channel_metadata[0]["calibration_status"], "unverified")
++
++
++if __name__ == "__main__":
++    unittest.main()

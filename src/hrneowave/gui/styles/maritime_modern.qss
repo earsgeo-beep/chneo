@@ -1,559 +1,431 @@
-/* =============================================================================
-   CHNeoWave - Thème Maritime Professionnel 2025
-   Interface professionnelle pour laboratoire d'étude maritime
-   Palette Maritime Professionnelle - Recherches Design Maritime 2025
-   ============================================================================= */
+/* CHNeoWave — canonical laboratory interface
+   One palette, one density scale, one component hierarchy. */
 
-/* Feuille autonome chargée directement par ThemeManager */
-
-/* =============================================================================
-   STYLES GLOBAUX - PALETTE MARITIME PROFESSIONNELLE
-   ============================================================================= */
-
-QMainWindow {
-    background-color: #d3edf9; /* Frost White - Blanc glacé pour les fonds */
-    color: #0A1929; /* Deep Navy - Textes principaux */
-    font-family: "Inter", "Segoe UI", "Roboto", sans-serif;
-    font-size: 13px; /* Fibonacci F7 - Body text */
-    font-weight: normal;
-    padding: 34px; /* Fibonacci F9 - Espacement large φ */
+QMainWindow,
+QDialog {
+    background-color: #F3F6F8;
+    color: #172B35;
 }
 
 QWidget {
-    background-color: transparent;
-    color: #0A1929; /* Deep Navy - Textes principaux */
-    font-family: "Inter", "Segoe UI", "Roboto", sans-serif;
-    font-size: 13px; /* Fibonacci F7 - Body text */
+    color: #172B35;
+    font-family: "Segoe UI", "Inter", sans-serif;
+    font-size: 13px;
 }
 
-/* =============================================================================
-   BOUTONS MODERNES
-   ============================================================================= */
+QWidget#workspace,
+QWidget#mainContent,
+QWidget#contentCanvas,
+QScrollArea#pageScroll,
+QScrollArea#pageScroll > QWidget > QWidget {
+    background-color: #F3F6F8;
+}
 
-QPushButton {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #0478b9, stop:1 #00558c); /* Steel Blue vers Harbor Blue */
-    color: white;
+/* Application shell */
+QFrame#main_sidebar {
+    background-color: #0B1F2A;
     border: none;
-    border-radius: 8px; /* Fibonacci F6 */
-    padding: 13px 21px; /* Fibonacci F7 x F8 - Espacements φ */
-    font-weight: bold;
-    font-size: 13px; /* Fibonacci F7 - Body text */
-    min-height: 34px; /* Fibonacci F9 - Hauteur φ */
+    border-right: 1px solid #183846;
 }
 
-QPushButton:hover {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #0478b9, stop:1 #00558c); /* Steel Blue vers Harbor Blue */
-    border: 1px solid #00558c; /* Harbor Blue */
+QFrame#sidebar_header {
+    background-color: #0B1F2A;
+    border: none;
+    border-bottom: 1px solid #183846;
 }
 
-QPushButton:pressed {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #00558c, stop:1 #003d66); /* Harbor Blue vers plus foncé */
+QLabel#brandMark {
+    background-color: #1A7188;
+    color: #FFFFFF;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 700;
 }
 
-QPushButton:disabled {
-    background-color: #E1F5FE; /* Seafoam */
-    color: #37474F; /* Storm Gray */
-    border: 1px solid #E1F5FE;
+QLabel#brandName {
+    color: #F4F8FA;
+    font-size: 16px;
+    font-weight: 700;
 }
 
-/* Boutons secondaires */
-QPushButton[class="secondary"] {
-    background-color: white;
-    color: #00558c; /* Harbor Blue */
-    border: 2px solid #00558c; /* Harbor Blue */
+QLabel#brandDescriptor,
+QLabel#navSection,
+QLabel#sidebarVersion {
+    color: #8EA6B2;
+    font-size: 10px;
+    font-weight: 600;
 }
 
-QPushButton[class="secondary"]:hover {
-    background-color: #d3edf9; /* Frost White */
-    border-color: #0478b9; /* Steel Blue */
+QPushButton#navButton {
+    background-color: transparent;
+    color: #B9C9D1;
+    border: none;
+    border-left: 3px solid transparent;
+    border-radius: 0;
+    min-height: 44px;
+    padding: 0 16px;
+    text-align: left;
+    font-weight: 500;
 }
 
-/* Boutons de succès */
-QPushButton[class="success"] {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #00ACC1, stop:1 #0097A7); /* Tidal Green */
+QPushButton#navButton:hover {
+    background-color: #112C39;
+    color: #FFFFFF;
 }
 
-QPushButton[class="success"]:hover {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #26C6DA, stop:1 #00ACC1); /* Tidal Green plus clair */
+QPushButton#navButton[active="true"] {
+    background-color: #153846;
+    color: #FFFFFF;
+    border-left: 3px solid #42B8C6;
+    font-weight: 600;
 }
 
-/* Boutons d'erreur */
-QPushButton[class="error"] {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #FF6B47, stop:1 #E55A3C); /* Coral Alert */
+QFrame#sidebar_footer {
+    background-color: #091A23;
+    border: none;
+    border-top: 1px solid #183846;
 }
 
-QPushButton[class="error"]:hover {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #FF8A65, stop:1 #FF6B47); /* Coral Alert plus clair */
+QLabel#sidebarStatusDot { color: #53C6A0; }
+QLabel#sidebarStatus { color: #B9C9D1; font-size: 11px; }
+
+QFrame#applicationHeader {
+    background-color: #FFFFFF;
+    border: none;
+    border-bottom: 1px solid #DCE5EA;
 }
 
-/* =============================================================================
-   CHAMPS DE SAISIE MODERNES
-   ============================================================================= */
-
-QLineEdit, QTextEdit, QPlainTextEdit {
-    background-color: white;
-    border: 2px solid #E1F5FE; /* Seafoam - Bordures douces */
-    border-radius: 8px; /* Fibonacci F6 */
-    padding: 13px 21px; /* Fibonacci F7 x F8 - Espacements φ */
-    font-size: 13px; /* Fibonacci F7 - Body text */
-    color: #0A1929; /* Deep Navy - Texte principal */
-    selection-background-color: #d3edf9; /* Frost White pour sélection */
-    min-height: 21px; /* Fibonacci F8 - Hauteur harmonieuse */
+QLabel#pageEyebrow {
+    color: #1A7188;
+    font-size: 10px;
+    font-weight: 700;
 }
 
-QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
-    border-color: #0478b9; /* Steel Blue pour focus */
-    background-color: #d3edf9; /* Frost White léger */
+QLabel#pageTitle {
+    color: #172B35;
+    font-size: 20px;
+    font-weight: 650;
 }
 
-QLineEdit:disabled, QTextEdit:disabled, QPlainTextEdit:disabled {
-    background-color: #E1F5FE; /* Seafoam */
-    color: #37474F; /* Storm Gray */
-    border-color: #E1F5FE;
+QLabel#pageSubtitle,
+QLabel#mutedText,
+QLabel[role="muted"] {
+    color: #667C88;
 }
 
-/* =============================================================================
-   LISTES ET COMBOBOX
-   ============================================================================= */
+QLabel#offlineBadge,
+QLabel[state="neutral"] {
+    background-color: #EDF3F5;
+    color: #4E6673;
+    border: 1px solid #DCE5EA;
+    border-radius: 10px;
+    padding: 4px 9px;
+    font-size: 10px;
+    font-weight: 700;
+}
 
+QLabel[state="success"] {
+    background-color: #E6F4EF;
+    color: #126A56;
+    border: 1px solid #BFE4D7;
+    border-radius: 10px;
+    padding: 4px 9px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+QLabel[state="warning"] {
+    background-color: #FFF3DE;
+    color: #8B570F;
+    border: 1px solid #F0D19C;
+    border-radius: 10px;
+    padding: 4px 9px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+QLabel[state="danger"] {
+    background-color: #FCEBEC;
+    color: #99383F;
+    border: 1px solid #EFC8CB;
+    border-radius: 10px;
+    padding: 4px 9px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+/* Typography and structured surfaces */
+QLabel#viewTitle {
+    color: #172B35;
+    font-size: 24px;
+    font-weight: 650;
+}
+
+QLabel#sectionTitle {
+    color: #203843;
+    font-size: 14px;
+    font-weight: 650;
+}
+
+QLabel#metricLabel {
+    color: #667C88;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+QLabel#metricValue {
+    color: #172B35;
+    font-size: 21px;
+    font-weight: 650;
+}
+
+QFrame#surface,
+QFrame#projectForm,
+QFrame#contextPanel,
+QFrame#metricCard,
+QFrame#workflowCard,
+QFrame#analysis_tools_panel,
+QFrame#analysis_results_area,
+QFrame#report_config_panel,
+QFrame#report_preview_area,
+QFrame#operationalHeader {
+    background-color: #FFFFFF;
+    border: 1px solid #DCE5EA;
+    border-radius: 8px;
+}
+
+QFrame#metricCard {
+    border-top: 3px solid #2B8298;
+}
+
+QFrame#workflowCard[active="true"] {
+    border-left: 3px solid #1A7188;
+}
+
+QFrame#quietSurface {
+    background-color: #F8FAFB;
+    border: 1px solid #E5ECEF;
+    border-radius: 6px;
+}
+
+QFrame#divider {
+    background-color: #DCE5EA;
+    border: none;
+    max-height: 1px;
+}
+
+/* Inputs */
+QLineEdit,
+QTextEdit,
+QPlainTextEdit,
+QDateEdit,
+QDoubleSpinBox,
+QSpinBox,
 QComboBox {
-    background-color: white;
-    border: 2px solid #E1F5FE; /* Seafoam - Bordures douces */
-    border-radius: 8px; /* Fibonacci F6 */
-    padding: 13px 21px; /* Fibonacci F7 x F8 - Espacements φ */
-    font-size: 13px; /* Fibonacci F7 - Body text */
-    color: #0A1929; /* Deep Navy - Texte principal */
-    min-height: 34px; /* Fibonacci F9 - Hauteur φ */
+    background-color: #FFFFFF;
+    color: #172B35;
+    border: 1px solid #C9D6DC;
+    border-radius: 5px;
+    padding: 7px 9px;
+    min-height: 22px;
+    selection-background-color: #1A7188;
+    selection-color: #FFFFFF;
 }
 
-QComboBox:hover {
-    border-color: #00ACC1; /* Tidal Green pour survol */
-}
-
+QLineEdit:focus,
+QTextEdit:focus,
+QPlainTextEdit:focus,
+QDateEdit:focus,
+QDoubleSpinBox:focus,
+QSpinBox:focus,
 QComboBox:focus {
-    border-color: #0478b9; /* Steel Blue pour focus */
+    border: 2px solid #1A7188;
+    padding: 6px 8px;
+}
+
+QLineEdit:disabled,
+QTextEdit:disabled,
+QComboBox:disabled,
+QSpinBox:disabled,
+QDoubleSpinBox:disabled {
+    background-color: #EEF2F4;
+    color: #8699A3;
 }
 
 QComboBox::drop-down {
     border: none;
-    width: 30px;
-}
-
-QComboBox::down-arrow {
-    width: 16px;
-    height: 16px;
-    border: none;
-    background-color: #37474F; /* Storm Gray */
+    width: 26px;
 }
 
 QComboBox QAbstractItemView {
-    background-color: white;
-    border: 1px solid #E1F5FE; /* Seafoam */
-    border-radius: 8px;
-    padding: 8px;
-    selection-background-color: #d3edf9; /* Frost White pour sélection */
-    selection-color: #00558c; /* Harbor Blue */
+    background-color: #FFFFFF;
+    color: #172B35;
+    border: 1px solid #C9D6DC;
+    selection-background-color: #DCEEF2;
+    selection-color: #172B35;
 }
 
-QListWidget {
-    background-color: white;
-    border: 1px solid #E1F5FE; /* Seafoam */
-    border-radius: 8px; /* Fibonacci F6 */
-    padding: 13px; /* Fibonacci F7 - Espacement moyen */
-    alternate-background-color: #d3edf9; /* Frost White alternance */
+QCheckBox { spacing: 8px; color: #405965; }
+QCheckBox::indicator { width: 16px; height: 16px; }
+
+/* Buttons: one visual priority per view */
+QPushButton {
+    background-color: #1A7188;
+    color: #FFFFFF;
+    border: 1px solid #1A7188;
+    border-radius: 5px;
+    padding: 8px 14px;
+    min-height: 20px;
+    font-weight: 600;
 }
 
-QListWidget::item {
-    padding: 13px 21px; /* Fibonacci F7 x F8 - Espacements φ */
-    border-radius: 5px; /* Fibonacci F5 - Rayon harmonieux */
-    margin: 3px 0; /* Fibonacci F4 */
-    color: #0A1929; /* Deep Navy */
-    font-size: 13px; /* Fibonacci F7 - Body text */
-    min-height: 21px; /* Fibonacci F8 */
+QPushButton:hover { background-color: #145E72; border-color: #145E72; }
+QPushButton:pressed { background-color: #0F4B5C; }
+QPushButton:disabled {
+    background-color: #E3E9EC;
+    color: #8798A1;
+    border-color: #D7E0E4;
 }
 
-QListWidget::item:selected {
-    background-color: #d3edf9; /* Frost White pour sélection */
-    color: #00558c; /* Harbor Blue */
+QPushButton[kind="secondary"],
+QPushButton#secondaryButton {
+    background-color: #FFFFFF;
+    color: #38515D;
+    border: 1px solid #C9D6DC;
 }
 
-QListWidget::item:hover {
-    background-color: #E1F5FE; /* Seafoam pour survol */
+QPushButton[kind="secondary"]:hover,
+QPushButton#secondaryButton:hover {
+    background-color: #F3F7F8;
+    color: #145E72;
+    border-color: #88ADB9;
 }
 
-/* =============================================================================
-   TABLEAUX MODERNES
-   ============================================================================= */
-
-QTableWidget, QTableView {
-    background-color: white;
-    border: 1px solid #E1F5FE; /* Seafoam */
-    border-radius: 8px; /* Fibonacci F6 */
-    gridline-color: #E1F5FE; /* Seafoam pour les lignes de grille */
-    selection-background-color: #d3edf9; /* Frost White pour sélection */
-    alternate-background-color: #d3edf9; /* Frost White alternance */
-    color: #0A1929; /* Deep Navy pour le texte */
-    font-size: 13px; /* Fibonacci F7 - Body text */
+QPushButton[kind="quiet"] {
+    background-color: transparent;
+    color: #4E6673;
+    border-color: transparent;
 }
 
-QTableWidget::item, QTableView::item {
-    padding: 8px 13px; /* Fibonacci F6 x F7 - Espacements φ */
-    border-bottom: 1px solid #E1F5FE; /* Seafoam */
-    min-height: 21px; /* Fibonacci F8 - Hauteur harmonieuse */
+QPushButton[kind="danger"] {
+    background-color: #FFFFFF;
+    color: #A23F45;
+    border-color: #DCA9AD;
 }
 
-QTableWidget::item:selected, QTableView::item:selected {
-    background-color: #d3edf9; /* Frost White pour sélection */
-    color: #00558c; /* Harbor Blue */
+QPushButton[kind="primaryLarge"] {
+    min-height: 30px;
+    padding: 10px 18px;
+    font-size: 13px;
 }
 
-QHeaderView::section {
-    background-color: #d3edf9; /* Frost White */
-    color: #37474F; /* Storm Gray */
-    padding: 13px 21px; /* Fibonacci F7 x F8 - Espacements φ */
-    border: none;
-    border-bottom: 2px solid #E1F5FE; /* Seafoam */
-    font-weight: bold;
-    font-size: 13px; /* Fibonacci F7 - Body text */
-    min-height: 34px; /* Fibonacci F9 - Hauteur φ */
-}
-
-QHeaderView::section:hover {
-    background-color: #E1F5FE; /* Seafoam pour survol */
-}
-
-/* =============================================================================
-   ONGLETS MODERNES
-   ============================================================================= */
-
-QTabWidget::pane {
-    background-color: white;
-    border: 1px solid #E1F5FE; /* Seafoam */
-    border-radius: 8px; /* Fibonacci F6 */
-}
-
-QTabBar::tab {
-    background-color: #d3edf9; /* Frost White */
-    color: #37474F; /* Storm Gray */
-    padding: 13px 21px; /* Fibonacci F7 x F8 - Espacements φ */
-    border-top-left-radius: 8px; /* Fibonacci F6 */
-    border-top-right-radius: 8px; /* Fibonacci F6 */
-    font-weight: normal;
-    font-size: 13px; /* Fibonacci F7 - Body text */
-    min-height: 21px; /* Fibonacci F8 - Hauteur harmonieuse */
-}
-
-QTabBar::tab:selected {
-    background-color: white;
-    color: #00558c; /* Harbor Blue */
-    border-bottom: 3px solid #0478b9; /* Steel Blue */
-}
-
-QTabBar::tab:hover:!selected {
-    background-color: #E1F5FE; /* Seafoam pour survol */
-    color: #0A1929; /* Deep Navy */
-}
-
-/* =============================================================================
-   BARRES DE PROGRESSION
-   ============================================================================= */
-
-QProgressBar {
-    background-color: #E1F5FE; /* Seafoam */
-    border: none;
-    border-radius: 8px; /* Fibonacci F6 */
-    height: 8px; /* Fibonacci F6 */
-    font-size: 8px; /* Fibonacci F6 - Caption text */
-}
-
-QProgressBar::chunk {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                                stop:0 #00ACC1, stop:1 #0478b9); /* Tidal Green vers Steel Blue */
-    border-radius: 8px; /* Fibonacci F6 */
-}
-
-/* =============================================================================
-   SLIDERS MODERNES
-   ============================================================================= */
-
-QSlider::groove:horizontal {
-    background-color: #E1F5FE; /* Seafoam */
-    height: 8px; /* Fibonacci F6 - Micro-espacement */
-    border-radius: 5px; /* Fibonacci F5 */
-}
-
-QSlider::handle:horizontal {
-    background-color: #0478b9; /* Steel Blue */
-    border: 2px solid white;
-    width: 21px; /* Fibonacci F8 - Espacement moyen */
-    height: 21px; /* Fibonacci F8 - Espacement moyen */
-    border-radius: 13px; /* Fibonacci F7 - Rayon φ */
-}
-
-QSlider::handle:horizontal:hover {
-    background-color: #00558c; /* Harbor Blue */
-}
-
-QSlider::sub-page:horizontal {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                                stop:0 #00ACC1, stop:1 #0478b9); /* Tidal Green vers Steel Blue */
-    border-radius: 3px;
-}
-
-/* =============================================================================
-   GROUPBOX ET FRAMES
-   ============================================================================= */
-
+/* Tabs and groups */
 QGroupBox {
-    background-color: white;
-    border: 1px solid #E1F5FE; /* Seafoam */
-    border-radius: 8px; /* Fibonacci F6 */
-    padding: 21px; /* Fibonacci F8 - Espacement moyen */
-    font-weight: bold;
-    font-size: 13px; /* Fibonacci F7 - Body text */
-    color: #37474F; /* Storm Gray */
+    background-color: #FFFFFF;
+    border: 1px solid #DCE5EA;
+    border-radius: 7px;
+    margin-top: 12px;
+    padding: 14px 12px 10px 12px;
+    font-weight: 650;
+    color: #304A56;
 }
 
 QGroupBox::title {
     subcontrol-origin: margin;
-    left: 21px; /* Fibonacci F8 - Espacement moyen */
-    padding: 0 13px; /* Fibonacci F7 - Espacement petit */
-    background-color: white;
-    color: #00558c; /* Harbor Blue */
-    font-size: 13px; /* Fibonacci F7 - Body text */
-    font-weight: bold;
+    left: 10px;
+    padding: 0 5px;
+    background-color: #FFFFFF;
 }
 
-QFrame {
-    background-color: white;
-    border: 1px solid #E1F5FE; /* Seafoam */
-    border-radius: 8px; /* Fibonacci F6 */
-}
-
-/* =============================================================================
-   SCROLLBARS MODERNES
-   ============================================================================= */
-
-QScrollBar:vertical {
-    background-color: #d3edf9; /* Frost White */
-    width: 12px;
+QTabWidget::pane {
+    background-color: #FFFFFF;
+    border: 1px solid #DCE5EA;
     border-radius: 6px;
-    margin: 0;
+    top: -1px;
 }
 
-QScrollBar::handle:vertical {
-    background-color: #37474F; /* Storm Gray */
-    border-radius: 6px;
-    min-height: 20px;
-    margin: 2px;
-}
-
-QScrollBar::handle:vertical:hover {
-    background-color: #0A1929; /* Deep Navy */
-}
-
-QScrollBar::add-line:vertical,
-QScrollBar::sub-line:vertical {
-    height: 0;
-    width: 0;
-}
-
-QScrollBar:horizontal {
-    background-color: #d3edf9; /* Frost White */
-    height: 12px;
-    border-radius: 6px;
-}
-
-QScrollBar::handle:horizontal {
-    background-color: #37474F; /* Storm Gray */
-    border-radius: 6px;
-    min-width: 20px;
-}
-
-QScrollBar::handle:horizontal:hover {
-    background-color: #0A1929; /* Deep Navy */
-}
-
-/* =============================================================================
-   MENUS ET BARRES D'OUTILS
-   ============================================================================= */
-
-QMenuBar {
-    background-color: white;
-    color: #37474F; /* Storm Gray */
-    border-bottom: 1px solid #E1F5FE; /* Seafoam */
-    padding: 8px 0; /* Fibonacci F6 - Micro-espacement */
-    font-size: 13px; /* Fibonacci F7 - Body text */
-}
-
-QMenuBar::item {
-    padding: 8px 21px; /* Fibonacci F6 x F8 - Espacement φ */
-    border-radius: 5px; /* Fibonacci F5 - Rayon harmonieux */
-}
-
-QMenuBar::item:selected {
-    background-color: #d3edf9; /* Frost White */
-    color: #00558c; /* Harbor Blue */
-}
-
-QMenu {
-    background-color: white;
-    border: 1px solid #E1F5FE; /* Seafoam */
-    border-radius: 8px; /* Fibonacci F6 */
-    padding: 13px 0; /* Fibonacci F7 - Espacement petit */
-}
-
-QMenu::item {
-    padding: 8px 21px; /* Fibonacci F6 x F8 - Espacement φ */
-    border-radius: 5px; /* Fibonacci F5 - Rayon harmonieux */
-    font-size: 13px; /* Fibonacci F7 - Body text */
-}
-
-QMenu::item:selected {
-    background-color: #d3edf9; /* Frost White */
-    color: #00558c; /* Harbor Blue */
-}
-
-QToolBar {
-    background-color: white;
-    border: none;
-    spacing: 8px;
-    padding: 8px;
-}
-
-QToolButton {
+QTabBar::tab {
     background-color: transparent;
+    color: #667C88;
     border: none;
-    border-radius: 6px;
+    border-bottom: 2px solid transparent;
+    padding: 10px 16px;
+    font-weight: 600;
+}
+
+QTabBar::tab:selected {
+    color: #145E72;
+    border-bottom-color: #1A7188;
+}
+
+QTabBar::tab:hover:!selected { color: #304A56; background-color: #F3F7F8; }
+
+/* Tables and lists */
+QTableWidget,
+QTableView,
+QListWidget {
+    background-color: #FFFFFF;
+    alternate-background-color: #F7F9FA;
+    color: #203843;
+    border: 1px solid #DCE5EA;
+    border-radius: 5px;
+    gridline-color: #E8EEF1;
+    selection-background-color: #D9EBEF;
+    selection-color: #172B35;
+}
+
+QTableWidget::item,
+QTableView::item,
+QListWidget::item { padding: 7px 9px; }
+
+QListWidget::item { border-bottom: 1px solid #EEF2F4; }
+QListWidget::item:selected { color: #145E72; font-weight: 600; }
+
+QHeaderView::section {
+    background-color: #EEF3F5;
+    color: #405965;
+    border: none;
+    border-right: 1px solid #DCE5EA;
+    border-bottom: 1px solid #D3DEE3;
     padding: 8px;
-    color: #37474F; /* Storm Gray */
+    font-size: 11px;
+    font-weight: 650;
 }
 
-QToolButton:hover {
-    background-color: #d3edf9; /* Frost White */
-    color: #00558c; /* Harbor Blue */
+/* Feedback and utility */
+QProgressBar {
+    background-color: #E5ECEF;
+    border: none;
+    border-radius: 3px;
+    height: 7px;
+    text-align: center;
 }
 
-QToolButton:pressed {
-    background-color: #E1F5FE; /* Seafoam */
+QProgressBar::chunk { background-color: #1A7188; border-radius: 3px; }
+
+QSplitter::handle { background-color: #DCE5EA; }
+QSplitter::handle:horizontal { width: 1px; }
+QSplitter::handle:vertical { height: 1px; }
+
+QScrollArea { border: none; background-color: transparent; }
+QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }
+QScrollBar::handle:vertical { background: #B7C6CD; border-radius: 4px; min-height: 30px; }
+QScrollBar::handle:vertical:hover { background: #8FA4AE; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar:horizontal { background: transparent; height: 10px; margin: 2px; }
+QScrollBar::handle:horizontal { background: #B7C6CD; border-radius: 4px; min-width: 30px; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
+
+QTextEdit#reportDocument {
+    background-color: #FFFFFF;
+    border: 1px solid #D3DEE3;
+    padding: 18px;
+    font-family: "Segoe UI", sans-serif;
 }
-
-/* =============================================================================
-   DOCK WIDGETS
-   ============================================================================= */
-
-QDockWidget {
-    background-color: white;
-    border: 1px solid #E1F5FE; /* Seafoam */
-    border-radius: 8px;
-    titlebar-close-icon: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEyIDRMNCA0TDQgMTJMMTIgMTJMMTIgNFoiIHN0cm9rZT0iIzM3NDc0RiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+);
-    titlebar-normal-icon: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTYgMkgxNFYxMEgxMlY0SDZWMloiIHN0cm9rZT0iIzM3NDc0RiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+);
-}
-
-QDockWidget::title {
-    background-color: #d3edf9; /* Frost White */
-    color: #37474F; /* Storm Gray */
-    padding: 12px 16px;
-    border-top-left-radius: 8px;
-    border-top-right-radius: 8px;
-    border-bottom: 1px solid #E1F5FE; /* Seafoam */
-    font-weight: bold;
-}
-
-/* =============================================================================
-   SPLITTERS
-   ============================================================================= */
-
-QSplitter::handle {
-    background-color: #E1F5FE; /* Seafoam */
-}
-
-QSplitter::handle:horizontal {
-    width: 2px;
-}
-
-QSplitter::handle:vertical {
-    height: 2px;
-}
-
-QSplitter::handle:hover {
-    background-color: #0478b9; /* Steel Blue */
-}
-
-/* =============================================================================
-   TOOLTIPS
-   ============================================================================= */
 
 QToolTip {
-    background-color: #0A1929; /* Deep Navy */
-    color: white;
-    border: none;
-    border-radius: 8px; /* Rayon moderne */
-    padding: 8px 13px; /* Golden Ratio - Espacement petit */
-    font-size: 12px;
-}
-
-/* =============================================================================
-   CLASSES UTILITAIRES
-   ============================================================================= */
-
-.card {
-    background-color: white;
-    border: 1px solid #E1F5FE; /* Seafoam */
-    border-radius: 12px;
-    padding: 24px;
-}
-
-.card-shadow {
-    background-color: white;
-    border: 1px solid #E1F5FE; /* Seafoam */
-    border-radius: 12px;
-    padding: 24px;
-}
-
-.text-primary {
-    color: #00558c; /* Harbor Blue */
-}
-
-.text-secondary {
-    color: #37474F; /* Storm Gray */
-}
-
-.text-success {
-    color: #00ACC1; /* Tidal Green */
-}
-
-.text-warning {
-    color: #f59e0b;
-}
-
-.text-error {
-    color: #FF6B47; /* Coral Alert */
-}
-
-.bg-primary {
-    background-color: #00558c; /* Harbor Blue */
-}
-
-.bg-secondary {
-    background-color: #d3edf9; /* Frost White */
-}
-
-.bg-success {
-    background-color: #00ACC1; /* Tidal Green */
-}
-
-.bg-warning {
-    background-color: #f59e0b;
-}
-
-.bg-error {
-    background-color: #FF6B47; /* Coral Alert */
+    background-color: #172B35;
+    color: #FFFFFF;
+    border: 1px solid #304A56;
+    padding: 6px 8px;
 }

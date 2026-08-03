@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Vue de configuration et de pilotage de l'acquisition."""
 
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
@@ -17,9 +16,9 @@ from PySide6.QtWidgets import (
     QFrame,
     QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QProgressBar,
     QPushButton,
     QSpinBox,
@@ -30,7 +29,6 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
-    QHeaderView,
 )
 
 from ...acquisition.acquisition_controller import AcquisitionController, create_default_maritime_config
@@ -47,50 +45,53 @@ class AcquisitionConfigView(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.controller: Optional[AcquisitionController] = None
+        self.controller: AcquisitionController | None = None
         self.update_timer = QTimer(self)
-        self.project_metadata: Dict[str, Any] = {}
-        self.project_dir: Optional[Path] = None
+        self.project_metadata: dict[str, Any] = {}
+        self.project_dir: Path | None = None
 
         self._build_ui()
         self._setup_connections()
         self.initialize_controller()
 
     def _build_ui(self) -> None:
-        self.setWindowTitle("Configuration Acquisition MCC DAQ USB-1608FS")
-        self.setMinimumSize(1200, 800)
-
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(14)
         main_layout.addWidget(self._create_header())
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._create_config_panel())
         splitter.addWidget(self._create_monitor_panel())
-        splitter.setSizes([700, 500])
+        splitter.setSizes([760, 420])
         main_layout.addWidget(splitter)
 
     def _create_header(self) -> QWidget:
         frame = QFrame()
+        frame.setObjectName("operationalHeader")
         layout = QHBoxLayout(frame)
+        layout.setContentsMargins(18, 12, 18, 12)
 
         title_layout = QVBoxLayout()
-        title = QLabel("Acquisition Maritime MCC DAQ USB-1608FS")
-        title.setStyleSheet("font-size: 18px; font-weight: 700; color: #1E3A5F;")
-        subtitle = QLabel("Configuration des canaux, acquisition et export de donnees")
-        subtitle.setStyleSheet("color: #5C6F82;")
+        title = QLabel("MCC USB-1608FS · 8 voies analogiques")
+        title.setObjectName("sectionTitle")
+        subtitle = QLabel("Session locale continue avec contrôle de traçabilité HDF5")
+        subtitle.setObjectName("mutedText")
         title_layout.addWidget(title)
         title_layout.addWidget(subtitle)
         layout.addLayout(title_layout)
         layout.addStretch()
 
-        self.hardware_status_label = QLabel("Verification...")
-        self.hardware_status_label.setStyleSheet("padding: 8px 12px; border-radius: 4px; background-color: #FFF3CD;")
+        self.hardware_status_label = QLabel("VÉRIFICATION")
+        self.hardware_status_label.setProperty("state", "warning")
         layout.addWidget(self.hardware_status_label)
         return frame
 
     def _create_config_panel(self) -> QWidget:
         widget = QWidget()
+        widget.setObjectName("contentCanvas")
         layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 14, 0)
 
         tabs = QTabWidget()
         tabs.addTab(self._create_hardware_tab(), "Materiel")
@@ -103,6 +104,13 @@ class AcquisitionConfigView(QWidget):
         self.save_config_btn = QPushButton("Sauver config")
         self.reset_config_btn = QPushButton("Reset")
         self.test_connection_btn = QPushButton("Test connexion")
+        for button in (
+            self.load_config_btn,
+            self.save_config_btn,
+            self.reset_config_btn,
+            self.test_connection_btn,
+        ):
+            button.setProperty("kind", "secondary")
         buttons_layout.addWidget(self.load_config_btn)
         buttons_layout.addWidget(self.save_config_btn)
         buttons_layout.addWidget(self.reset_config_btn)
@@ -119,6 +127,7 @@ class AcquisitionConfigView(QWidget):
         detection_layout = QFormLayout(detection_group)
         self.board_combo = QComboBox()
         self.scan_boards_btn = QPushButton("Scanner les cartes")
+        self.scan_boards_btn.setProperty("kind", "secondary")
         detection_layout.addRow("Carte selectionnee:", self.board_combo)
         detection_layout.addRow("", self.scan_boards_btn)
 
@@ -143,21 +152,25 @@ class AcquisitionConfigView(QWidget):
         actions = QHBoxLayout()
         self.load_preset_btn = QPushButton("Preset maritime")
         self.clear_channels_btn = QPushButton("Effacer")
+        self.load_preset_btn.setProperty("kind", "secondary")
+        self.clear_channels_btn.setProperty("kind", "quiet")
         actions.addWidget(self.load_preset_btn)
         actions.addWidget(self.clear_channels_btn)
         actions.addStretch()
         layout.addLayout(actions)
 
         self.channels_table = QTableWidget(8, 7)
-        self.channels_table.setHorizontalHeaderLabels([
-            "Canal",
-            "Actif",
-            "Type capteur",
-            "Etiquette",
-            "Plage",
-            "Sensibilite",
-            "Unites",
-        ])
+        self.channels_table.setHorizontalHeaderLabels(
+            [
+                "Canal",
+                "Actif",
+                "Type capteur",
+                "Etiquette",
+                "Plage",
+                "Sensibilite",
+                "Unites",
+            ]
+        )
         self.channels_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self._initialize_channels_table()
         layout.addWidget(self.channels_table)
@@ -193,10 +206,16 @@ class AcquisitionConfigView(QWidget):
         controls_group = QGroupBox("Controles")
         controls_layout = QHBoxLayout(controls_group)
         self.start_acquisition_btn = QPushButton("Demarrer")
+        self.start_acquisition_btn.setText("Démarrer l'acquisition")
+        self.start_acquisition_btn.setProperty("kind", "primaryLarge")
         self.stop_acquisition_btn = QPushButton("Arreter")
+        self.stop_acquisition_btn.setText("Arrêter")
+        self.stop_acquisition_btn.setProperty("kind", "danger")
         self.stop_acquisition_btn.setEnabled(False)
         self.test_acquisition_btn = QPushButton("Test rapide")
         self.calibrate_btn = QPushButton("Calibration")
+        self.test_acquisition_btn.setProperty("kind", "secondary")
+        self.calibrate_btn.setProperty("kind", "secondary")
         controls_layout.addWidget(self.start_acquisition_btn)
         controls_layout.addWidget(self.stop_acquisition_btn)
         controls_layout.addStretch()
@@ -212,6 +231,8 @@ class AcquisitionConfigView(QWidget):
         self.export_csv_btn = QPushButton("CSV")
         self.export_json_btn = QPushButton("JSON")
         self.export_hdf5_btn = QPushButton("HDF5")
+        for button in (self.export_csv_btn, self.export_json_btn, self.export_hdf5_btn):
+            button.setProperty("kind", "secondary")
         export_layout.addWidget(self.export_csv_btn)
         export_layout.addWidget(self.export_json_btn)
         export_layout.addWidget(self.export_hdf5_btn)
@@ -223,8 +244,11 @@ class AcquisitionConfigView(QWidget):
         return widget
 
     def _create_monitor_panel(self) -> QWidget:
-        widget = QWidget()
+        widget = QFrame()
+        widget.setObjectName("surface")
         layout = QVBoxLayout(widget)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(12)
 
         status_group = QGroupBox("Statut acquisition")
         status_layout = QFormLayout(status_group)
@@ -247,6 +271,7 @@ class AcquisitionConfigView(QWidget):
         self.log_text.setReadOnly(True)
         self.log_text.setMaximumHeight(220)
         clear_log_btn = QPushButton("Effacer le journal")
+        clear_log_btn.setProperty("kind", "quiet")
         clear_log_btn.clicked.connect(self.clear_log)
         log_layout.addWidget(self.log_text)
         log_layout.addWidget(clear_log_btn)
@@ -295,7 +320,9 @@ class AcquisitionConfigView(QWidget):
 
             sensor_combo = QComboBox()
             sensor_combo.addItems(sensor_types)
-            sensor_combo.setCurrentText(sensor_types[min(row, len(sensor_types) - 1)] if row < len(sensor_types) else "generic")
+            sensor_combo.setCurrentText(
+                sensor_types[min(row, len(sensor_types) - 1)] if row < len(sensor_types) else "generic"
+            )
             self.channels_table.setCellWidget(row, 2, sensor_combo)
 
             self.channels_table.setItem(row, 3, QTableWidgetItem(f"Canal {row}"))
@@ -317,7 +344,7 @@ class AcquisitionConfigView(QWidget):
         except Exception as exc:
             self.log_message(f"Erreur d'initialisation: {exc}")
 
-    def set_project_context(self, project_metadata: Dict[str, Any], project_dir: Optional[str] = None) -> None:
+    def set_project_context(self, project_metadata: dict[str, Any], project_dir: str | None = None) -> None:
         self.project_metadata = project_metadata or {}
         self.project_dir = Path(project_dir) if project_dir else None
         project_name = self.project_metadata.get("name") or self.project_metadata.get("project_name")
@@ -342,11 +369,13 @@ class AcquisitionConfigView(QWidget):
 
     def update_hardware_status(self) -> None:
         if self.controller and self.controller.is_hardware_available():
-            self.hardware_status_label.setText("Materiel operationnel")
-            self.hardware_status_label.setStyleSheet("padding: 8px 12px; border-radius: 4px; background-color: #D4EDDA; color: #155724;")
+            self.hardware_status_label.setText("MATÉRIEL OPÉRATIONNEL")
+            self.hardware_status_label.setProperty("state", "success")
         else:
-            self.hardware_status_label.setText("Mode simulation")
-            self.hardware_status_label.setStyleSheet("padding: 8px 12px; border-radius: 4px; background-color: #FFF3CD; color: #856404;")
+            self.hardware_status_label.setText("MODE SIMULATION")
+            self.hardware_status_label.setProperty("state", "warning")
+        self.hardware_status_label.style().unpolish(self.hardware_status_label)
+        self.hardware_status_label.style().polish(self.hardware_status_label)
 
     def test_connection(self) -> None:
         if not self.controller:
@@ -410,8 +439,14 @@ class AcquisitionConfigView(QWidget):
 
             sensor_type = sensor_combo.currentText() if sensor_combo else "generic"
             range_text = range_combo.currentText() if range_combo else "±10V"
-            label = self.channels_table.item(row, 3).text() if self.channels_table.item(row, 3) else f"Canal {row}"
-            sensitivity = float(self.channels_table.item(row, 5).text()) if self.channels_table.item(row, 5) else 1.0
+            label = (
+                self.channels_table.item(row, 3).text()
+                if self.channels_table.item(row, 3)
+                else f"Canal {row}"
+            )
+            sensitivity = (
+                float(self.channels_table.item(row, 5).text()) if self.channels_table.item(row, 5) else 1.0
+            )
             units = self.channels_table.item(row, 6).text() if self.channels_table.item(row, 6) else "V"
 
             range_volts = 10.0
@@ -422,7 +457,9 @@ class AcquisitionConfigView(QWidget):
             elif "±5V" in range_text:
                 range_volts = 5.0
 
-            self.controller.configure_maritime_channel(row, sensor_type, label, range_volts, sensitivity, units)
+            self.controller.configure_maritime_channel(
+                row, sensor_type, label, range_volts, sensitivity, units
+            )
 
     def start_acquisition(self) -> None:
         if not self.controller:
@@ -450,9 +487,7 @@ class AcquisitionConfigView(QWidget):
 
         self.log_message(f"Acquisition demarree: {project_name}")
         if self.controller.current_session.data_file_path:
-            self.log_message(
-                f"Enregistrement continu: {self.controller.current_session.data_file_path}"
-            )
+            self.log_message(f"Enregistrement continu: {self.controller.current_session.data_file_path}")
         self.start_acquisition_btn.setEnabled(False)
         self.stop_acquisition_btn.setEnabled(True)
         self.progress_bar.setVisible(duration is not None)
@@ -508,7 +543,9 @@ class AcquisitionConfigView(QWidget):
 
         recent_data = self.controller.get_recent_data(1)
         if recent_data and "data" in recent_data and len(recent_data["data"]) > 0:
-            self._update_realtime_table(recent_data["data"][-1], recent_data.get("channels", []), recent_data.get("units", []))
+            self._update_realtime_table(
+                recent_data["data"][-1], recent_data.get("channels", []), recent_data.get("units", [])
+            )
 
         if not status.get("is_acquiring") and self.stop_acquisition_btn.isEnabled():
             self._reset_acquisition_controls()
@@ -603,7 +640,9 @@ class AcquisitionConfigView(QWidget):
             self.log_message("Pas de session active a exporter")
             return
 
-        default_path = self._get_default_export_directory() / f"{self.controller.current_session.session_id}.{suffix}"
+        default_path = (
+            self._get_default_export_directory() / f"{self.controller.current_session.session_id}.{suffix}"
+        )
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             f"Exporter {format_type.upper()}",

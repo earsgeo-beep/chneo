@@ -1,12 +1,10 @@
-# -*- coding: utf-8 -*-
 """Vue de generation de rapports CHNeoWave."""
 
 import html
 import json
 from pathlib import Path
-from typing import Dict, Optional
 
-from PySide6.QtCore import Qt, QDate, Signal
+from PySide6.QtCore import QDate, Qt, Signal
 from PySide6.QtGui import QTextDocument
 from PySide6.QtPrintSupport import QPrinter
 from PySide6.QtWidgets import (
@@ -28,10 +26,6 @@ from PySide6.QtWidgets import (
 )
 
 
-FIBONACCI_SPACING = [8, 13, 21, 34, 55, 89]
-GOLDEN_RATIO = 1.618
-
-
 class ReportConfigPanel(QFrame):
     """Panneau de configuration du rapport."""
 
@@ -41,17 +35,17 @@ class ReportConfigPanel(QFrame):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.default_export_dir: Optional[Path] = None
+        self.default_export_dir: Path | None = None
         self._build_ui()
 
     def _build_ui(self) -> None:
         self.setObjectName("report_config_panel")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(FIBONACCI_SPACING[2], FIBONACCI_SPACING[2], FIBONACCI_SPACING[2], FIBONACCI_SPACING[2])
-        layout.setSpacing(FIBONACCI_SPACING[2])
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(14)
 
-        title = QLabel("Configuration")
-        title.setStyleSheet("font-size: 20px; font-weight: 700; color: #0A1929;")
+        title = QLabel("Composition du rapport")
+        title.setObjectName("sectionTitle")
         layout.addWidget(title)
 
         metadata_group = QGroupBox("Metadonnees")
@@ -74,18 +68,22 @@ class ReportConfigPanel(QFrame):
 
         actions_group = QGroupBox("Generation et export")
         actions_layout = QVBoxLayout(actions_group)
-        self.generate_button = QPushButton("Generer le rapport")
+        self.generate_button = QPushButton("Générer le rapport")
+        self.generate_button.setProperty("kind", "primaryLarge")
         self.generate_button.clicked.connect(self.generate_report)
         actions_layout.addWidget(self.generate_button)
 
         export_grid = QGridLayout()
-        for index, (label, export_type) in enumerate((
-            ("PDF", "pdf"),
-            ("HTML", "html"),
-            ("JSON", "json"),
-            ("TXT", "txt"),
-        )):
+        for index, (label, export_type) in enumerate(
+            (
+                ("PDF", "pdf"),
+                ("HTML", "html"),
+                ("JSON", "json"),
+                ("TXT", "txt"),
+            )
+        ):
             button = QPushButton(label)
+            button.setProperty("kind", "secondary")
             button.clicked.connect(lambda checked=False, kind=export_type: self.export_report(kind))
             export_grid.addWidget(button, index // 2, index % 2)
         actions_layout.addLayout(export_grid)
@@ -132,14 +130,17 @@ class ReportPreviewArea(QFrame):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(FIBONACCI_SPACING[2], FIBONACCI_SPACING[2], FIBONACCI_SPACING[2], FIBONACCI_SPACING[2])
-        layout.setSpacing(FIBONACCI_SPACING[2])
+        self.setObjectName("report_preview_area")
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(14)
 
         header = QHBoxLayout()
-        title = QLabel("Previsualisation")
-        title.setStyleSheet("font-size: 22px; font-weight: 700; color: #0A1929;")
-        self.generation_status_label = QLabel("Pret")
+        title = QLabel("Aperçu du livrable")
+        title.setObjectName("sectionTitle")
+        self.generation_status_label = QLabel("PRÊT")
+        self.generation_status_label.setProperty("state", "neutral")
         self.page_count_label = QLabel("1 page")
+        self.page_count_label.setObjectName("mutedText")
         header.addWidget(title)
         header.addStretch()
         header.addWidget(self.generation_status_label)
@@ -147,6 +148,7 @@ class ReportPreviewArea(QFrame):
         layout.addLayout(header)
 
         self.report_text = QTextEdit()
+        self.report_text.setObjectName("reportDocument")
         self.report_text.setReadOnly(True)
         layout.addWidget(self.report_text)
 
@@ -156,6 +158,11 @@ class ReportPreviewArea(QFrame):
     def update_status(self, status: str, page_count: int = 1) -> None:
         self.generation_status_label.setText(status)
         self.page_count_label.setText(f"{page_count} page(s)")
+        lowered = status.lower()
+        state = "success" if "généré" in lowered or "terminé" in lowered else "neutral"
+        self.generation_status_label.setProperty("state", state)
+        self.generation_status_label.style().unpolish(self.generation_status_label)
+        self.generation_status_label.style().polish(self.generation_status_label)
 
 
 class ReportView(QWidget):
@@ -168,10 +175,10 @@ class ReportView(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.is_dark_mode = False
-        self.current_project_dir: Optional[Path] = None
-        self.current_project_metadata: Dict[str, object] = {}
-        self.current_analysis_payload: Dict[str, object] = {}
-        self.current_report_config: Dict[str, object] = {}
+        self.current_project_dir: Path | None = None
+        self.current_project_metadata: dict[str, object] = {}
+        self.current_analysis_payload: dict[str, object] = {}
+        self.current_report_config: dict[str, object] = {}
         self.current_report_html = ""
         self.current_report_text = ""
 
@@ -181,14 +188,14 @@ class ReportView(QWidget):
     def _build_ui(self) -> None:
         self.setObjectName("report_view")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(20, 20, 20, 20)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.config_panel = ReportConfigPanel()
         self.preview_area = ReportPreviewArea()
         splitter.addWidget(self.config_panel)
         splitter.addWidget(self.preview_area)
-        splitter.setSizes([int(280 * GOLDEN_RATIO), int(450 * GOLDEN_RATIO)])
+        splitter.setSizes([310, 900])
         layout.addWidget(splitter)
 
     def _setup_connections(self) -> None:
@@ -204,7 +211,9 @@ class ReportView(QWidget):
             export_dir.mkdir(parents=True, exist_ok=True)
             self.config_panel.set_default_export_dir(str(export_dir))
 
-    def set_analysis_context(self, source_file: str, analysis_results: dict, extra_metadata: dict = None) -> None:
+    def set_analysis_context(
+        self, source_file: str, analysis_results: dict, extra_metadata: dict = None
+    ) -> None:
         self.current_analysis_payload = {
             "source_file": source_file,
             "analysis_results": analysis_results or {},
@@ -218,7 +227,7 @@ class ReportView(QWidget):
         self.current_report_html = self._build_report_html(config)
         self.current_report_text = self._build_report_text()
         self.preview_area.update_content(self.current_report_html)
-        self.preview_area.update_status("Rapport genere", self._estimate_page_count())
+        self.preview_area.update_status("RAPPORT GÉNÉRÉ", self._estimate_page_count())
         self.report_generated.emit(report_type, config)
 
     def on_template_selected(self, template: str) -> None:
@@ -259,15 +268,11 @@ class ReportView(QWidget):
             QMessageBox.warning(self, "Export", f"Format non supporte: {export_type}")
             return
 
-        self.preview_area.update_status("Export termine", self._estimate_page_count())
+        self.preview_area.update_status("EXPORT TERMINÉ", self._estimate_page_count())
         self.report_exported.emit(export_type, str(output_path))
 
     def set_theme(self, is_dark: bool) -> None:
         self.is_dark_mode = is_dark
-        if is_dark:
-            self.setStyleSheet("QWidget#report_view { background-color: #0A1929; color: #F5FBFF; }")
-        else:
-            self.setStyleSheet("QWidget#report_view { background-color: #F5FBFF; color: #0A1929; }")
 
     def load_report_data(self, data_source: str) -> None:
         self.current_analysis_payload["source_file"] = data_source
@@ -329,40 +334,45 @@ class ReportView(QWidget):
         for channel, indicators in quality.items():
             warnings = indicators.get("warnings", [])
             state = "Valide" if not warnings else "; ".join(map(str, warnings))
-            quality_items.append(
-                f"<li><strong>{html.escape(channel)}</strong> - "
-                f"{html.escape(state)}</li>"
-            )
+            quality_items.append(f"<li><strong>{html.escape(channel)}</strong> - {html.escape(state)}</li>")
+
+        section_style = (
+            "font-size: 16px; color: #203843; border-bottom: 1px solid #DCE5EA; padding-bottom: 6px"
+        )
+        spaced_section_style = f"{section_style}; margin-top: 24px"
+        table_style = "border-collapse: collapse; width: 100%; border: 1px solid #DCE5EA"
+        config_style = "background-color: #F5F8F9; border: 1px solid #DCE5EA; padding: 12px"
+        config_text = html.escape(json.dumps(config, indent=2, ensure_ascii=False))
 
         return f"""
 <html>
-  <body style="font-family: Segoe UI, Arial, sans-serif; color: #102030; line-height: 1.5;">
-    <h1>{html.escape(title)}</h1>
-    <p><strong>Projet:</strong> {html.escape(str(project_name))}</p>
-    <p><strong>Auteur:</strong> {html.escape(str(author))}</p>
-    <p><strong>Source:</strong> {html.escape(str(source_file))}</p>
-    <p>{html.escape(str(description))}</p>
-    <h2>Statistiques</h2>
-    <table border="1" cellspacing="0" cellpadding="6" style="border-collapse: collapse; width: 100%;">
-      <tr>
-        <th>Canal</th>
-        <th>Moyenne</th>
-        <th>Ecart-type</th>
-        <th>Min</th>
-        <th>Max</th>
-      </tr>
-      {''.join(rows) if rows else '<tr><td colspan="5">Aucune statistique disponible</td></tr>'}
+  <body style="font-family: 'Segoe UI', Arial, sans-serif; color: #172B35; line-height: 1.45; margin: 32px;">
+    <div style="border-bottom: 3px solid #1A7188; padding-bottom: 14px; margin-bottom: 20px;">
+      <p style="color: #1A7188; font-size: 10px; font-weight: 700; letter-spacing: 1px; margin: 0;">
+        CHNEOWAVE · RAPPORT TECHNIQUE
+      </p>
+      <h1 style="font-size: 25px; font-weight: 650; margin: 5px 0 8px 0;">{html.escape(title)}</h1>
+      <p style="color: #667C88; margin: 0;">{html.escape(str(description))}</p>
+    </div>
+    <table cellspacing="0" cellpadding="5" style="width: 100%; color: #405965; margin-bottom: 22px;">
+      <tr><td><strong>Projet</strong></td><td>{html.escape(str(project_name))}</td></tr>
+      <tr><td><strong>Auteur</strong></td><td>{html.escape(str(author))}</td></tr>
+      <tr><td><strong>Source</strong></td><td>{html.escape(str(source_file))}</td></tr>
+      <tr><td><strong>Date</strong></td><td>{html.escape(str(config.get("date", "")))}</td></tr>
     </table>
-    <h2>Parametres de houle</h2>
-    <ul>
-      {''.join(wave_items) if wave_items else '<li>Aucun parametre disponible</li>'}
-    </ul>
-    <h2>Qualite de l'analyse</h2>
-    <ul>
-      {''.join(quality_items) if quality_items else '<li>Aucun indicateur disponible</li>'}
-    </ul>
-    <h2>Configuration</h2>
-    <pre>{html.escape(json.dumps(config, indent=2, ensure_ascii=False))}</pre>
+    <h2 style="{section_style};">Statistiques</h2>
+    <table cellspacing="0" cellpadding="7" style="{table_style};">
+      <tr style="background-color: #EEF3F5; color: #304A56;">
+        <th>Canal</th><th>Moyenne</th><th>Écart-type</th><th>Min</th><th>Max</th>
+      </tr>
+      {"".join(rows) if rows else '<tr><td colspan="5">Aucune statistique disponible</td></tr>'}
+    </table>
+    <h2 style="{spaced_section_style};">Paramètres de houle</h2>
+    <ul>{"".join(wave_items) if wave_items else "<li>Aucun paramètre disponible</li>"}</ul>
+    <h2 style="{spaced_section_style};">Qualité de l'analyse</h2>
+    <ul>{"".join(quality_items) if quality_items else "<li>Aucun indicateur disponible</li>"}</ul>
+    <h2 style="{spaced_section_style};">Configuration scientifique</h2>
+    <pre style="{config_style}; color: #405965;">{config_text}</pre>
   </body>
 </html>
 """

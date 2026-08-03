@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Interface en ligne de commande pour CHNeoWave.
 """
@@ -20,8 +19,8 @@ def _ensure_qt_imports() -> str | None:
     global QApplication, Qt
 
     try:
-        from PySide6.QtWidgets import QApplication as _QApplication
         from PySide6.QtCore import Qt as _Qt
+        from PySide6.QtWidgets import QApplication as _QApplication
 
         QApplication = _QApplication
         Qt = _Qt
@@ -96,13 +95,13 @@ def run_gui() -> int:
         app.setApplicationVersion(__version__)
         app.setOrganizationName("Laboratoire Maritime")
 
-    from hrneowave.gui.styles.theme_manager import ThemeManager
     from hrneowave.gui.main_window import MainWindow
+    from hrneowave.gui.styles.theme_manager import ThemeManager
 
     logger.info("Qt binding chargé: %s", binding_name)
 
     theme_manager = ThemeManager(app)
-    theme_manager.apply_theme("maritime_modern")
+    theme_manager.apply_theme("laboratory")
 
     logger.info("Creating MainWindow...")
     window = MainWindow()

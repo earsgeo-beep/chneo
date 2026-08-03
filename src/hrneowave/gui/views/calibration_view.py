@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Calibration View - Maritime Design System 2025
 Vue de calibration unifiée avec design maritime industriel et Golden Ratio
@@ -10,63 +9,32 @@ Version: 3.0.0 Maritime Unified
 """
 
 import logging
-from typing import Dict, List, Optional, Any
 from datetime import datetime
-from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-# Imports Qt avec hiérarchie PySide6 → PyQt6 → PyQt5
-try:
-    from PySide6.QtCore import Qt, Signal, QTimer, QPropertyAnimation, QEasingCurve, QRect
-    from PySide6.QtWidgets import (
-        QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
-        QProgressBar, QScrollArea, QSpacerItem, QSizePolicy, QStackedWidget,
-        QGroupBox, QGridLayout, QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox,
-        QCheckBox, QTextEdit, QSplitter, QApplication, QMainWindow
-    )
-    from PySide6.QtGui import QFont, QPainter, QColor, QLinearGradient, QPixmap
-except ImportError:
-    try:
-        from PyQt6.QtCore import Qt, pyqtSignal as Signal, QTimer, QPropertyAnimation, QEasingCurve, QRect
-        from PyQt6.QtWidgets import (
-            QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
-            QProgressBar, QScrollArea, QSpacerItem, QSizePolicy, QStackedWidget,
-            QGroupBox, QGridLayout, QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox,
-            QCheckBox, QTextEdit, QSplitter, QApplication, QMainWindow
-        )
-        from PyQt6.QtGui import QFont, QPainter, QColor, QLinearGradient, QPixmap
-    except ImportError:
-        from PyQt5.QtCore import Qt, pyqtSignal as Signal, QTimer, QPropertyAnimation, QEasingCurve, QRect
-        from PyQt5.QtWidgets import (
-            QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
-            QProgressBar, QScrollArea, QSpacerItem, QSizePolicy, QStackedWidget,
-            QGroupBox, QGridLayout, QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox,
-            QCheckBox, QTextEdit, QSplitter, QApplication, QMainWindow
-        )
-        from PyQt5.QtGui import QFont, QPainter, QColor, QLinearGradient, QPixmap
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QScrollArea,
+    QSizePolicy,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
-# Imports des composants maritimes avec fallbacks
-try:
-    from ..widgets.maritime.maritime_card import MaritimeCard
-    from ..widgets.maritime.kpi_indicator import KPIIndicator
-    from ..widgets.maritime.status_beacon import StatusBeacon
-    from ..widgets.maritime.maritime_button import MaritimeButton
-    from ..widgets.maritime.progress_stepper import ProgressStepper
-    from ..styles.maritime_theme import MaritimeTheme
-except ImportError:
-    logging.warning("Maritime components not available, using fallbacks")
-    MaritimeCard = QFrame
-    KPIIndicator = QLabel
-    StatusBeacon = QFrame
-    MaritimeButton = QPushButton
-    ProgressStepper = QWidget
-    
-    class MaritimeTheme:
-        SPACE_XS = 8
-        SPACE_SM = 13
-        SPACE_MD = 21
-        SPACE_LG = 34
-        SPACE_XL = 55
-        SPACE_XXL = 89
+from ..styles.maritime_theme import MaritimeTheme
+from ..widgets.maritime.kpi_indicator import KPIIndicator
+from ..widgets.maritime.maritime_button import MaritimeButton
+from ..widgets.maritime.maritime_card import MaritimeCard
+from ..widgets.maritime.progress_stepper import ProgressStepper
+from ..widgets.maritime.status_beacon import StatusBeacon
 
 # Configuration logger
 logger = logging.getLogger(__name__)
@@ -77,18 +45,18 @@ FIBONACCI_SPACES = [8, 13, 21, 34, 55, 89, 144]  # Suite Fibonacci pour espaceme
 
 # Palette Maritime Professionnelle
 MARITIME_COLORS = {
-    'ocean_deep': '#0A1929',      # Fond application
-    'harbor_blue': '#1565C0',     # Boutons primaires
-    'steel_blue': '#1976D2',      # Boutons secondaires
-    'tidal_cyan': '#00BCD4',      # Graphiques, données temps réel
-    'foam_white': '#FAFBFC',      # Cards, surfaces
-    'frost_light': '#F5F7FA',     # Backgrounds sections
-    'storm_gray': '#37474F',      # Texte principal
-    'slate_gray': '#546E7A',      # Texte secondaire
-    'coral_alert': '#FF5722',     # Alertes, erreurs
-    'emerald_success': '#4CAF50', # Succès, validation
-    'amber_warning': '#FF9800',   # Avertissements
-    'azure_info': '#2196F3'       # Informations
+    'ocean_deep': '#172B35',
+    'harbor_blue': '#1A7188',
+    'steel_blue': '#145E72',
+    'tidal_cyan': '#42B8C6',
+    'foam_white': '#FFFFFF',
+    'frost_light': '#F3F6F8',
+    'storm_gray': '#304A56',
+    'slate_gray': '#667C88',
+    'coral_alert': '#C54B4B',
+    'emerald_success': '#16876C',
+    'amber_warning': '#C47B18',
+    'azure_info': '#2B8298'
 }
 
 class CalibrationStep:
@@ -169,7 +137,7 @@ class CalibrationSidebar(QFrame):
         """Crée l'en-tête maritime de la sidebar"""
         header = QFrame()
         header.setObjectName("sidebar_header")
-        header.setMinimumHeight(89)  # Fibonacci
+        header.setMinimumHeight(62)
         
         header_layout = QVBoxLayout(header)
         header_layout.setContentsMargins(MaritimeTheme.SPACE_MD, MaritimeTheme.SPACE_MD,
@@ -847,8 +815,8 @@ class CalibrationViewMaritime(QWidget):
         
         # Layout principal horizontal (Golden Ratio)
         main_layout = QHBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(14)
         
         # Sidebar de navigation (20%)
         self.sidebar = CalibrationSidebar()
