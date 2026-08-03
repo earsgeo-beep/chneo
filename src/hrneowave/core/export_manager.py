@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from datetime import datetime
 import json
 
+from hrneowave import __version__
+
 # Imports conditionnels pour les formats d'export
 try:
     import h5py
@@ -134,7 +136,7 @@ class ExportManager:
             # Informations générales
             metadata_group.attrs['export_timestamp'] = datetime.now().isoformat()
             metadata_group.attrs['software'] = 'CHNeoWave'
-            metadata_group.attrs['version'] = '1.1.0-RC'
+            metadata_group.attrs['version'] = __version__
             metadata_group.attrs['format_version'] = '1.0'
             metadata_group.attrs['n_channels'] = n_channels
             metadata_group.attrs['n_samples'] = n_samples
@@ -191,7 +193,7 @@ class ExportManager:
             # Propriétés du fichier
             file_properties = {
                 'Title': 'CHNeoWave Acquisition Data',
-                'Author': 'CHNeoWave v1.1.0-RC',
+                'Author': f'CHNeoWave v{__version__}',
                 'Export_Timestamp': datetime.now().isoformat(),
                 'Sample_Rate': config.session_info.get('sample_rate', 32.0),
                 'Number_of_Channels': n_channels,

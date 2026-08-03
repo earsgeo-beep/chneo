@@ -294,7 +294,8 @@ class ReportView(QWidget):
         analysis_results = self.current_analysis_payload.get("analysis_results", {})
         source_file = self.current_analysis_payload.get("source_file") or "Non defini"
         basic_stats = analysis_results.get("basic_stats", {})
-        goda_metrics = analysis_results.get("goda_metrics", {})
+        wave_parameters = analysis_results.get("wave_parameters", {})
+        quality = analysis_results.get("quality", {})
 
         project_name = self.current_project_metadata.get("name", "CHNeoWave")
         title = config.get("title") or f"Rapport {project_name}"
@@ -313,13 +314,24 @@ class ReportView(QWidget):
                 "</tr>"
             )
 
-        goda_items = []
-        for channel, metrics in goda_metrics.items():
-            goda_items.append(
+        wave_items = []
+        for channel, metrics in wave_parameters.items():
+            wave_items.append(
                 f"<li><strong>{html.escape(channel)}</strong> - "
-                f"Hs={metrics.get('Hs', 0):.6f}, "
+                f"H1/3={metrics.get('H1_3', 0):.6f}, "
+                f"Hm0={metrics.get('Hm0', 0):.6f}, "
                 f"Tp={metrics.get('Tp', 0):.6f}, "
+                f"Tm02={metrics.get('Tm02', 0):.6f}, "
                 f"Hmax={metrics.get('H_max', 0):.6f}</li>"
+            )
+
+        quality_items = []
+        for channel, indicators in quality.items():
+            warnings = indicators.get("warnings", [])
+            state = "Valide" if not warnings else "; ".join(map(str, warnings))
+            quality_items.append(
+                f"<li><strong>{html.escape(channel)}</strong> - "
+                f"{html.escape(state)}</li>"
             )
 
         return f"""
@@ -341,9 +353,13 @@ class ReportView(QWidget):
       </tr>
       {''.join(rows) if rows else '<tr><td colspan="5">Aucune statistique disponible</td></tr>'}
     </table>
-    <h2>Metriques Goda</h2>
+    <h2>Parametres de houle</h2>
     <ul>
-      {''.join(goda_items) if goda_items else '<li>Aucune metrique disponible</li>'}
+      {''.join(wave_items) if wave_items else '<li>Aucun parametre disponible</li>'}
+    </ul>
+    <h2>Qualite de l'analyse</h2>
+    <ul>
+      {''.join(quality_items) if quality_items else '<li>Aucun indicateur disponible</li>'}
     </ul>
     <h2>Configuration</h2>
     <pre>{html.escape(json.dumps(config, indent=2, ensure_ascii=False))}</pre>
@@ -355,7 +371,8 @@ class ReportView(QWidget):
         analysis_results = self.current_analysis_payload.get("analysis_results", {})
         source_file = self.current_analysis_payload.get("source_file") or "Non defini"
         basic_stats = analysis_results.get("basic_stats", {})
-        goda_metrics = analysis_results.get("goda_metrics", {})
+        wave_parameters = analysis_results.get("wave_parameters", {})
+        quality = analysis_results.get("quality", {})
 
         lines = [
             "Rapport CHNeoWave",
@@ -372,12 +389,22 @@ class ReportView(QWidget):
             lines.append(f"  min/max: {stats.get('min', 0):.6f} / {stats.get('max', 0):.6f}")
 
         lines.append("")
-        lines.append("Metriques Goda")
-        for channel, metrics in goda_metrics.items():
+        lines.append("Parametres de houle")
+        for channel, metrics in wave_parameters.items():
             lines.append(
-                f"- {channel}: Hs={metrics.get('Hs', 0):.6f}, "
-                f"Tp={metrics.get('Tp', 0):.6f}, Hmax={metrics.get('H_max', 0):.6f}"
+                f"- {channel}: H1/3={metrics.get('H1_3', 0):.6f}, "
+                f"Hm0={metrics.get('Hm0', 0):.6f}, "
+                f"Tp={metrics.get('Tp', 0):.6f}, "
+                f"Tm02={metrics.get('Tm02', 0):.6f}, "
+                f"Hmax={metrics.get('H_max', 0):.6f}"
             )
+
+        lines.append("")
+        lines.append("Qualite de l'analyse")
+        for channel, indicators in quality.items():
+            warnings = indicators.get("warnings", [])
+            state = "Valide" if not warnings else "; ".join(map(str, warnings))
+            lines.append(f"- {channel}: {state}")
 
         return "\n".join(lines).strip()
 

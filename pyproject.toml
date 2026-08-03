@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chneowave"
+dynamic = ["version"]
+description = "Acquisition et analyse de donnees maritimes avec MCC USB-1608FS"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "Laboratoire d'Etudes Maritimes" },
+]
+dependencies = [
+  "PySide6>=6.5,<7",
+  "numpy>=1.24,<3",
+  "pandas>=2,<3",
+  "h5py>=3.9,<4",
+  "scipy>=1.10,<2",
+  "matplotlib>=3.7,<4",
+  "reportlab>=4,<5",
+]
+
+[project.optional-dependencies]
+mcc = [
+  "mcculw>=1.0; platform_system == 'Windows'",
+]
+dev = [
+  "pytest>=8,<9",
+  "pytest-cov>=5,<7",
+  "ruff>=0.6,<1",
+]
+
+[project.scripts]
+chneowave = "hrneowave.cli:run_cli"
+
+[tool.setuptools.dynamic]
+version = { attr = "hrneowave.__version__" }
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

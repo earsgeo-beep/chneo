@@ -1,21 +1,26 @@
-# post_processor.py - Module de post-traitement pour l'analyse des donnees de houle
+"""Chargement, analyse scientifique et export des donnees CHNeoWave."""
+
+from __future__ import annotations
+
 import json
 import os
-from typing import Dict, Optional
+from copy import deepcopy
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 
+from .wave_analysis import WaveAnalysisConfig, WaveAnalysisError, WaveAnalyzer
 
 QObject = None
 Signal = None
 
 
-def _ensure_qt_imports():
-    """Importe les modules Qt de maniere conditionnelle."""
+def _ensure_qt_imports() -> None:
+    """Importe Qt conditionnellement pour garder le moteur testable sans GUI."""
     global QObject, Signal
     if QObject is not None:
         return
-
     try:
         from PySide6.QtCore import QObject, Signal
     except ImportError:
@@ -35,58 +40,75 @@ _ensure_qt_imports()
 
 
 class PostProcessor(QObject):
-    """Controleur de post-traitement et d'analyse des donnees."""
+    """Orchestre l'analyse canal par canal sans charger un long HDF5 en bloc."""
 
     dataLoaded = Signal(dict)
     analysisCompleted = Signal(dict)
     exportCompleted = Signal(str)
     errorOccurred = Signal(str)
 
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_path: str | None = None):
         super().__init__()
         self.config = self._load_config(config_path)
-        self.current_data = None
-        self.current_analysis = None
+        self.current_data: dict[str, Any] | None = None
+        self.current_analysis: dict[str, Any] | None = None
         self.sample_rate = 32.0
+        self.source_file: str | None = None
 
-    def _load_config(self, config_path: Optional[str]) -> Dict:
-        default_config = {
+    def _load_config(self, config_path: str | None) -> dict[str, Any]:
+        config = {
             "analysis": {
                 "window_size": 1024,
                 "overlap": 0.5,
+                "window": "hann",
                 "detrend": True,
-                "apply_window": True,
+                "min_frequency": 0.0,
+                "max_frequency": None,
+                "minimum_samples": 32,
             },
-            "goda": {
-                "significant_wave_height": True,
-                "peak_period": True,
-                "mean_period": True,
-                "spectral_moments": True,
-            },
-            "export": {
-                "formats": ["csv", "json", "hdf5"],
-                "precision": 6,
-            },
+            "export": {"formats": ["csv", "json", "hdf5"], "precision": 6},
         }
-
         if config_path and os.path.exists(config_path):
             try:
-                with open(config_path, "r", encoding="utf-8") as handle:
-                    user_config = json.load(handle)
-                default_config.update(user_config)
+                with open(config_path, encoding="utf-8") as handle:
+                    self._deep_update(config, json.load(handle))
             except Exception as exc:
-                print(f"Erreur chargement config: {exc}")
+                raise ValueError(f"Configuration d'analyse invalide: {exc}") from exc
+        return config
 
-        return default_config
+    @staticmethod
+    def _deep_update(target: dict[str, Any], update: dict[str, Any]) -> None:
+        for key, value in update.items():
+            if isinstance(value, dict) and isinstance(target.get(key), dict):
+                PostProcessor._deep_update(target[key], value)
+            else:
+                target[key] = value
 
-    def _normalize_metadata_value(self, value):
+    def _wave_config(self) -> WaveAnalysisConfig:
+        analysis = self.config["analysis"]
+        return WaveAnalysisConfig(
+            segment_length=int(analysis.get("window_size", 1024)),
+            overlap_ratio=float(analysis.get("overlap", 0.5)),
+            window=str(analysis.get("window", "hann")),
+            detrend=bool(analysis.get("detrend", True)),
+            min_frequency=float(analysis.get("min_frequency", 0.0)),
+            max_frequency=(
+                float(analysis["max_frequency"])
+                if analysis.get("max_frequency") is not None
+                else None
+            ),
+            minimum_samples=int(analysis.get("minimum_samples", 32)),
+        )
+
+    @staticmethod
+    def _normalize_metadata_value(value: Any) -> Any:
         if isinstance(value, bytes):
             value = value.decode("utf-8", errors="replace")
         if isinstance(value, np.generic):
             return value.item()
         if isinstance(value, str):
             stripped = value.strip()
-            if stripped.startswith("[") or stripped.startswith("{"):
+            if stripped.startswith(("[", "{")):
                 try:
                     return json.loads(stripped)
                 except json.JSONDecodeError:
@@ -95,137 +117,224 @@ class PostProcessor(QObject):
 
     def load_data_file(self, file_path: str) -> bool:
         try:
-            if not os.path.exists(file_path):
-                self.errorOccurred.emit(f"Fichier introuvable: {file_path}")
-                return False
-
-            extension = os.path.splitext(file_path)[1].lower()
+            path = Path(file_path).expanduser().resolve()
+            if not path.is_file():
+                raise FileNotFoundError(f"Fichier introuvable: {path}")
+            extension = path.suffix.lower()
             if extension == ".csv":
-                data = self._load_csv(file_path)
+                data = self._load_csv(path)
             elif extension == ".json":
-                data = self._load_json(file_path)
+                data = self._load_json(path)
             elif extension in {".h5", ".hdf5"}:
-                data = self._load_hdf5(file_path)
+                data = self._load_hdf5(path)
             else:
-                self.errorOccurred.emit(f"Format non supporte: {extension}")
-                return False
+                raise ValueError(f"Format non supporte: {extension}")
 
+            if not data.get("channel_keys"):
+                raise ValueError("Aucun canal exploitable dans le fichier")
+            self.source_file = str(path)
             self.current_data = data
+            self.current_analysis = None
             self.dataLoaded.emit(data)
-            print(f"Donnees chargees: {file_path}")
+            print(f"Donnees chargees: {path}")
             return True
-
         except Exception as exc:
-            error_msg = f"Erreur chargement donnees: {exc}"
-            print(f"Erreur {error_msg}")
-            self.errorOccurred.emit(error_msg)
+            message = f"Erreur chargement donnees: {exc}"
+            self.errorOccurred.emit(message)
+            print(message)
             return False
 
-    def _load_csv(self, file_path: str) -> Dict:
+    def _load_csv(self, file_path: Path) -> dict[str, Any]:
         import pandas as pd
 
         frame = pd.read_csv(file_path)
-        metadata = {}
-
-        if "sample_rate" in frame.columns:
-            self.sample_rate = float(frame["sample_rate"].iloc[0])
-            metadata["sample_rate"] = self.sample_rate
+        if frame.empty:
+            raise ValueError("Le fichier CSV est vide")
 
         time_columns = [column for column in frame.columns if "time" in column.lower()]
-        data_columns = [column for column in frame.columns if column.startswith("channel_") or column.startswith("probe_")]
+        data_columns = [
+            column
+            for column in frame.columns
+            if column.startswith(("channel_", "probe_"))
+        ]
+        metadata: dict[str, Any] = {}
+        if "sample_rate" in frame.columns:
+            sample_rates = frame["sample_rate"].dropna().astype(float)
+            if sample_rates.empty or sample_rates.iloc[0] <= 0:
+                raise ValueError("Frequence d'echantillonnage CSV invalide")
+            if not np.allclose(sample_rates, sample_rates.iloc[0]):
+                raise ValueError("La frequence d'echantillonnage varie dans le CSV")
+            self.sample_rate = float(sample_rates.iloc[0])
+        elif time_columns:
+            self.sample_rate = self._infer_sample_rate(frame[time_columns[0]].to_numpy())
+        else:
+            raise ValueError("Le CSV ne contient ni sample_rate ni axe temporel")
+        metadata["sample_rate"] = self.sample_rate
 
+        channels = {
+            column: frame[column].to_numpy(dtype=np.float64)
+            for column in data_columns
+        }
         return {
+            "source_format": "csv",
             "metadata": metadata,
-            "time": frame[time_columns[0]].to_numpy() if time_columns else np.arange(len(frame)) / self.sample_rate,
-            "channels": {column: frame[column].to_numpy() for column in data_columns},
+            "time": (
+                frame[time_columns[0]].to_numpy(dtype=np.float64)
+                if time_columns
+                else np.arange(len(frame), dtype=np.float64) / self.sample_rate
+            ),
+            "channels": channels,
+            "channel_keys": list(channels),
+            "channel_metadata": {key: {} for key in channels},
         }
 
-    def _load_json(self, file_path: str) -> Dict:
-        with open(file_path, "r", encoding="utf-8") as handle:
-            data = json.load(handle)
+    def _load_json(self, file_path: Path) -> dict[str, Any]:
+        with file_path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        channels_payload = payload.get("channels", {})
+        channels = {
+            key: np.asarray(values, dtype=np.float64)
+            for key, values in channels_payload.items()
+        }
+        metadata = {
+            key: self._normalize_metadata_value(value)
+            for key, value in payload.get("metadata", {}).items()
+        }
+        session = payload.get("session", {})
+        sample_rate = (
+            metadata.get("sample_rate")
+            or metadata.get("sampling_rate")
+            or session.get("sample_rate")
+            or session.get("sampling_rate")
+        )
+        if sample_rate is None and "time" in payload:
+            sample_rate = self._infer_sample_rate(np.asarray(payload["time"], dtype=float))
+        if sample_rate is None or float(sample_rate) <= 0:
+            raise ValueError("Frequence d'echantillonnage JSON absente ou invalide")
+        self.sample_rate = float(sample_rate)
 
-        if "channels" in data:
-            for channel, values in data["channels"].items():
-                data["channels"][channel] = np.array(values)
+        channel_metadata = {}
+        for item in payload.get("channel_metadata", []):
+            key = f"channel_{int(item.get('channel', 0)):02d}"
+            channel_metadata[key] = item
+        return {
+            "source_format": "json",
+            "metadata": metadata,
+            "session": session,
+            "time": np.asarray(payload.get("time", []), dtype=np.float64),
+            "channels": channels,
+            "channel_keys": list(channels),
+            "channel_metadata": channel_metadata,
+        }
 
-        if "time" in data:
-            data["time"] = np.array(data["time"])
-
-        if "metadata" in data:
-            data["metadata"] = {
-                key: self._normalize_metadata_value(value)
-                for key, value in data["metadata"].items()
-            }
-
-        sample_rate = None
-        if "metadata" in data:
-            sample_rate = data["metadata"].get("sample_rate") or data["metadata"].get("sampling_rate")
-        if sample_rate is None and "session" in data:
-            sample_rate = data["session"].get("sample_rate") or data["session"].get("sampling_rate")
-        if sample_rate is not None:
-            self.sample_rate = float(sample_rate)
-
-        return data
-
-    def _load_hdf5(self, file_path: str) -> Dict:
+    def _load_hdf5(self, file_path: Path) -> dict[str, Any]:
         try:
             import h5py
         except ImportError as exc:
             raise ImportError("h5py requis pour les fichiers HDF5") from exc
 
-        data = {"channels": {}, "metadata": {}}
-
+        metadata: dict[str, Any] = {}
+        session: dict[str, Any] = {}
+        channel_metadata: dict[str, dict[str, Any]] = {}
         with h5py.File(file_path, "r") as handle:
-            data["metadata"].update({
-                key: self._normalize_metadata_value(value)
-                for key, value in handle.attrs.items()
-            })
-
-            if "metadata" in handle:
-                metadata_group = handle["metadata"]
-                data["metadata"].update({
+            metadata.update(
+                {
                     key: self._normalize_metadata_value(value)
-                    for key, value in metadata_group.attrs.items()
-                })
+                    for key, value in handle.attrs.items()
+                }
+            )
+            status = metadata.get("recording_status")
+            if status is not None and str(status) != "complete":
+                raise ValueError(f"Session HDF5 non valide: recording_status={status}")
+            if int(metadata.get("errors", 0)) > 0:
+                raise ValueError("Session HDF5 contenant des erreurs d'acquisition")
+            if int(metadata.get("buffer_overruns", 0)) > 0:
+                raise ValueError("Session HDF5 contenant des debordements de buffer")
 
-                if "session" in metadata_group:
-                    session_attrs = {
-                        key: self._normalize_metadata_value(value)
-                        for key, value in metadata_group["session"].attrs.items()
+            if "metadata/session" in handle:
+                session = {
+                    key: self._normalize_metadata_value(value)
+                    for key, value in handle["metadata/session"].attrs.items()
+                }
+                metadata.update(session)
+            if "metadata/channels" in handle:
+                for key, group in handle["metadata/channels"].items():
+                    channel_metadata[key] = {
+                        name: self._normalize_metadata_value(value)
+                        for name, value in group.attrs.items()
                     }
-                    data["session"] = session_attrs
-                    data["metadata"].update(session_attrs)
 
-                if "calibration" in metadata_group:
-                    data["calibration"] = {
-                        key: self._normalize_metadata_value(value)
-                        for key, value in metadata_group["calibration"].attrs.items()
-                    }
+            acquisition_group = handle.get("acquisition_data")
+            if acquisition_group is not None:
+                channel_keys = sorted(
+                    key
+                    for key in acquisition_group.keys()
+                    if key.startswith(("channel_", "probe_"))
+                )
+            else:
+                channel_keys = sorted(
+                    key for key in handle.keys() if key.startswith(("channel_", "probe_"))
+                )
 
-            if "acquisition_data" in handle:
-                acquisition_group = handle["acquisition_data"]
-                for key in acquisition_group.keys():
-                    if key == "time":
-                        data["time"] = acquisition_group[key][:]
-                    elif key.startswith("channel_") or key.startswith("probe_"):
-                        data["channels"][key] = acquisition_group[key][:]
+            channel_lengths = []
+            for key in channel_keys:
+                dataset = (
+                    acquisition_group[key]
+                    if acquisition_group is not None
+                    else handle[key]
+                )
+                if dataset.ndim != 1:
+                    raise ValueError(f"Le canal {key} n'est pas un vecteur")
+                channel_lengths.append(int(dataset.shape[0]))
+            if len(set(channel_lengths)) > 1:
+                raise ValueError("Les canaux HDF5 n'ont pas la meme longueur")
+            declared_samples = metadata.get("n_samples")
+            if (
+                declared_samples is not None
+                and channel_lengths
+                and int(declared_samples) != channel_lengths[0]
+            ):
+                raise ValueError("Le compteur n_samples ne correspond pas aux donnees")
 
-            if "time" in handle and "time" not in data:
-                data["time"] = handle["time"][:]
+        sample_rate = metadata.get("sample_rate") or metadata.get("sampling_rate")
+        if sample_rate is None or float(sample_rate) <= 0:
+            raise ValueError("Frequence d'echantillonnage HDF5 absente ou invalide")
+        self.sample_rate = float(sample_rate)
+        return {
+            "source_format": "hdf5",
+            "source_path": str(file_path),
+            "metadata": metadata,
+            "session": session,
+            "channels": {},
+            "channel_keys": channel_keys,
+            "channel_metadata": channel_metadata,
+        }
 
-            for key in handle.keys():
-                if key.startswith("channel_") or key.startswith("probe_"):
-                    data["channels"][key] = handle[key][:]
+    @staticmethod
+    def _infer_sample_rate(time_values: np.ndarray) -> float:
+        time_values = np.asarray(time_values, dtype=np.float64)
+        if len(time_values) < 2 or not np.all(np.isfinite(time_values)):
+            raise ValueError("Axe temporel insuffisant ou invalide")
+        intervals = np.diff(time_values)
+        if np.any(intervals <= 0):
+            raise ValueError("L'axe temporel n'est pas strictement croissant")
+        median_interval = float(np.median(intervals))
+        if not np.allclose(intervals, median_interval, rtol=1e-3, atol=1e-9):
+            raise ValueError("L'echantillonnage n'est pas regulier")
+        return 1.0 / median_interval
 
-        sample_rate = data["metadata"].get("sample_rate") or data["metadata"].get("sampling_rate")
-        if sample_rate is not None:
-            self.sample_rate = float(sample_rate)
+    def _load_channel_values(self, channel: str) -> np.ndarray:
+        if self.current_data is None:
+            raise WaveAnalysisError("Aucune donnee chargee")
+        if self.current_data["source_format"] != "hdf5":
+            return np.asarray(self.current_data["channels"][channel], dtype=np.float64)
 
-        if "time" not in data and data["channels"]:
-            first_channel = next(iter(data["channels"].values()))
-            data["time"] = np.arange(len(first_channel), dtype=float) / self.sample_rate
+        import h5py
 
-        return data
+        with h5py.File(self.current_data["source_path"], "r") as handle:
+            if f"acquisition_data/{channel}" in handle:
+                return np.asarray(handle[f"acquisition_data/{channel}"][:], dtype=np.float64)
+            return np.asarray(handle[channel][:], dtype=np.float64)
 
     def run_analysis(self) -> bool:
         if self.current_data is None:
@@ -233,129 +342,112 @@ class PostProcessor(QObject):
             return False
 
         try:
-            analysis_results = {
-                "basic_stats": self._compute_basic_stats(),
-                "spectral_analysis": self._compute_spectral_analysis(),
-                "goda_metrics": self._compute_goda_metrics(),
+            analyzer = WaveAnalyzer(self._wave_config())
+            channel_keys = list(self.current_data["channel_keys"])
+            reference_channel = channel_keys[0]
+            reference_values = self._load_channel_values(reference_channel)
+            results: dict[str, Any] = {
+                "basic_stats": {},
+                "spectral_analysis": {},
+                "wave_parameters": {},
+                "goda_metrics": {},
+                "quality": {},
+                "cross_spectral_analysis": {},
+                "analysis_configuration": analyzer.configuration(),
+                "sample_rate": self.sample_rate,
+                "reference_channel": reference_channel,
+                "channel_metadata": deepcopy(self.current_data.get("channel_metadata", {})),
+                "source_metadata": deepcopy(self.current_data.get("metadata", {})),
                 "timestamp": np.datetime64("now").astype(str),
             }
-            self.current_analysis = analysis_results
-            self.analysisCompleted.emit(analysis_results)
+
+            for channel in channel_keys:
+                values = (
+                    reference_values
+                    if channel == reference_channel
+                    else self._load_channel_values(channel)
+                )
+                channel_info = self.current_data.get("channel_metadata", {}).get(channel, {})
+                unit = str(
+                    channel_info.get("physical_unit")
+                    or channel_info.get("physical_units")
+                    or channel_info.get("unit")
+                    or ""
+                )
+                channel_results = analyzer.analyze_channel(values, self.sample_rate, unit)
+                sensor_type = str(channel_info.get("sensor_type", "")).lower()
+                wave_elevation_types = {
+                    "wave_height",
+                    "wave_probe",
+                    "wave_elevation",
+                    "elevation",
+                    "houle",
+                }
+                interpretation_valid = sensor_type in wave_elevation_types
+                channel_results["wave_parameters"]["interpretation"] = (
+                    "wave_elevation" if interpretation_valid else "generic_amplitude"
+                )
+                channel_results["quality"][
+                    "wave_height_interpretation_valid"
+                ] = interpretation_valid
+                if not interpretation_valid:
+                    warning = (
+                        "Type de capteur absent: verifier que le signal represente une elevation"
+                        if not sensor_type
+                        else "Hm0 et H1/3 restent dans l'unite du capteur; ce ne sont pas "
+                        "des hauteurs de houle sans conversion en elevation"
+                    )
+                    channel_results["quality"]["warnings"].append(warning)
+                    channel_results["quality"]["valid"] = False
+                results["basic_stats"][channel] = channel_results["basic_stats"]
+                results["spectral_analysis"][channel] = channel_results["spectral"]
+                results["wave_parameters"][channel] = channel_results["wave_parameters"]
+                results["quality"][channel] = channel_results["quality"]
+                results["goda_metrics"][channel] = self._compatibility_wave_metrics(
+                    channel_results["wave_parameters"]
+                )
+
+                if channel != reference_channel:
+                    pair_key = f"{reference_channel}__{channel}"
+                    results["cross_spectral_analysis"][pair_key] = (
+                        analyzer.analyze_cross_spectrum(
+                            reference_values,
+                            values,
+                            self.sample_rate,
+                            results["spectral_analysis"][reference_channel]["peak_frequency"],
+                        )
+                    )
+
+            self.current_analysis = results
+            self.analysisCompleted.emit(results)
             print("Analyse terminee")
             return True
-
         except Exception as exc:
-            error_msg = f"Erreur analyse: {exc}"
-            self.errorOccurred.emit(error_msg)
-            print(error_msg)
+            message = f"Erreur analyse: {exc}"
+            self.errorOccurred.emit(message)
+            print(message)
             return False
 
-    def _compute_basic_stats(self) -> Dict:
-        stats = {}
-        for channel, values in self.current_data["channels"].items():
-            stats[channel] = {
-                "mean": float(np.mean(values)),
-                "std": float(np.std(values)),
-                "min": float(np.min(values)),
-                "max": float(np.max(values)),
-                "rms": float(np.sqrt(np.mean(values ** 2))),
-                "skewness": float(self._compute_skewness(values)),
-                "kurtosis": float(self._compute_kurtosis(values)),
-            }
-        return stats
-
-    def _compute_spectral_analysis(self) -> Dict:
-        spectral_results = {}
-        for channel, values in self.current_data["channels"].items():
-            n_fft = self.config["analysis"]["window_size"]
-            freqs = np.fft.fftfreq(n_fft, 1 / self.sample_rate)[: n_fft // 2]
-            if self.config["analysis"]["apply_window"]:
-                window = np.hanning(len(values))
-                values = values * window
-            fft_data = np.fft.fft(values, n_fft)
-            power_spectrum = np.abs(fft_data[: n_fft // 2]) ** 2
-            spectral_results[channel] = {
-                "frequencies": freqs.tolist(),
-                "power_spectrum": power_spectrum.tolist(),
-                "peak_frequency": float(freqs[np.argmax(power_spectrum)]),
-                "total_energy": float(np.sum(power_spectrum)),
-            }
-        return spectral_results
-
-    def _compute_goda_metrics(self) -> Dict:
-        goda_results = {}
-        for channel, values in self.current_data["channels"].items():
-            wave_heights = self._extract_wave_heights(values)
-            if len(wave_heights) == 0:
-                goda_results[channel] = {
-                    "Hs": 0.0,
-                    "H_max": 0.0,
-                    "H_mean": 0.0,
-                    "H_rms": 0.0,
-                    "n_waves": 0,
-                    "Tp": 0.0,
-                    "Tm": 0.0,
-                }
-                continue
-
-            sorted_heights = np.sort(wave_heights)[::-1]
-            n_waves = len(sorted_heights)
-            goda_results[channel] = {
-                "Hs": float(np.mean(sorted_heights[: max(1, n_waves // 3)])),
-                "H_max": float(np.max(sorted_heights)),
-                "H_mean": float(np.mean(sorted_heights)),
-                "H_rms": float(np.sqrt(np.mean(sorted_heights ** 2))),
-                "n_waves": int(n_waves),
-                "Tp": self._compute_peak_period(values),
-                "Tm": self._compute_mean_period(values),
-            }
-        return goda_results
-
-    def _extract_wave_heights(self, values: np.ndarray) -> np.ndarray:
-        zero_crossings = np.where(np.diff(np.sign(values)))[0]
-        wave_heights = []
-        for index in range(0, len(zero_crossings) - 1, 2):
-            if index + 1 >= len(zero_crossings):
-                break
-            start_idx = zero_crossings[index]
-            end_idx = zero_crossings[index + 1]
-            segment = values[start_idx:end_idx]
-            if len(segment) > 0:
-                wave_heights.append(np.max(segment) - np.min(segment))
-        return np.array(wave_heights)
-
-    def _compute_peak_period(self, values: np.ndarray) -> float:
-        freqs = np.fft.fftfreq(len(values), 1 / self.sample_rate)
-        fft_data = np.fft.fft(values)
-        power_spectrum = np.abs(fft_data) ** 2
-        valid_indices = freqs > 0
-        if np.any(valid_indices):
-            peak_freq = freqs[valid_indices][np.argmax(power_spectrum[valid_indices])]
-            return float(1.0 / peak_freq) if peak_freq > 0 else 0.0
-        return 0.0
-
-    def _compute_mean_period(self, values: np.ndarray) -> float:
-        zero_crossings = np.where(np.diff(np.sign(values)))[0]
-        if len(zero_crossings) > 1:
-            periods = np.diff(zero_crossings) / self.sample_rate * 2
-            return float(np.mean(periods))
-        return 0.0
-
-    def _compute_skewness(self, values: np.ndarray) -> float:
-        mean = np.mean(values)
-        std = np.std(values)
-        return float(np.mean(((values - mean) / std) ** 3)) if std > 0 else 0.0
-
-    def _compute_kurtosis(self, values: np.ndarray) -> float:
-        mean = np.mean(values)
-        std = np.std(values)
-        return float(np.mean(((values - mean) / std) ** 4) - 3.0) if std > 0 else 0.0
+    @staticmethod
+    def _compatibility_wave_metrics(parameters: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "Hs": parameters.get("Hs", 0.0),
+            "H1_3": parameters.get("H1_3", 0.0),
+            "Hm0": parameters.get("Hm0", 0.0),
+            "H_max": parameters.get("H_max", 0.0),
+            "H_mean": parameters.get("H_mean", 0.0),
+            "H_rms": parameters.get("H_rms", 0.0),
+            "n_waves": parameters.get("n_waves", 0),
+            "Tp": parameters.get("Tp", 0.0),
+            "Tm": parameters.get("T_mean", 0.0),
+            "Tm01": parameters.get("Tm01", 0.0),
+            "Tm02": parameters.get("Tm02", 0.0),
+        }
 
     def export_results(self, output_path: str, format_type: str = "csv") -> bool:
         if self.current_analysis is None:
             self.errorOccurred.emit("Aucune analyse a exporter")
             return False
-
         try:
             if format_type == "csv":
                 self._export_csv(output_path)
@@ -365,10 +457,8 @@ class PostProcessor(QObject):
                 self._export_hdf5(output_path)
             else:
                 raise ValueError(f"Format non supporte: {format_type}")
-
             self.exportCompleted.emit(output_path)
             return True
-
         except Exception as exc:
             self.errorOccurred.emit(f"Erreur export: {exc}")
             return False
@@ -376,28 +466,50 @@ class PostProcessor(QObject):
     def _export_csv(self, output_path: str) -> None:
         import pandas as pd
 
-        rows = []
-        for channel, stats in self.current_analysis["basic_stats"].items():
-            for metric, value in stats.items():
-                rows.append({
-                    "channel": channel,
-                    "category": "basic_stats",
-                    "metric": metric,
-                    "value": value,
-                })
-        for channel, goda in self.current_analysis["goda_metrics"].items():
-            for metric, value in goda.items():
-                rows.append({
-                    "channel": channel,
-                    "category": "goda_metrics",
-                    "metric": metric,
-                    "value": value,
-                })
+        rows: list[dict[str, Any]] = []
+        categories = ("basic_stats", "wave_parameters", "quality")
+        for category in categories:
+            for channel, metrics in self.current_analysis.get(category, {}).items():
+                for metric, value in metrics.items():
+                    if isinstance(value, (dict, list)):
+                        value = json.dumps(self._prepare_json_data(value), ensure_ascii=False)
+                    rows.append(
+                        {
+                            "channel": channel,
+                            "category": category,
+                            "metric": metric,
+                            "value": value,
+                        }
+                    )
+        for channel, spectrum in self.current_analysis["spectral_analysis"].items():
+            for metric in (
+                "peak_frequency",
+                "peak_period",
+                "Hm0",
+                "Tm01",
+                "Tm02",
+                "Te",
+                "frequency_resolution",
+                "segment_count",
+            ):
+                rows.append(
+                    {
+                        "channel": channel,
+                        "category": "spectral_analysis",
+                        "metric": metric,
+                        "value": spectrum.get(metric),
+                    }
+                )
         pd.DataFrame(rows).to_csv(output_path, index=False)
 
     def _export_json(self, output_path: str) -> None:
         with open(output_path, "w", encoding="utf-8") as handle:
-            json.dump(self._prepare_json_data(self.current_analysis), handle, indent=2, ensure_ascii=False)
+            json.dump(
+                self._prepare_json_data(self.current_analysis),
+                handle,
+                indent=2,
+                ensure_ascii=False,
+            )
 
     def _export_hdf5(self, output_path: str) -> None:
         try:
@@ -406,46 +518,69 @@ class PostProcessor(QObject):
             raise ImportError("h5py requis pour l'export HDF5") from exc
 
         with h5py.File(output_path, "w") as handle:
-            handle.attrs["timestamp"] = self.current_analysis["timestamp"]
+            handle.attrs["timestamp"] = str(self.current_analysis["timestamp"])
             handle.attrs["sample_rate"] = self.sample_rate
+            handle.attrs["analysis_configuration"] = json.dumps(
+                self.current_analysis["analysis_configuration"], ensure_ascii=False
+            )
 
-            stats_group = handle.create_group("basic_stats")
-            for channel, stats in self.current_analysis["basic_stats"].items():
-                channel_group = stats_group.create_group(channel)
-                for metric, value in stats.items():
-                    channel_group.attrs[metric] = value
+            for category in ("basic_stats", "wave_parameters", "quality"):
+                category_group = handle.create_group(category)
+                for channel, metrics in self.current_analysis[category].items():
+                    channel_group = category_group.create_group(channel)
+                    for metric, value in metrics.items():
+                        channel_group.attrs[metric] = self._hdf5_attribute(value)
 
-            goda_group = handle.create_group("goda_metrics")
-            for channel, goda in self.current_analysis["goda_metrics"].items():
-                channel_group = goda_group.create_group(channel)
-                for metric, value in goda.items():
-                    channel_group.attrs[metric] = value
+            spectral_group = handle.create_group("spectral_analysis")
+            for channel, spectrum in self.current_analysis["spectral_analysis"].items():
+                channel_group = spectral_group.create_group(channel)
+                channel_group.create_dataset("frequencies", data=spectrum["frequencies"])
+                channel_group.create_dataset("psd", data=spectrum["psd"])
+                for metric, value in spectrum.items():
+                    if metric not in {"frequencies", "psd", "power_spectrum"}:
+                        channel_group.attrs[metric] = self._hdf5_attribute(value)
 
-    def _prepare_json_data(self, data):
+            cross_group = handle.create_group("cross_spectral_analysis")
+            for pair, metrics in self.current_analysis["cross_spectral_analysis"].items():
+                pair_group = cross_group.create_group(pair)
+                for metric, value in metrics.items():
+                    if metric in {"frequencies", "coherence", "phase_degrees"}:
+                        pair_group.create_dataset(metric, data=value)
+                    else:
+                        pair_group.attrs[metric] = self._hdf5_attribute(value)
+
+    def _hdf5_attribute(self, value: Any) -> Any:
+        if isinstance(value, (str, int, float, bool, np.integer, np.floating)):
+            return value
+        return json.dumps(self._prepare_json_data(value), ensure_ascii=False)
+
+    def _prepare_json_data(self, data: Any) -> Any:
         if isinstance(data, dict):
             return {key: self._prepare_json_data(value) for key, value in data.items()}
+        if isinstance(data, (list, tuple)):
+            return [self._prepare_json_data(item) for item in data]
         if isinstance(data, np.ndarray):
             return data.tolist()
         if isinstance(data, (np.integer, np.floating)):
-            return float(data)
+            return data.item()
         return data
 
-    def get_analysis_summary(self) -> Optional[Dict]:
+    def get_analysis_summary(self) -> dict[str, Any] | None:
         if self.current_analysis is None:
             return None
-
-        summary = {
+        return {
             "timestamp": self.current_analysis["timestamp"],
-            "channels_analyzed": list(self.current_analysis["basic_stats"].keys()),
+            "channels_analyzed": list(self.current_analysis["basic_stats"]),
             "sample_rate": self.sample_rate,
-        }
-        if "goda_metrics" in self.current_analysis:
-            summary["goda_summary"] = {}
-            for channel, goda in self.current_analysis["goda_metrics"].items():
-                summary["goda_summary"][channel] = {
-                    "Hs": goda.get("Hs", 0),
-                    "H_max": goda.get("H_max", 0),
-                    "Tp": goda.get("Tp", 0),
-                    "n_waves": goda.get("n_waves", 0),
+            "reference_channel": self.current_analysis["reference_channel"],
+            "wave_summary": {
+                channel: {
+                    "H1_3": values.get("H1_3", 0.0),
+                    "Hm0": values.get("Hm0", 0.0),
+                    "Tp": values.get("Tp", 0.0),
+                    "Tm02": values.get("Tm02", 0.0),
+                    "n_waves": values.get("n_waves", 0),
                 }
-        return summary
+                for channel, values in self.current_analysis["wave_parameters"].items()
+            },
+        }

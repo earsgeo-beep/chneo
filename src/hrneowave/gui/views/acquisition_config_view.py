@@ -43,6 +43,7 @@ class AcquisitionConfigView(QWidget):
 
     data_exported = Signal(str)
     calibration_completed = Signal(dict)
+    data_block_received = Signal(object, object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -169,7 +170,9 @@ class AcquisitionConfigView(QWidget):
         params_group = QGroupBox("Parametres d'acquisition")
         params_layout = QFormLayout(params_group)
         self.sampling_rate_spin = QDoubleSpinBox()
-        self.sampling_rate_spin.setRange(1.0, 50000.0)
+        # Le USB-1608FS classique scanne toujours huit canaux et accepte au
+        # maximum 100 kS/s agreges, soit 12.5 kS/s par canal.
+        self.sampling_rate_spin.setRange(1.0, 12500.0)
         self.sampling_rate_spin.setValue(1000.0)
         self.sampling_rate_spin.setSuffix(" Hz")
         self.duration_spin = QDoubleSpinBox()
@@ -274,6 +277,7 @@ class AcquisitionConfigView(QWidget):
         self.export_json_btn.clicked.connect(self.export_json)
         self.export_hdf5_btn.clicked.connect(self.export_hdf5)
         self.update_timer.timeout.connect(self.update_display)
+        self.data_block_received.connect(self._display_received_data)
         self.update_timer.start(1000)
 
     def _initialize_channels_table(self) -> None:
@@ -438,12 +442,17 @@ class AcquisitionConfigView(QWidget):
             sampling_rate=self.sampling_rate_spin.value(),
             duration_seconds=duration,
             channels=active_channels,
+            recording_directory=str(self._get_default_data_directory()),
         )
         if not success:
             self.log_message("Erreur de demarrage d'acquisition")
             return
 
         self.log_message(f"Acquisition demarree: {project_name}")
+        if self.controller.current_session.data_file_path:
+            self.log_message(
+                f"Enregistrement continu: {self.controller.current_session.data_file_path}"
+            )
         self.start_acquisition_btn.setEnabled(False)
         self.stop_acquisition_btn.setEnabled(True)
         self.progress_bar.setVisible(duration is not None)
@@ -535,6 +544,10 @@ class AcquisitionConfigView(QWidget):
         self.log_text.append(f"[{timestamp}] {message}")
 
     def data_received_callback(self, data, session) -> None:
+        """Relaye le bloc vers le thread Qt au lieu de modifier l'UI ici."""
+        self.data_block_received.emit(data, session)
+
+    def _display_received_data(self, data, session) -> None:
         try:
             if hasattr(data, "shape") and data.shape[0] > 0:
                 latest_sample = data[-1]
@@ -579,6 +592,11 @@ class AcquisitionConfigView(QWidget):
             export_dir.mkdir(parents=True, exist_ok=True)
             return export_dir
         return Path.cwd()
+
+    def _get_default_data_directory(self) -> Path:
+        data_dir = self.project_dir / "data" if self.project_dir else Path.cwd() / "data"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        return data_dir
 
     def _export_data(self, format_type: str, file_filter: str, suffix: str) -> None:
         if not self.controller or not self.controller.current_session:

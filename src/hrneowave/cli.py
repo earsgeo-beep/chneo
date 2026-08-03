@@ -9,12 +9,14 @@ import logging
 import os
 import sys
 
+from hrneowave import __version__
+
 QApplication = None
 Qt = None
 
 
 def _ensure_qt_imports() -> str | None:
-    """Charge un binding Qt compatible et retourne son nom."""
+    """Charge PySide6, le binding Qt supporte par CHNeoWave."""
     global QApplication, Qt
 
     try:
@@ -25,15 +27,7 @@ def _ensure_qt_imports() -> str | None:
         Qt = _Qt
         return "PySide6"
     except ImportError:
-        try:
-            from PyQt6.QtWidgets import QApplication as _QApplication
-            from PyQt6.QtCore import Qt as _Qt
-
-            QApplication = _QApplication
-            Qt = _Qt
-            return "PyQt6"
-        except ImportError:
-            return None
+        return None
 
 
 def _set_qt_application_attributes() -> None:
@@ -90,8 +84,8 @@ def run_gui() -> int:
 
     binding_name = _ensure_qt_imports()
     if not binding_name:
-        logger.critical("Aucune bibliothèque Qt trouvée (PySide6 ou PyQt6)")
-        raise RuntimeError("Qt non disponible")
+        logger.critical("PySide6 n'est pas installe")
+        raise RuntimeError("PySide6 est requis pour lancer CHNeoWave")
 
     _set_qt_application_attributes()
 
@@ -99,7 +93,7 @@ def run_gui() -> int:
     if app is None:
         app = QApplication(sys.argv)
         app.setApplicationName("CHNeoWave")
-        app.setApplicationVersion("1.0.0")
+        app.setApplicationVersion(__version__)
         app.setOrganizationName("Laboratoire Maritime")
 
     from hrneowave.gui.styles.theme_manager import ThemeManager
@@ -134,7 +128,7 @@ def run_cli(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--version",
         action="version",
-        version="CHNeoWave 1.0.0",
+        version=f"CHNeoWave {__version__}",
     )
     parser.add_argument(
         "--gui",

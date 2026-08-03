@@ -8,18 +8,26 @@ Auteur: CHNeoWave Development Team
 Version: 1.0.0
 """
 
-import logging
 import json
+import logging
+import re
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
+from pathlib import Path
 from queue import Queue
 from typing import Optional, Dict, List, Callable, Any
 
 import numpy as np
 
-from .mcc_daq_wrapper import MCCDAQ_USB1608FS, MCCRanges, scan_available_boards
+from .mcc_daq_wrapper import (
+    MCCBackendError,
+    MCCDAQ_USB1608FS,
+    MCCRanges,
+    scan_available_boards,
+)
+from .session_recorder import ContinuousHDF5Recorder, RecordingError
 
 # Configuration du logging
 logger = logging.getLogger(__name__)
@@ -59,7 +67,13 @@ class AcquisitionController:
     avec des fonctionnalités spécialisées pour l'acquisition de houle maritime.
     """
     
-    def __init__(self, data_callback: Optional[Callable] = None):
+    def __init__(
+        self,
+        data_callback: Optional[Callable] = None,
+        daq_factory: Callable[[], MCCDAQ_USB1608FS] = MCCDAQ_USB1608FS,
+        board_scanner: Callable[[], List[int]] = scan_available_boards,
+        recorder_factory: Callable[[], ContinuousHDF5Recorder] = ContinuousHDF5Recorder,
+    ):
         """
         Initialise le contrôleur d'acquisition
         
@@ -68,6 +82,10 @@ class AcquisitionController:
         """
         self.daq = None
         self.data_callback = data_callback
+        self._daq_factory = daq_factory
+        self._board_scanner = board_scanner
+        self._recorder_factory = recorder_factory
+        self._recorder: Optional[ContinuousHDF5Recorder] = None
         self.is_acquiring = False
         self.acquisition_thread = None
         self.data_queue = Queue()
@@ -83,12 +101,15 @@ class AcquisitionController:
             'acquisition_rate': 0.0,
             'last_update': None,
             'errors': 0,
-            'buffer_overruns': 0
+            'buffer_overruns': 0,
+            'recording_errors': 0,
         }
         
         # Buffer pour données
         self.data_buffer = []
         self.buffer_size = 10000
+        self._data_lock = threading.RLock()
+        self._simulation_sample_index = 0
         self.last_exported_path: Optional[str] = None
         
         self._initialize_system()
@@ -97,12 +118,12 @@ class AcquisitionController:
         """Initialise le système d'acquisition"""
         try:
             # Scan des cartes disponibles
-            self.available_boards = scan_available_boards()
+            self.available_boards = self._board_scanner()
             logger.info(f"Cartes MCC détectées: {self.available_boards}")
             
             if self.available_boards:
                 # Initialisation avec la première carte
-                self.daq = MCCDAQ_USB1608FS()
+                self.daq = self._daq_factory()
                 if self.daq.initialize(self.available_boards[0]):
                     logger.info("Système d'acquisition initialisé")
                 else:
@@ -145,6 +166,9 @@ class AcquisitionController:
         """
         if not (0 <= channel <= 7):
             logger.error(f"Numéro de canal invalide: {channel}")
+            return False
+        if sensor_sensitivity == 0:
+            logger.error("La sensibilite du canal %s ne peut pas etre nulle", channel)
             return False
             
         # Conversion de la plage de tension
@@ -207,7 +231,8 @@ class AcquisitionController:
                                 project_name: str,
                                 sampling_rate: float = 1000.0,
                                 duration_seconds: Optional[float] = None,
-                                channels: Optional[List[int]] = None) -> bool:
+                                channels: Optional[List[int]] = None,
+                                recording_directory: Optional[str] = None) -> bool:
         """
         Démarre une session d'acquisition
         
@@ -216,12 +241,16 @@ class AcquisitionController:
             sampling_rate: Fréquence d'échantillonnage (Hz)
             duration_seconds: Durée d'acquisition (None = continue)
             channels: Liste des canaux à acquérir (None = tous configurés)
+            recording_directory: Repertoire du fichier HDF5 alimente en continu
             
         Returns:
             True si l'acquisition démarre
         """
         if self.is_acquiring:
             logger.error("Acquisition déjà en cours")
+            return False
+        if sampling_rate <= 0:
+            logger.error("Frequence d'echantillonnage invalide: %s", sampling_rate)
             return False
             
         if not self.is_hardware_available() and not self._simulation_mode():
@@ -235,15 +264,36 @@ class AcquisitionController:
         if not channels:
             logger.error("Aucun canal configuré")
             return False
+        missing_channels = [channel for channel in channels if channel not in self.channels_config]
+        if missing_channels:
+            logger.error("Canaux non configures: %s", missing_channels)
+            return False
+
+        selected_configs = [self.channels_config[channel] for channel in channels]
+
+        with self._data_lock:
+            self.data_buffer.clear()
+        self._simulation_sample_index = 0
+        self.stats = {
+            'samples_acquired': 0,
+            'acquisition_rate': 0.0,
+            'last_update': None,
+            'errors': 0,
+            'buffer_overruns': 0,
+            'recording_errors': 0,
+        }
             
         # Création de la session
-        session_id = f"{project_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        session_start = datetime.now()
+        project_slug = re.sub(r"[^A-Za-z0-9._-]+", "_", project_name.strip())
+        project_slug = project_slug.strip("._-")[:80] or "Acquisition_Maritime"
+        session_id = f"{project_slug}_{session_start.strftime('%Y%m%d_%H%M%S_%f')[:-3]}"
         self.current_session = AcquisitionSession(
             session_id=session_id,
             project_name=project_name,
-            start_time=datetime.now(),
+            start_time=session_start,
             sampling_rate=sampling_rate,
-            channels=[self.channels_config[ch] for ch in channels if ch in self.channels_config],
+            channels=selected_configs,
             metadata={
                 'duration_seconds': duration_seconds,
                 'selected_channels': channels,
@@ -255,6 +305,14 @@ class AcquisitionController:
         try:
             if self.daq:
                 # Configuration matérielle
+                self.daq.clear_channels()
+                for channel_config in selected_configs:
+                    self.daq.configure_channel(
+                        channel_config.channel,
+                        channel_config.range_type,
+                        channel_config.label,
+                        "V",
+                    )
                 low_chan = min(channels)
                 high_chan = max(channels)
                 
@@ -267,7 +325,24 @@ class AcquisitionController:
                 
                 if not success:
                     logger.error("Erreur de démarrage de l'acquisition matérielle")
+                    self.current_session = None
                     return False
+                self.current_session.sampling_rate = self.daq.acquisition_config.rate
+                self.current_session.metadata['requested_sampling_rate'] = sampling_rate
+                self.current_session.metadata['actual_sampling_rate'] = self.daq.acquisition_config.rate
+
+            if duration_seconds is not None:
+                self.current_session.metadata['expected_samples'] = int(
+                    round(duration_seconds * self.current_session.sampling_rate)
+                )
+
+            if recording_directory:
+                recording_path = Path(recording_directory) / f"{session_id}.h5"
+                self._recorder = self._recorder_factory()
+                resolved_path = self._recorder.start(recording_path, self.current_session)
+                self.current_session.data_file_path = str(resolved_path)
+                self.current_session.metadata['recording_path'] = str(resolved_path)
+                logger.info("Enregistrement continu active: %s", resolved_path)
                     
             # Démarrage du thread d'acquisition
             self.is_acquiring = True
@@ -283,47 +358,88 @@ class AcquisitionController:
             
         except Exception as e:
             logger.error(f"Erreur lors du démarrage: {e}")
+            if self._recorder:
+                self._recorder.close()
+                self._recorder = None
+            if self.daq:
+                self.daq.stop_acquisition()
             self.current_session = None
             return False
             
     def _acquisition_loop(self, duration_seconds: Optional[float]):
         """Boucle principale d'acquisition"""
-        start_time = time.time()
+        start_time = time.monotonic()
         last_stats_update = start_time
         samples_since_last_update = 0
+        next_simulation_deadline = start_time
+        target_samples = (
+            int(self.current_session.metadata.get('expected_samples', 0))
+            if self.current_session and duration_seconds is not None
+            else None
+        )
+        acquisition_deadline = (
+            start_time + duration_seconds + max(2.0, duration_seconds * 0.1)
+            if duration_seconds is not None
+            else None
+        )
         
         try:
             while self.is_acquiring:
-                # Vérification de la durée
-                if duration_seconds and (time.time() - start_time) >= duration_seconds:
+                if target_samples is not None and self.stats['samples_acquired'] >= target_samples:
                     logger.info("Durée d'acquisition atteinte")
                     break
+                if acquisition_deadline and time.monotonic() >= acquisition_deadline:
+                    logger.error(
+                        "Acquisition incomplete: %s/%s echantillons",
+                        self.stats['samples_acquired'],
+                        target_samples,
+                    )
+                    self.stats['errors'] += 1
+                    self.current_session.metadata['incomplete_reason'] = 'acquisition_timeout'
+                    break
+
+                block_samples = 100
+                if target_samples is not None:
+                    block_samples = min(
+                        block_samples,
+                        target_samples - self.stats['samples_acquired'],
+                    )
                     
                 # Acquisition des données
                 if self.daq:
                     # Acquisition matérielle
-                    data = self.daq.get_data(num_samples=100)
+                    data = self.daq.wait_for_data(num_samples=block_samples, timeout=0.25)
                     if data is not None:
                         self._process_acquired_data(data)
                         samples_since_last_update += data.shape[0]
                 else:
                     # Mode simulation
-                    data = self._generate_simulation_data()
+                    data = self._generate_simulation_data(block_samples)
                     self._process_acquired_data(data)
                     samples_since_last_update += data.shape[0]
-                    time.sleep(0.01)  # Simulation du timing
+                    next_simulation_deadline += data.shape[0] / self.current_session.sampling_rate
+                    sleep_duration = next_simulation_deadline - time.monotonic()
+                    if sleep_duration > 0:
+                        time.sleep(sleep_duration)
                     
                 # Mise à jour des statistiques
-                current_time = time.time()
+                current_time = time.monotonic()
                 if current_time - last_stats_update >= 1.0:  # Chaque seconde
                     self.stats['acquisition_rate'] = samples_since_last_update / (current_time - last_stats_update)
                     self.stats['last_update'] = datetime.now()
                     samples_since_last_update = 0
                     last_stats_update = current_time
                     
+        except MCCBackendError as e:
+            logger.error("Erreur MCC dans la boucle d'acquisition: %s", e)
+            self.stats['errors'] += 1
+            if self.daq:
+                self.stats['buffer_overruns'] = self.daq.buffer_overruns
         except Exception as e:
             logger.error(f"Erreur dans la boucle d'acquisition: {e}")
             self.stats['errors'] += 1
+            if isinstance(e, RecordingError):
+                self.stats['recording_errors'] += 1
             
         finally:
             self._finalize_acquisition()
@@ -340,18 +456,24 @@ class AcquisitionController:
             
         # Conversion en unités physiques
         processed_data = self._convert_to_physical_units(raw_data)
+
+        # Le disque est la source complete. Une erreur d'ecriture interrompt la
+        # session afin de ne jamais annoncer une acquisition non sauvegardee.
+        if self._recorder:
+            self._recorder.append(raw_data, processed_data)
         
         # Ajout au buffer
-        self.data_buffer.append({
-            'timestamp': datetime.now(),
-            'raw_data': raw_data,
-            'processed_data': processed_data,
-            'sample_count': raw_data.shape[0]
-        })
-        
-        # Limitation de la taille du buffer
-        if len(self.data_buffer) > 1000:
-            self.data_buffer.pop(0)
+        with self._data_lock:
+            self.data_buffer.append({
+                'timestamp': datetime.now(),
+                'raw_data': raw_data.copy(),
+                'processed_data': processed_data,
+                'sample_count': raw_data.shape[0]
+            })
+
+            # Buffer d'aperçu temporaire pour l'affichage en temps reel.
+            if len(self.data_buffer) > 1000:
+                self.data_buffer.pop(0)
             
         # Mise à jour des statistiques
         self.stats['samples_acquired'] += raw_data.shape[0]
@@ -368,7 +490,7 @@ class AcquisitionController:
         if self.current_session is None:
             return raw_data
             
-        processed_data = np.zeros_like(raw_data)
+        processed_data = np.zeros(raw_data.shape, dtype=np.float64)
         
         for i, channel_config in enumerate(self.current_session.channels):
             if i < raw_data.shape[1]:
@@ -380,45 +502,43 @@ class AcquisitionController:
                 
         return processed_data
         
-    def _generate_simulation_data(self) -> np.ndarray:
+    def _generate_simulation_data(self, num_samples: int = 100) -> np.ndarray:
         """Génère des données de simulation pour les tests"""
         if not self.current_session:
             return np.array([])
             
         num_channels = len(self.current_session.channels)
-        num_samples = 100
-        
-        # Génération de signaux simulés
-        t = np.linspace(0, 1, num_samples)
+        # Axe temporel continu respectant exactement la frequence demandee.
+        sample_rate = self.current_session.sampling_rate
+        sample_indices = self._simulation_sample_index + np.arange(num_samples)
+        t = sample_indices / sample_rate
         data = np.zeros((num_samples, num_channels))
         
         for i, channel_config in enumerate(self.current_session.channels):
             if channel_config.sensor_type == 'wave_height':
                 # Signal de houle sinusoïdal avec bruit
-                frequency = 0.1 + np.random.random() * 0.5  # 0.1-0.6 Hz
-                amplitude = 0.5 + np.random.random() * 1.5   # 0.5-2.0 m
-                phase = np.random.random() * 2 * np.pi
-                wave_signal = amplitude * np.sin(2 * np.pi * frequency * t + phase)
-                noise = 0.1 * np.random.normal(0, 1, num_samples)
-                data[:, i] = wave_signal + noise
+                frequency = 0.2 + 0.05 * i
+                physical_signal = 0.5 * np.sin(2 * np.pi * frequency * t)
+                noise = 0.005 * np.random.normal(0, 1, num_samples)
+                data[:, i] = physical_signal * channel_config.sensor_sensitivity + noise
                 
             elif channel_config.sensor_type == 'pressure':
                 # Signal de pression hydrostatique
-                base_pressure = 1013.25  # hPa
-                variation = 10 * np.sin(2 * np.pi * 0.05 * t)  # Variation lente
-                noise = 0.5 * np.random.normal(0, 1, num_samples)
-                data[:, i] = base_pressure + variation + noise
+                physical_signal = 10 * np.sin(2 * np.pi * 0.05 * t)
+                noise = 0.002 * np.random.normal(0, 1, num_samples)
+                data[:, i] = physical_signal * channel_config.sensor_sensitivity + noise
                 
             elif channel_config.sensor_type == 'accelerometer':
                 # Signal d'accélération
-                gravity = 9.81
-                vibration = 0.5 * np.sin(2 * np.pi * 2.0 * t)  # Vibration 2 Hz
-                noise = 0.1 * np.random.normal(0, 1, num_samples)
-                data[:, i] = gravity + vibration + noise
+                physical_signal = 0.5 * np.sin(2 * np.pi * 2.0 * t)
+                noise = 0.002 * np.random.normal(0, 1, num_samples)
+                data[:, i] = physical_signal * channel_config.sensor_sensitivity + noise
                 
             else:
                 # Signal générique
-                data[:, i] = np.random.normal(0, 1, num_samples)
+                data[:, i] = 0.1 * np.sin(2 * np.pi * (0.5 + i * 0.1) * t)
+
+        self._simulation_sample_index += num_samples
                 
         return data
         
@@ -450,6 +570,16 @@ class AcquisitionController:
         if self.current_session:
             self.current_session.end_time = datetime.now()
             self.current_session.total_samples = self.stats['samples_acquired']
+
+            if self._recorder:
+                try:
+                    self._recorder.finalize(self.current_session, self.stats)
+                except Exception as exc:
+                    self.stats['errors'] += 1
+                    self.stats['recording_errors'] += 1
+                    logger.error("Erreur de finalisation HDF5: %s", exc)
+                finally:
+                    self._recorder = None
             
             logger.info(f"Session terminée: {self.current_session.session_id}")
             logger.info(f"Échantillons acquis: {self.current_session.total_samples}")
@@ -469,7 +599,10 @@ class AcquisitionController:
             'statistics': self.stats.copy(),
             'session': None,
             'channels_configured': len(self.channels_config),
-            'data_buffer_size': len(self.data_buffer)
+            'data_buffer_size': len(self.data_buffer),
+            'recording_path': self.current_session.data_file_path
+            if self.current_session
+            else None,
         }
         
         if self.current_session:
@@ -499,14 +632,16 @@ class AcquisitionController:
         Returns:
             Dictionnaire avec les données
         """
-        if not self.data_buffer:
-            return None
+        with self._data_lock:
+            if not self.data_buffer:
+                return None
+            buffer_snapshot = list(self.data_buffer)
             
         # Agrégation des données récentes
         recent_samples = []
         total_samples = 0
         
-        for entry in reversed(self.data_buffer):
+        for entry in reversed(buffer_snapshot):
             if total_samples >= num_samples:
                 break
                 
@@ -523,11 +658,12 @@ class AcquisitionController:
         if all_data.shape[0] > num_samples:
             all_data = all_data[-num_samples:]
             
-        # Création des timestamps avec timedelta
-        from datetime import timedelta
-        base_time = datetime.now()
+        first_sample_index = max(0, self.stats['samples_acquired'] - all_data.shape[0])
         time_interval = timedelta(seconds=1.0 / self.current_session.sampling_rate)
-        timestamps = [base_time - i * time_interval for i in range(all_data.shape[0])]
+        timestamps = [
+            self.current_session.start_time + (first_sample_index + i) * time_interval
+            for i in range(all_data.shape[0])
+        ]
         
         return {
             'data': all_data,
@@ -575,7 +711,12 @@ class AcquisitionController:
         if not self.data_buffer:
             return np.empty((0, 0))
 
-        chunks = [entry['processed_data'] for entry in self.data_buffer if 'processed_data' in entry]
+        with self._data_lock:
+            chunks = [
+                entry['processed_data'].copy()
+                for entry in self.data_buffer
+                if 'processed_data' in entry
+            ]
         if not chunks:
             return np.empty((0, 0))
 
@@ -607,11 +748,13 @@ class AcquisitionController:
         with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
             writer = csv.writer(csvfile)
 
-            headers = ['time'] + channel_keys
+            headers = ['time', 'sample_rate'] + channel_keys
             writer.writerow(headers)
 
             for index, row in enumerate(data_matrix):
-                writer.writerow([float(time_vector[index])] + row.tolist())
+                writer.writerow(
+                    [float(time_vector[index]), float(self.current_session.sampling_rate)] + row.tolist()
+                )
 
         logger.info(f"Données exportées en CSV: {file_path}")
         return True
@@ -659,7 +802,12 @@ class AcquisitionController:
                 }
                 for ch in self.current_session.channels
             ],
-            'statistics': self.stats,
+            'statistics': {
+                **self.stats,
+                'last_update': self.stats['last_update'].isoformat()
+                if self.stats.get('last_update')
+                else None,
+            },
             'data_entries': len(self.data_buffer)
         }
 
@@ -755,6 +903,10 @@ class AcquisitionController:
             
         if self.daq:
             self.daq.close()
+
+        if self._recorder:
+            self._recorder.close()
+            self._recorder = None
             
         logger.info("Contrôleur d'acquisition fermé")
         

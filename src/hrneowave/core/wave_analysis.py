@@ -1,0 +1,469 @@
+"""Analyse scientifique des series temporelles de houle.
+
+Les spectres sont des densites spectrales de variance unilaterales calculees
+par la methode de Welch. Les parametres spectraux suivent les definitions ITTC
+usuelles: Hm0, Tp, Tm01 et Tm02.
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import asdict, dataclass
+from typing import Any
+
+import numpy as np
+from scipy import signal, stats
+
+
+class WaveAnalysisError(ValueError):
+    """Donnees ou configuration incompatibles avec une analyse fiable."""
+
+
+@dataclass(frozen=True)
+class WaveAnalysisConfig:
+    """Parametres numeriques explicites et exportables avec les resultats."""
+
+    segment_length: int = 1024
+    overlap_ratio: float = 0.5
+    window: str = "hann"
+    detrend: bool = True
+    min_frequency: float = 0.0
+    max_frequency: float | None = None
+    minimum_samples: int = 32
+
+    def validate(self, sample_rate: float) -> None:
+        if sample_rate <= 0 or not math.isfinite(sample_rate):
+            raise WaveAnalysisError("La frequence d'echantillonnage est invalide")
+        if self.segment_length < 8:
+            raise WaveAnalysisError("La taille de segment doit etre au moins egale a 8")
+        if not 0 <= self.overlap_ratio < 1:
+            raise WaveAnalysisError("Le recouvrement doit etre compris entre 0 et 1 exclu")
+        if self.min_frequency < 0:
+            raise WaveAnalysisError("La frequence minimale ne peut pas etre negative")
+        if self.min_frequency >= sample_rate / 2:
+            raise WaveAnalysisError("La frequence minimale atteint ou depasse Nyquist")
+        if self.max_frequency is not None:
+            if self.max_frequency <= self.min_frequency:
+                raise WaveAnalysisError("La bande frequentielle est invalide")
+            if self.max_frequency > sample_rate / 2:
+                raise WaveAnalysisError("La frequence maximale depasse Nyquist")
+
+
+class WaveAnalyzer:
+    """Calcule statistiques, spectre, moments et vagues individuelles."""
+
+    METHOD_VERSION = "1.0"
+
+    def __init__(self, config: WaveAnalysisConfig | None = None):
+        self.config = config or WaveAnalysisConfig()
+
+    def configuration(self) -> dict[str, Any]:
+        return {
+            "method": "Welch PSD + zero-upcrossing",
+            "method_version": self.METHOD_VERSION,
+            **asdict(self.config),
+        }
+
+    def analyze_channel(
+        self,
+        values: np.ndarray,
+        sample_rate: float,
+        unit: str = "",
+    ) -> dict[str, Any]:
+        self.config.validate(sample_rate)
+        series = self._validate_series(values)
+        centered = series - np.mean(series)
+        if self.config.detrend and len(series) > 2:
+            processed = signal.detrend(series, type="linear")
+        else:
+            processed = centered
+
+        spectral = self._spectral_analysis(
+            processed,
+            sample_rate,
+            unit,
+            constant_signal=bool(np.ptp(series) == 0),
+        )
+        temporal = self._zero_upcrossing_analysis(processed, sample_rate, unit)
+        quality = self._quality_indicators(series, processed, spectral, sample_rate)
+
+        return {
+            "basic_stats": self._basic_statistics(series, sample_rate, unit),
+            "spectral": spectral,
+            "wave_parameters": {
+                **temporal,
+                "Hm0": spectral["Hm0"],
+                "Tp": spectral["peak_period"],
+                "Tm01": spectral["Tm01"],
+                "Tm02": spectral["Tm02"],
+                "Te": spectral["Te"],
+            },
+            "quality": quality,
+        }
+
+    def analyze_cross_spectrum(
+        self,
+        reference: np.ndarray,
+        compared: np.ndarray,
+        sample_rate: float,
+        reference_peak_frequency: float,
+    ) -> dict[str, Any]:
+        """Analyse la coherence et la phase d'un canal par rapport a une reference."""
+        self.config.validate(sample_rate)
+        x = self._validate_series(reference)
+        y = self._validate_series(compared)
+        sample_count = min(len(x), len(y))
+        x = x[:sample_count]
+        y = y[:sample_count]
+        if self.config.detrend:
+            x = signal.detrend(x, type="linear")
+            y = signal.detrend(y, type="linear")
+        else:
+            x = x - np.mean(x)
+            y = y - np.mean(y)
+
+        nperseg, noverlap, segment_count = self._welch_layout(sample_count)
+        common = {
+            "fs": sample_rate,
+            "window": self.config.window,
+            "nperseg": nperseg,
+            "noverlap": noverlap,
+            "detrend": False,
+        }
+        frequencies, coherence = signal.coherence(x, y, **common)
+        _, cross_density = signal.csd(
+            x,
+            y,
+            scaling="density",
+            return_onesided=True,
+            **common,
+        )
+        coherence = np.nan_to_num(coherence, nan=0.0, posinf=0.0, neginf=0.0)
+        cross_density = np.nan_to_num(cross_density, nan=0.0, posinf=0.0, neginf=0.0)
+        phase_degrees = np.degrees(np.angle(cross_density))
+        band = self._frequency_mask(frequencies, sample_rate)
+        valid_indices = np.flatnonzero(band)
+        if len(valid_indices) == 0:
+            raise WaveAnalysisError("Aucune frequence exploitable pour l'analyse croisee")
+
+        peak_index = int(
+            valid_indices[
+                np.argmin(np.abs(frequencies[valid_indices] - reference_peak_frequency))
+            ]
+        )
+        max_index = int(valid_indices[np.argmax(coherence[valid_indices])])
+        peak_frequency = float(frequencies[peak_index])
+        phase_at_peak = float(phase_degrees[peak_index])
+
+        return {
+            "frequencies": frequencies.tolist(),
+            "coherence": coherence.tolist(),
+            "phase_degrees": phase_degrees.tolist(),
+            "reference_peak_frequency": float(reference_peak_frequency),
+            "coherence_at_reference_peak": float(coherence[peak_index]),
+            "phase_at_reference_peak_degrees": phase_at_peak,
+            "time_lag_at_reference_peak_seconds": (
+                math.radians(phase_at_peak) / (2 * math.pi * peak_frequency)
+                if peak_frequency > 0
+                else 0.0
+            ),
+            "maximum_coherence": float(coherence[max_index]),
+            "frequency_at_maximum_coherence": float(frequencies[max_index]),
+            "segment_count": segment_count,
+        }
+
+    def _spectral_analysis(
+        self,
+        values: np.ndarray,
+        sample_rate: float,
+        unit: str,
+        constant_signal: bool = False,
+    ) -> dict[str, Any]:
+        nperseg, noverlap, segment_count = self._welch_layout(len(values))
+        frequencies, density = signal.welch(
+            values,
+            fs=sample_rate,
+            window=self.config.window,
+            nperseg=nperseg,
+            noverlap=noverlap,
+            detrend=False,
+            return_onesided=True,
+            scaling="density",
+            average="mean",
+        )
+        density = np.maximum(np.asarray(density, dtype=np.float64), 0.0)
+        if constant_signal:
+            density.fill(0.0)
+        band = self._frequency_mask(frequencies, sample_rate)
+        band_indices = np.flatnonzero(band)
+        if len(band_indices) < 2:
+            raise WaveAnalysisError("La bande d'analyse contient moins de deux raies")
+
+        band_frequencies = frequencies[band]
+        band_density = density[band]
+        moments = {
+            "m_1": self._spectral_moment(band_frequencies, band_density, -1),
+            "m0": self._spectral_moment(band_frequencies, band_density, 0),
+            "m1": self._spectral_moment(band_frequencies, band_density, 1),
+            "m2": self._spectral_moment(band_frequencies, band_density, 2),
+            "m4": self._spectral_moment(band_frequencies, band_density, 4),
+        }
+        peak_local_index = int(np.argmax(band_density))
+        peak_index = int(band_indices[peak_local_index])
+        peak_frequency = (
+            self._interpolated_peak(frequencies, density, peak_index)
+            if float(band_density[peak_local_index]) > np.finfo(np.float64).tiny
+            else 0.0
+        )
+
+        m0 = moments["m0"]
+        m1 = moments["m1"]
+        m2 = moments["m2"]
+        m4 = moments["m4"]
+        m_1 = moments["m_1"]
+        hm0 = 4.0 * math.sqrt(max(m0, 0.0))
+        tm01 = m0 / m1 if m1 > 0 else 0.0
+        tm02 = math.sqrt(m0 / m2) if m2 > 0 else 0.0
+        energy_period = m_1 / m0 if m0 > 0 else 0.0
+        bandwidth = (
+            math.sqrt(max(0.0, 1.0 - (m2 * m2) / (m0 * m4)))
+            if m0 > 0 and m4 > 0
+            else 0.0
+        )
+
+        return {
+            "method": "Welch",
+            "frequencies": frequencies.tolist(),
+            "psd": density.tolist(),
+            "power_spectrum": density.tolist(),
+            "psd_units": f"{unit or 'unit'}^2/Hz",
+            "analysis_band_hz": [
+                float(band_frequencies[0]),
+                float(band_frequencies[-1]),
+            ],
+            "frequency_resolution": float(frequencies[1] - frequencies[0]),
+            "nyquist_frequency": float(sample_rate / 2),
+            "segment_length": nperseg,
+            "overlap_samples": noverlap,
+            "segment_count": segment_count,
+            "spectral_moments": moments,
+            "peak_frequency": peak_frequency,
+            "peak_period": 1.0 / peak_frequency if peak_frequency > 0 else 0.0,
+            "peak_psd": float(density[peak_index]),
+            "total_energy": m0,
+            "Hm0": hm0,
+            "Tm01": tm01,
+            "Tm02": tm02,
+            "Te": energy_period,
+            "spectral_bandwidth_epsilon": bandwidth,
+        }
+
+    def _zero_upcrossing_analysis(
+        self,
+        values: np.ndarray,
+        sample_rate: float,
+        unit: str,
+    ) -> dict[str, Any]:
+        indices = np.flatnonzero((values[:-1] <= 0.0) & (values[1:] > 0.0))
+        crossings: list[float] = []
+        for index in indices:
+            denominator = values[index + 1] - values[index]
+            fraction = -values[index] / denominator if denominator else 0.0
+            crossings.append(float(index + fraction))
+
+        heights: list[float] = []
+        periods: list[float] = []
+        for start_crossing, end_crossing in zip(
+            crossings[:-1], crossings[1:], strict=False
+        ):
+            start = max(0, int(math.ceil(start_crossing)))
+            stop = min(len(values), int(math.floor(end_crossing)) + 1)
+            if stop - start < 2:
+                continue
+            segment = values[start:stop]
+            heights.append(float(np.max(segment) - np.min(segment)))
+            periods.append(float((end_crossing - start_crossing) / sample_rate))
+
+        if not heights:
+            return {
+                "method": "zero-upcrossing",
+                "unit": unit,
+                "n_waves": 0,
+                "Hs": 0.0,
+                "H1_3": 0.0,
+                "H1_10": 0.0,
+                "H_max": 0.0,
+                "H_mean": 0.0,
+                "H_rms": 0.0,
+                "T_mean": 0.0,
+                "T_H1_3": 0.0,
+            }
+
+        height_array = np.asarray(heights)
+        period_array = np.asarray(periods)
+        order = np.argsort(height_array)[::-1]
+        top_third_count = max(1, int(math.ceil(len(height_array) / 3)))
+        top_tenth_count = max(1, int(math.ceil(len(height_array) / 10)))
+        top_third = order[:top_third_count]
+
+        return {
+            "method": "zero-upcrossing",
+            "unit": unit,
+            "n_waves": int(len(height_array)),
+            "Hs": float(np.mean(height_array[top_third])),
+            "H1_3": float(np.mean(height_array[top_third])),
+            "H1_10": float(np.mean(height_array[order[:top_tenth_count]])),
+            "H_max": float(np.max(height_array)),
+            "H_mean": float(np.mean(height_array)),
+            "H_rms": float(np.sqrt(np.mean(height_array**2))),
+            "T_mean": float(np.mean(period_array)),
+            "T_H1_3": float(np.mean(period_array[top_third])),
+        }
+
+    def _quality_indicators(
+        self,
+        original: np.ndarray,
+        processed: np.ndarray,
+        spectral: dict[str, Any],
+        sample_rate: float,
+    ) -> dict[str, Any]:
+        warnings: list[str] = []
+        variance_time = float(np.var(processed))
+        variance_spectral = float(spectral["spectral_moments"]["m0"])
+        variance_ratio = variance_spectral / variance_time if variance_time > 0 else 0.0
+        if bool(np.ptp(original) == 0):
+            variance_time = 0.0
+            variance_ratio = 0.0
+            warnings.append("Signal constant: aucune energie de houle detectee")
+        elif not 0.8 <= variance_ratio <= 1.2:
+            warnings.append("Ecart notable entre variance temporelle et spectrale")
+
+        segment_count = int(spectral["segment_count"])
+        if segment_count < 4:
+            warnings.append("Moins de quatre segments Welch: estimation spectrale peu stable")
+
+        block_count = min(8, max(1, len(processed) // 32))
+        block_variances = np.array(
+            [np.var(block) for block in np.array_split(processed, block_count) if len(block)]
+        )
+        positive_variances = block_variances[block_variances > 0]
+        stationarity_ratio = (
+            float(np.max(positive_variances) / np.min(positive_variances))
+            if len(positive_variances) > 1
+            else 1.0
+        )
+        if stationarity_ratio > 4.0:
+            warnings.append("Variance fortement non stationnaire entre les blocs")
+
+        time_axis = np.arange(len(original), dtype=np.float64) / sample_rate
+        trend_slope = (
+            float(np.polyfit(time_axis, original, 1)[0]) if len(original) > 1 else 0.0
+        )
+        return {
+            "valid": not warnings,
+            "warnings": warnings,
+            "sample_count": int(len(original)),
+            "duration_seconds": float(len(original) / sample_rate),
+            "welch_segment_count": segment_count,
+            "variance_time_domain": variance_time,
+            "variance_spectral": variance_spectral,
+            "spectral_to_time_variance_ratio": variance_ratio,
+            "block_variance_ratio": stationarity_ratio,
+            "linear_trend_per_second": trend_slope,
+        }
+
+    @staticmethod
+    def _basic_statistics(
+        values: np.ndarray,
+        sample_rate: float,
+        unit: str,
+    ) -> dict[str, Any]:
+        standard_deviation = float(np.std(values))
+        return {
+            "unit": unit,
+            "sample_count": int(len(values)),
+            "duration_seconds": float(len(values) / sample_rate),
+            "mean": float(np.mean(values)),
+            "std": standard_deviation,
+            "variance": float(np.var(values)),
+            "median": float(np.median(values)),
+            "min": float(np.min(values)),
+            "max": float(np.max(values)),
+            "peak_to_peak": float(np.ptp(values)),
+            "rms": float(np.sqrt(np.mean(values**2))),
+            "skewness": (
+                float(stats.skew(values, bias=False))
+                if len(values) > 2 and standard_deviation > 0
+                else 0.0
+            ),
+            "kurtosis": (
+                float(stats.kurtosis(values, fisher=True, bias=False))
+                if len(values) > 3 and standard_deviation > 0
+                else 0.0
+            ),
+        }
+
+    def _welch_layout(self, sample_count: int) -> tuple[int, int, int]:
+        nperseg = min(self.config.segment_length, sample_count)
+        if nperseg < 8:
+            raise WaveAnalysisError("Signal trop court pour l'analyse spectrale")
+        noverlap = min(nperseg - 1, int(round(nperseg * self.config.overlap_ratio)))
+        step = nperseg - noverlap
+        segment_count = 1 + max(0, (sample_count - nperseg) // step)
+        return nperseg, noverlap, segment_count
+
+    def _frequency_mask(self, frequencies: np.ndarray, sample_rate: float) -> np.ndarray:
+        upper = self.config.max_frequency or sample_rate / 2
+        return (
+            (frequencies > 0)
+            & (frequencies >= self.config.min_frequency)
+            & (frequencies <= upper)
+        )
+
+    @staticmethod
+    def _spectral_moment(
+        frequencies: np.ndarray,
+        density: np.ndarray,
+        order: int,
+    ) -> float:
+        weighted = density * np.power(frequencies, order)
+        return WaveAnalyzer._integrate(weighted, frequencies)
+
+    @staticmethod
+    def _integrate(values: np.ndarray, coordinates: np.ndarray) -> float:
+        if len(values) < 2:
+            return 0.0
+        widths = np.diff(coordinates)
+        return float(np.sum((values[:-1] + values[1:]) * widths * 0.5))
+
+    @staticmethod
+    def _interpolated_peak(
+        frequencies: np.ndarray,
+        density: np.ndarray,
+        peak_index: int,
+    ) -> float:
+        if peak_index <= 0 or peak_index >= len(density) - 1:
+            return float(frequencies[peak_index])
+        left, center, right = np.log(np.maximum(density[peak_index - 1 : peak_index + 2], 1e-300))
+        denominator = left - 2 * center + right
+        if denominator == 0:
+            return float(frequencies[peak_index])
+        offset = float(np.clip(0.5 * (left - right) / denominator, -1.0, 1.0))
+        resolution = frequencies[1] - frequencies[0]
+        return float(frequencies[peak_index] + offset * resolution)
+
+    def _validate_series(self, values: np.ndarray) -> np.ndarray:
+        series = np.asarray(values, dtype=np.float64)
+        if series.ndim != 1:
+            raise WaveAnalysisError("Chaque canal doit etre une serie unidimensionnelle")
+        if len(series) < self.config.minimum_samples:
+            raise WaveAnalysisError(
+                f"Signal trop court: {len(series)} echantillons, "
+                f"minimum {self.config.minimum_samples}"
+            )
+        if not np.all(np.isfinite(series)):
+            invalid_count = int(np.count_nonzero(~np.isfinite(series)))
+            raise WaveAnalysisError(
+                f"Signal contenant {invalid_count} valeur(s) NaN ou infinie(s)"
+            )
+        return series

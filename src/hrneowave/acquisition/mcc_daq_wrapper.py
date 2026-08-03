@@ -1,669 +1,529 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Wrapper Python pour carte d'acquisition MCC DAQ USB-1608FS
-Module d'interface avec les DLLs de Measurement Computing
+"""Backend MCC USB-1608FS base sur l'Universal Library officielle.
 
-Auteur: CHNeoWave Development Team
-Version: 1.0.0
+Le paquet :mod:`mcculw` est une fine couche Python au-dessus de l'Universal
+Library installee avec InstaCal. Il ne requiert aucune connexion internet a
+l'execution. Ce module conserve l'API historique de CHNeoWave tout en confiant
+la gestion des buffers Windows a l'API MCC.
 """
+
+from __future__ import annotations
 
 import ctypes
-import ctypes.wintypes
 import logging
-import numpy as np
+import threading
 import time
-from pathlib import Path
-from typing import Optional, List, Dict, Tuple, Any
 from dataclasses import dataclass
 from enum import IntEnum
+from types import SimpleNamespace
+from typing import Any
 
-# Configuration du logging
+import numpy as np
+
 logger = logging.getLogger(__name__)
 
+
+class MCCBackendError(RuntimeError):
+    """Erreur d'acquisition MCC avec un message exploitable par l'interface."""
+
+
+class MCCUniversalLibraryUnavailable(MCCBackendError):
+    """L'Universal Library ou son paquet Python n'est pas disponible."""
+
+
 class MCCErrorCodes(IntEnum):
-    """Codes d'erreur MCC DAQ"""
+    """Codes conserves pour compatibilite avec l'ancienne API."""
+
     NOERRORS = 0
     BADBOARD = 1
-    DEADDIGITALDEV = 2
-    DEADCOUNTERDEV = 3
-    DEADDADEV = 4
-    DEADADDEV = 5
-    NOTDIGITALCONF = 6
-    NOTCOUNTERCONF = 7
-    NOTDACONF = 8
-    NOTADCONF = 9
-    NOTMUXCONF = 10
-    BADPORTNUM = 11
-    BADCOUNTERDEVNUM = 12
-    BADDADEVNUM = 13
-    BADADDEVNUM = 14
     BADCHANNEL = 15
     BADRANGE = 16
-    BADCOUNTERCHAN = 17
-    BADCOUNTERPARAM = 18
-    BADEVENTTYPE = 19
-    WRONGDIGCONFIG = 20
-    WRONGDIOCONFIG = 21
-    WRONGCOUNTERCONFIG = 22
-    WRONGDACONFIG = 23
-    WRONGADCONFIG = 24
+
 
 class MCCRanges(IntEnum):
-    """Plages de tension disponibles"""
-    BIP20VOLTS = 0      # ±20V (Non disponible sur USB-1608FS)
-    BIP10VOLTS = 1      # ±10V
-    BIP5VOLTS = 2       # ±5V
-    BIP4VOLTS = 3       # ±4V (Non disponible sur USB-1608FS)
-    BIP2PT5VOLTS = 4    # ±2.5V (Non disponible sur USB-1608FS)
-    BIP2VOLTS = 5       # ±2V
-    BIP1PT25VOLTS = 6   # ±1.25V (Non disponible sur USB-1608FS)
-    BIP1VOLTS = 7       # ±1V
-    BIPPT625VOLTS = 8   # ±0.625V (Non disponible sur USB-1608FS)
-    BIPPT5VOLTS = 9     # ±0.5V (Non disponible sur USB-1608FS)
-    BIPPT25VOLTS = 10   # ±0.25V (Non disponible sur USB-1608FS)
-    BIPPT2VOLTS = 11    # ±0.2V (Non disponible sur USB-1608FS)
-    BIPPT1VOLTS = 12    # ±0.1V (Non disponible sur USB-1608FS)
-    BIPPT05VOLTS = 13   # ±0.05V (Non disponible sur USB-1608FS)
-    
+    """Plages analogiques prises en charge par la MCC USB-1608FS."""
+
+    BIP10VOLTS = 1
+    BIP5VOLTS = 2
+    BIP2VOLTS = 5
+    BIP1VOLTS = 7
+
+    @property
+    def full_scale_volts(self) -> float:
+        return {
+            MCCRanges.BIP10VOLTS: 10.0,
+            MCCRanges.BIP5VOLTS: 5.0,
+            MCCRanges.BIP2VOLTS: 2.0,
+            MCCRanges.BIP1VOLTS: 1.0,
+        }[self]
+
+
 class MCCOptions(IntEnum):
-    """Options d'acquisition"""
+    """Anciennes options publiques conservees pour les imports existants."""
+
     DEFAULTOPTION = 0x0000
     CONTINUOUS = 0x0001
     BACKGROUND = 0x0002
-    SINGLEENDED = 0x0004
-    DIFFERENTIAL = 0x0008
-    BLOCKIO = 0x0010
-    BURSTIO = 0x0020
-    CONVERTDATA = 0x0040
-    NODTCONNECT = 0x0080
-    DTCONNECT = 0x0100
     SCALEDATA = 0x0200
 
-@dataclass
-class AcquisitionConfig:
-    """Configuration d'acquisition"""
-    board_num: int = 0
-    low_chan: int = 0
-    high_chan: int = 7
-    range_type: MCCRanges = MCCRanges.BIP10VOLTS
-    rate: float = 1000.0  # Hz
-    count: int = 1000
-    options: int = MCCOptions.DEFAULTOPTION
-    
-@dataclass
+
+@dataclass(frozen=True)
 class ChannelConfig:
-    """Configuration d'un canal"""
+    """Configuration d'une entree analogique."""
+
     channel: int
     range_type: MCCRanges
     enabled: bool = True
     label: str = ""
     units: str = "V"
-    scale_factor: float = 1.0
-    offset: float = 0.0
+
+
+@dataclass
+class AcquisitionConfig:
+    """Configuration effective du scan MCC."""
+
+    board_num: int = 0
+    low_chan: int = 0
+    high_chan: int = 7
+    rate: float = 1000.0
+    count: int = 0
+    n_channels: int = 0
+    n_scan_channels: int = 0
+
+
+def _load_mcc_api() -> SimpleNamespace:
+    """Charge mcculw uniquement quand le backend materiel est utilise."""
+
+    try:
+        from mcculw import ul
+        from mcculw.enums import FunctionType, ScanOptions, ULRange
+    except (ImportError, OSError) as exc:
+        raise MCCUniversalLibraryUnavailable(
+            "MCC Universal Library indisponible. Installer InstaCal/Universal Library "
+            "puis le paquet Python mcculw depuis le kit hors ligne."
+        ) from exc
+
+    return SimpleNamespace(
+        ul=ul,
+        FunctionType=FunctionType,
+        ScanOptions=ScanOptions,
+        ULRange=ULRange,
+    )
+
 
 class MCCDAQ_USB1608FS:
+    """Acquisition continue fiable pour une MCC USB-1608FS configuree par InstaCal.
+
+    ``api`` est injectable afin de tester toute la logique de buffer sans carte.
+    En production, il est omis et le module charge l'Universal Library locale.
     """
-    Wrapper Python pour carte d'acquisition MCC DAQ USB-1608FS
-    
-    Cette classe fournit une interface Python pour contrôler la carte
-    d'acquisition de données Measurement Computing USB-1608FS via les DLLs.
-    """
-    
-    def __init__(self, dll_path: Optional[str] = None):
-        """
-        Initialise le wrapper MCC DAQ
-        
-        Args:
-            dll_path: Chemin vers les DLLs MCC (optionnel)
-        """
-        self.dll_path = dll_path or self._find_dll_path()
-        self.cbw32 = None
-        self.mcc_daq = None
+
+    MAX_CHANNELS = 8
+    MAX_AGGREGATE_RATE = 100_000.0
+    SUPPORTED_RANGES = (
+        MCCRanges.BIP10VOLTS,
+        MCCRanges.BIP5VOLTS,
+        MCCRanges.BIP2VOLTS,
+        MCCRanges.BIP1VOLTS,
+    )
+
+    def __init__(self, api: Any | None = None):
+        self._api = api
         self.board_num = 0
+        self.board_name = ""
         self.is_initialized = False
-        self.channels_config = {}
+        self.channels_config: dict[int, ChannelConfig] = {}
         self.acquisition_config = AcquisitionConfig()
-        
-        # Buffers pour les données
-        self.data_buffer = None
-        self.data_array = None
-        
-        self._load_dlls()
-        
-    def _find_dll_path(self) -> str:
-        """Trouve le chemin vers les DLLs MCC"""
-        # Chemin relatif au projet
-        project_root = Path(__file__).parent.parent.parent.parent
-        mcc_path = project_root / "Measurement Computing"
-        
-        if mcc_path.exists():
-            return str(mcc_path)
-            
-        # Chemins standards Windows
-        standard_paths = [
-            "C:\\Program Files (x86)\\Measurement Computing\\DAQ",
-            "C:\\Program Files\\Measurement Computing\\DAQ",
-            "C:\\MCC\\DAQ"
-        ]
-        
-        for path in standard_paths:
-            if Path(path).exists():
-                return path
-                
-        raise FileNotFoundError("Impossible de trouver les DLLs MCC DAQ")
-        
-    def _load_dlls(self):
-        """Charge les DLLs nécessaires"""
+
+        self._memhandle: int | None = None
+        self._buffer_count = 0
+        self._last_point_count = 0
+        self._sequence = 0
+        self._running = False
+        self._output_indices: list[int] = []
+        self._output_ranges: list[Any] = []
+        self._lock = threading.RLock()
+        self.buffer_overruns = 0
+
+    @property
+    def api(self):
+        if self._api is None:
+            self._api = _load_mcc_api()
+        return self._api
+
+    @classmethod
+    def detect_boards(cls, api: Any | None = None, max_boards: int = 10) -> list[int]:
+        """Retourne les numeros InstaCal valides sans modifier leur configuration."""
+
         try:
-            # Chargement de cbw32.dll (Universal Library)
-            cbw32_path = Path(self.dll_path) / "cbw32.dll"
-            if cbw32_path.exists():
-                self.cbw32 = ctypes.windll.LoadLibrary(str(cbw32_path))
-                logger.info(f"cbw32.dll chargé depuis: {cbw32_path}")
-            else:
-                # Essayer de charger depuis le système
-                self.cbw32 = ctypes.windll.cbw32
-                logger.info("cbw32.dll chargé depuis le système")
-                
-            # Chargement de MccDaq.dll
-            mcc_daq_path = Path(self.dll_path) / "MccDaq.dll"
-            if mcc_daq_path.exists():
-                self.mcc_daq = ctypes.windll.LoadLibrary(str(mcc_daq_path))
-                logger.info(f"MccDaq.dll chargé depuis: {mcc_daq_path}")
-                
-            self._setup_function_prototypes()
-            
-        except Exception as e:
-            logger.error(f"Erreur lors du chargement des DLLs: {e}")
-            raise
-            
-    def _setup_function_prototypes(self):
-        """Configure les prototypes des fonctions DLL"""
-        if self.cbw32:
-            # cbAIn - Lecture d'un canal analogique
-            self.cbw32.cbAIn.argtypes = [
-                ctypes.c_int,           # BoardNum
-                ctypes.c_int,           # Chan
-                ctypes.c_int,           # Gain
-                ctypes.POINTER(ctypes.c_ushort)  # DataValue
-            ]
-            self.cbw32.cbAIn.restype = ctypes.c_int
-            
-            # cbAInScan - Acquisition multi-canaux
-            self.cbw32.cbAInScan.argtypes = [
-                ctypes.c_int,           # BoardNum
-                ctypes.c_int,           # LowChan
-                ctypes.c_int,           # HighChan
-                ctypes.c_long,          # Count
-                ctypes.POINTER(ctypes.c_long),    # Rate
-                ctypes.c_int,           # Range
-                ctypes.POINTER(ctypes.c_ushort),  # ADData
-                ctypes.c_int            # Options
-            ]
-            self.cbw32.cbAInScan.restype = ctypes.c_int
-            
-            # cbGetStatus - Statut de l'acquisition
-            self.cbw32.cbGetStatus.argtypes = [
-                ctypes.c_int,           # BoardNum
-                ctypes.POINTER(ctypes.c_short),   # Status
-                ctypes.POINTER(ctypes.c_long),    # CurCount
-                ctypes.POINTER(ctypes.c_long),    # CurIndex
-                ctypes.c_int            # FunctionType
-            ]
-            self.cbw32.cbGetStatus.restype = ctypes.c_int
-            
-            # cbStopBackground - Arrêt de l'acquisition
-            self.cbw32.cbStopBackground.argtypes = [
-                ctypes.c_int,           # BoardNum
-                ctypes.c_int            # FunctionType
-            ]
-            self.cbw32.cbStopBackground.restype = ctypes.c_int
-            
-            # cbGetBoardName - Nom de la carte
-            self.cbw32.cbGetBoardName.argtypes = [
-                ctypes.c_int,           # BoardNum
-                ctypes.c_char_p         # BoardName
-            ]
-            self.cbw32.cbGetBoardName.restype = ctypes.c_int
-            
+            active_api = api or _load_mcc_api()
+        except MCCUniversalLibraryUnavailable:
+            return []
+
+        boards: list[int] = []
+        for board_num in range(max_boards):
+            try:
+                name = active_api.ul.get_board_name(board_num)
+                if name:
+                    boards.append(board_num)
+            except Exception:
+                continue
+        return boards
+
     def initialize(self, board_num: int = 0) -> bool:
-        """
-        Initialise la carte d'acquisition
-        
-        Args:
-            board_num: Numéro de carte (défaut: 0)
-            
-        Returns:
-            True si l'initialisation réussit
-        """
+        """Ouvre logiquement une carte deja enregistree dans InstaCal."""
+
         try:
+            board_name = self.api.ul.get_board_name(board_num)
+            if not board_name:
+                raise MCCBackendError(f"Aucune carte MCC configuree au numero {board_num}")
             self.board_num = board_num
-            
-            # Vérification de la présence de la carte
-            board_name = ctypes.create_string_buffer(64)
-            result = self.cbw32.cbGetBoardName(self.board_num, board_name)
-            
-            if result == MCCErrorCodes.NOERRORS:
-                self.is_initialized = True
-                logger.info(f"Carte initialisée: {board_name.value.decode('utf-8')}")
-                return True
-            else:
-                logger.error(f"Erreur d'initialisation: {result}")
-                return False
-                
-        except Exception as e:
-            logger.error(f"Erreur lors de l'initialisation: {e}")
+            self.board_name = str(board_name)
+            self.is_initialized = True
+            logger.info("Carte MCC initialisee: %s (board %s)", self.board_name, board_num)
+            return True
+        except Exception as exc:
+            logger.error("Initialisation MCC impossible: %s", exc)
+            self.is_initialized = False
             return False
-            
-    def configure_channel(self, channel: int, range_type: MCCRanges, 
-                         label: str = "", units: str = "V") -> bool:
-        """
-        Configure un canal d'acquisition
-        
-        Args:
-            channel: Numéro du canal (0-7)
-            range_type: Plage de tension
-            label: Étiquette du canal
-            units: Unités de mesure
-            
-        Returns:
-            True si la configuration réussit
-        """
-        if not (0 <= channel <= 7):
-            logger.error(f"Numéro de canal invalide: {channel}")
+
+    def configure_channel(
+        self,
+        channel: int,
+        range_type: MCCRanges,
+        label: str = "",
+        units: str = "V",
+    ) -> bool:
+        """Configure un canal et sa plage pour la channel-gain queue MCC."""
+
+        if not 0 <= channel < self.MAX_CHANNELS:
+            logger.error("Canal MCC invalide: %s", channel)
             return False
-            
-        config = ChannelConfig(
+        try:
+            normalized_range = MCCRanges(range_type)
+        except ValueError:
+            logger.error("Plage MCC non prise en charge: %s", range_type)
+            return False
+
+        self.channels_config[channel] = ChannelConfig(
             channel=channel,
-            range_type=range_type,
+            range_type=normalized_range,
             label=label or f"Canal {channel}",
-            units=units
+            units=units,
         )
-        
-        self.channels_config[channel] = config
-        logger.info(f"Canal {channel} configuré: {range_type.name}")
         return True
-        
-    def read_single_channel(self, channel: int) -> Optional[float]:
-        """
-        Lit une valeur sur un canal unique
-        
-        Args:
-            channel: Numéro du canal
-            
-        Returns:
-            Valeur lue en volts ou None si erreur
-        """
-        if not self.is_initialized:
-            logger.error("Carte non initialisée")
-            return None
-            
-        if channel not in self.channels_config:
-            logger.error(f"Canal {channel} non configuré")
-            return None
-            
-        try:
-            data_value = ctypes.c_ushort()
-            config = self.channels_config[channel]
-            
-            result = self.cbw32.cbAIn(
-                self.board_num,
-                channel,
-                config.range_type.value,
-                ctypes.byref(data_value)
-            )
-            
-            if result == MCCErrorCodes.NOERRORS:
-                # Conversion en volts
-                voltage = self._convert_to_voltage(data_value.value, config.range_type)
-                return voltage
-            else:
-                logger.error(f"Erreur de lecture canal {channel}: {result}")
-                return None
-                
-        except Exception as e:
-            logger.error(f"Erreur lors de la lecture: {e}")
-            return None
-            
-    def _convert_to_voltage(self, raw_value: int, range_type: MCCRanges) -> float:
-        """Convertit une valeur brute en tension"""
-        # Conversion 16 bits vers tension
-        # La USB-1608FS utilise des valeurs signées 16 bits
-        if raw_value > 32767:
-            raw_value = raw_value - 65536
-            
-        # Facteurs de conversion selon la plage
-        range_factors = {
-            MCCRanges.BIP10VOLTS: 20.0 / 65536,  # ±10V
-            MCCRanges.BIP5VOLTS: 10.0 / 65536,   # ±5V
-            MCCRanges.BIP2VOLTS: 4.0 / 65536,    # ±2V
-            MCCRanges.BIP1VOLTS: 2.0 / 65536,    # ±1V
+
+    def clear_channels(self) -> None:
+        if self._running:
+            raise MCCBackendError("Impossible de modifier les canaux pendant l'acquisition")
+        self.channels_config.clear()
+
+    def _ul_range(self, range_type: MCCRanges):
+        names = {
+            MCCRanges.BIP10VOLTS: "BIP10VOLTS",
+            MCCRanges.BIP5VOLTS: "BIP5VOLTS",
+            MCCRanges.BIP2VOLTS: "BIP2VOLTS",
+            MCCRanges.BIP1VOLTS: "BIP1VOLTS",
         }
-        
-        factor = range_factors.get(range_type, 20.0 / 65536)
-        return raw_value * factor
-        
-    def start_continuous_acquisition(self, 
-                                   low_chan: int = 0, 
-                                   high_chan: int = 7,
-                                   rate: float = 1000.0,
-                                   buffer_size: int = 10000) -> bool:
-        """
-        Démarre une acquisition continue
-        
-        Args:
-            low_chan: Premier canal
-            high_chan: Dernier canal  
-            rate: Fréquence d'échantillonnage (Hz)
-            buffer_size: Taille du buffer
-            
-        Returns:
-            True si l'acquisition démarre
-        """
+        return getattr(self.api.ULRange, names[range_type])
+
+    def _scan_options(self):
+        # SINGLEIO donne au USB-1608FS classique un paquet exactement egal au
+        # nombre de canaux. CONVERTDATA applique la calibration MCC aux codes
+        # 16 bits avant leur conversion en volts.
+        return (
+            self.api.ScanOptions.BACKGROUND
+            | self.api.ScanOptions.CONTINUOUS
+            | self.api.ScanOptions.SINGLEIO
+            | self.api.ScanOptions.CONVERTDATA
+        )
+
+    def start_continuous_acquisition(
+        self,
+        low_chan: int = 0,
+        high_chan: int = 7,
+        rate: float = 1000.0,
+        buffer_size: int = 10000,
+    ) -> bool:
+        """Demarre un scan continu et alloue un buffer circulaire MCC."""
+
         if not self.is_initialized:
-            logger.error("Carte non initialisée")
+            logger.error("Carte MCC non initialisee")
             return False
-            
-        try:
-            # Configuration
-            num_channels = high_chan - low_chan + 1
-            total_count = buffer_size * num_channels
-            
-            # Allocation du buffer
-            self.data_buffer = (ctypes.c_ushort * total_count)()
-            
-            # Configuration de l'acquisition
-            rate_ptr = ctypes.c_long(int(rate))
-            
-            # Utilisation de la première plage configurée ou défaut
-            first_chan_config = self.channels_config.get(low_chan)
-            range_type = first_chan_config.range_type.value if first_chan_config else MCCRanges.BIP10VOLTS.value
-            
-            result = self.cbw32.cbAInScan(
-                self.board_num,
-                low_chan,
-                high_chan,
-                total_count,
-                ctypes.byref(rate_ptr),
-                range_type,
-                self.data_buffer,
-                MCCOptions.CONTINUOUS | MCCOptions.BACKGROUND
-            )
-            
-            if result == MCCErrorCodes.NOERRORS:
-                self.acquisition_config.low_chan = low_chan
-                self.acquisition_config.high_chan = high_chan
-                self.acquisition_config.rate = rate_ptr.value
-                self.acquisition_config.count = total_count
-                
-                logger.info(f"Acquisition continue démarrée: {num_channels} canaux à {rate_ptr.value} Hz")
-                return True
-            else:
-                logger.error(f"Erreur démarrage acquisition: {result}")
-                return False
-                
-        except Exception as e:
-            logger.error(f"Erreur lors du démarrage: {e}")
+        if self._running:
+            logger.error("Un scan MCC est deja en cours")
             return False
-            
-    def get_acquisition_status(self) -> Dict[str, Any]:
-        """
-        Récupère le statut de l'acquisition
-        
-        Returns:
-            Dictionnaire avec le statut
-        """
-        if not self.is_initialized:
-            return {"error": "Carte non initialisée"}
-            
-        try:
-            status = ctypes.c_short()
-            cur_count = ctypes.c_long()
-            cur_index = ctypes.c_long()
-            
-            result = self.cbw32.cbGetStatus(
-                self.board_num,
-                ctypes.byref(status),
-                ctypes.byref(cur_count),
-                ctypes.byref(cur_index),
-                1  # AIFUNCTION
-            )
-            
-            if result == MCCErrorCodes.NOERRORS:
-                return {
-                    "status": status.value,
-                    "current_count": cur_count.value,
-                    "current_index": cur_index.value,
-                    "is_running": status.value == 1
-                }
-            else:
-                return {"error": f"Erreur statut: {result}"}
-                
-        except Exception as e:
-            return {"error": f"Exception: {e}"}
-            
-    def stop_acquisition(self) -> bool:
-        """
-        Arrête l'acquisition en cours
-        
-        Returns:
-            True si l'arrêt réussit
-        """
-        if not self.is_initialized:
+        if rate <= 0 or buffer_size <= 0:
+            logger.error("Frequence ou taille de buffer invalide")
             return False
-            
-        try:
-            result = self.cbw32.cbStopBackground(self.board_num, 1)  # AIFUNCTION
-            
-            if result == MCCErrorCodes.NOERRORS:
-                logger.info("Acquisition arrêtée")
-                return True
-            else:
-                logger.error(f"Erreur arrêt acquisition: {result}")
-                return False
-                
-        except Exception as e:
-            logger.error(f"Erreur lors de l'arrêt: {e}")
-            return False
-            
-    def get_data(self, num_samples: int = 1000) -> Optional[np.ndarray]:
-        """
-        Récupère les données d'acquisition
-        
-        Args:
-            num_samples: Nombre d'échantillons à récupérer
-            
-        Returns:
-            Array numpy avec les données ou None
-        """
-        if not self.data_buffer:
-            logger.error("Pas de buffer de données")
-            return None
-            
-        try:
-            num_channels = self.acquisition_config.high_chan - self.acquisition_config.low_chan + 1
-            
-            # Copie des données du buffer
-            raw_data = np.array(self.data_buffer[:num_samples * num_channels])
-            
-            # Reshape en [samples, channels]
-            data_matrix = raw_data.reshape(-1, num_channels)
-            
-            # Conversion en tension
-            voltage_data = np.zeros_like(data_matrix, dtype=np.float64)
-            
-            for i, chan in enumerate(range(self.acquisition_config.low_chan, 
-                                         self.acquisition_config.high_chan + 1)):
-                config = self.channels_config.get(chan)
-                range_type = config.range_type if config else MCCRanges.BIP10VOLTS
-                
-                for j in range(data_matrix.shape[0]):
-                    voltage_data[j, i] = self._convert_to_voltage(data_matrix[j, i], range_type)
-                    
-            return voltage_data
-            
-        except Exception as e:
-            logger.error(f"Erreur récupération données: {e}")
-            return None
-            
-    def get_available_ranges(self) -> List[MCCRanges]:
-        """Retourne les plages disponibles pour USB-1608FS"""
-        return [
-            MCCRanges.BIP10VOLTS,
-            MCCRanges.BIP5VOLTS,
-            MCCRanges.BIP2VOLTS,
-            MCCRanges.BIP1VOLTS
+
+        selected_channels = [
+            config
+            for channel, config in sorted(self.channels_config.items())
+            if low_chan <= channel <= high_chan and config.enabled
         ]
-        
-    def get_channel_info(self, channel: int) -> Optional[Dict[str, Any]]:
-        """
-        Récupère les informations d'un canal
-        
-        Args:
-            channel: Numéro du canal
-            
-        Returns:
-            Dictionnaire avec les informations
-        """
-        config = self.channels_config.get(channel)
-        if not config:
+        if not selected_channels:
+            logger.error("Aucun canal MCC configure pour le scan")
+            return False
+
+        # Le USB-1608FS classique impose une file de gains contenant les huit
+        # canaux dans l'ordre. Les canaux non demandes sont donc acquis en
+        # +/-10 V, puis retires du bloc retourne au controleur.
+        selected_by_number = {item.channel: item for item in selected_channels}
+        scan_channels = [
+            selected_by_number.get(
+                channel,
+                ChannelConfig(channel=channel, range_type=MCCRanges.BIP10VOLTS),
+            )
+            for channel in range(self.MAX_CHANNELS)
+        ]
+        output_indices = [item.channel for item in selected_channels]
+        output_ranges = [self._ul_range(item.range_type) for item in selected_channels]
+        n_channels = len(selected_channels)
+        n_scan_channels = len(scan_channels)
+        aggregate_rate = float(rate) * n_scan_channels
+        if aggregate_rate > self.MAX_AGGREGATE_RATE:
+            logger.error(
+                "Frequence MCC trop elevee: %.3f Hz/canal produit %.3f S/s "
+                "pour une limite agregee de %.3f S/s",
+                float(rate),
+                aggregate_rate,
+                self.MAX_AGGREGATE_RATE,
+            )
+            return False
+        buffer_count = int(buffer_size) * n_scan_channels
+
+        try:
+            channel_queue = [item.channel for item in scan_channels]
+            gain_queue = [self._ul_range(item.range_type) for item in scan_channels]
+            self.api.ul.a_load_queue(
+                self.board_num,
+                channel_queue,
+                gain_queue,
+                n_scan_channels,
+            )
+
+            memhandle = self.api.ul.win_buf_alloc(buffer_count)
+            if not memhandle:
+                raise MCCBackendError("Allocation du buffer MCC impossible")
+
+            try:
+                actual_rate = self.api.ul.a_in_scan(
+                    self.board_num,
+                    channel_queue[0],
+                    channel_queue[-1],
+                    buffer_count,
+                    int(rate),
+                    gain_queue[0],
+                    memhandle,
+                    self._scan_options(),
+                )
+            except Exception:
+                self.api.ul.win_buf_free(memhandle)
+                raise
+
+            with self._lock:
+                self._memhandle = memhandle
+                self._buffer_count = buffer_count
+                self._last_point_count = 0
+                self._sequence = 0
+                self.buffer_overruns = 0
+                self._running = True
+                self._output_indices = output_indices
+                self._output_ranges = output_ranges
+                self.acquisition_config = AcquisitionConfig(
+                    board_num=self.board_num,
+                    low_chan=0,
+                    high_chan=self.MAX_CHANNELS - 1,
+                    rate=float(actual_rate),
+                    count=buffer_count,
+                    n_channels=n_channels,
+                    n_scan_channels=n_scan_channels,
+                )
+            logger.info(
+                "Scan MCC demarre: %s canaux lus sur 8, %.3f Hz/canal, buffer=%s points",
+                n_channels,
+                float(actual_rate),
+                buffer_count,
+            )
+            return True
+        except Exception as exc:
+            logger.exception("Demarrage du scan MCC impossible: %s", exc)
+            return False
+
+    def _copy_raw_points(self, start_index: int, point_count: int) -> np.ndarray:
+        """Copie une zone, avec gestion explicite du retour au debut du buffer."""
+
+        if not self._memhandle or point_count <= 0:
+            return np.empty(0, dtype=np.uint16)
+
+        output = np.empty(point_count, dtype=np.uint16)
+        first_count = min(point_count, self._buffer_count - start_index)
+
+        first = (ctypes.c_ushort * first_count)()
+        self.api.ul.win_buf_to_array(self._memhandle, first, start_index, first_count)
+        output[:first_count] = np.ctypeslib.as_array(first)
+
+        remaining = point_count - first_count
+        if remaining:
+            second = (ctypes.c_ushort * remaining)()
+            self.api.ul.win_buf_to_array(self._memhandle, second, 0, remaining)
+            output[first_count:] = np.ctypeslib.as_array(second)
+        return output
+
+    def _convert_selected_to_volts(self, selected_raw: np.ndarray) -> np.ndarray:
+        volts = np.empty(selected_raw.shape, dtype=np.float64)
+        for column, ul_range in enumerate(self._output_ranges):
+            volts[:, column] = np.fromiter(
+                (
+                    self.api.ul.to_eng_units(self.board_num, ul_range, int(value))
+                    for value in selected_raw[:, column]
+                ),
+                dtype=np.float64,
+                count=selected_raw.shape[0],
+            )
+        return volts
+
+    def get_data(self, num_samples: int = 1000) -> np.ndarray | None:
+        """Retourne uniquement les nouveaux echantillons complets disponibles."""
+
+        if not self._running or not self._memhandle:
             return None
-            
+
+        try:
+            _, current_count, _ = self.api.ul.get_status(
+                self.board_num,
+                self.api.FunctionType.AIFUNCTION,
+            )
+            current_count = int(current_count)
+            n_scan_channels = self.acquisition_config.n_scan_channels
+
+            with self._lock:
+                if current_count < self._last_point_count:
+                    raise MCCBackendError("Le compteur MCC a recule pendant le scan")
+
+                available_points = current_count - self._last_point_count
+                if available_points > self._buffer_count:
+                    self.buffer_overruns += 1
+                    raise MCCBackendError(
+                        "Debordement du buffer MCC: le logiciel n'a pas lu les donnees assez vite"
+                    )
+
+                available_samples = available_points // n_scan_channels
+                samples_to_read = min(int(num_samples), available_samples)
+                if samples_to_read <= 0:
+                    return None
+
+                point_count = samples_to_read * n_scan_channels
+                start_index = self._last_point_count % self._buffer_count
+                points = self._copy_raw_points(start_index, point_count)
+                self._last_point_count += point_count
+                self._sequence += 1
+
+            scan_matrix = points.reshape(samples_to_read, n_scan_channels)
+            selected_raw = scan_matrix[:, self._output_indices]
+            return self._convert_selected_to_volts(selected_raw)
+        except MCCBackendError:
+            raise
+        except Exception as exc:
+            raise MCCBackendError(f"Lecture MCC impossible: {exc}") from exc
+
+    def wait_for_data(self, num_samples: int, timeout: float = 1.0) -> np.ndarray | None:
+        """Attend sans boucle CPU active qu'un bloc complet soit disponible."""
+
+        deadline = time.monotonic() + max(0.0, timeout)
+        while self._running and time.monotonic() < deadline:
+            data = self.get_data(num_samples)
+            if data is not None:
+                return data
+            time.sleep(0.002)
+        return None
+
+    def get_acquisition_status(self) -> dict[str, Any]:
+        status: dict[str, Any] = {
+            "board_num": self.board_num,
+            "board_name": self.board_name,
+            "is_running": self._running,
+            "actual_rate": self.acquisition_config.rate,
+            "channels_count": self.acquisition_config.n_channels,
+            "scan_channels_count": self.acquisition_config.n_scan_channels,
+            "points_read": self._last_point_count,
+            "sequence": self._sequence,
+            "buffer_overruns": self.buffer_overruns,
+        }
+        if self._running:
+            try:
+                _, current_count, current_index = self.api.ul.get_status(
+                    self.board_num,
+                    self.api.FunctionType.AIFUNCTION,
+                )
+                status.update(
+                    current_count=int(current_count),
+                    current_index=int(current_index),
+                )
+            except Exception as exc:
+                status["error"] = str(exc)
+        return status
+
+    def stop_acquisition(self) -> bool:
+        if not self._running:
+            return True
+        try:
+            self.api.ul.stop_background(self.board_num, self.api.FunctionType.AIFUNCTION)
+            return True
+        except Exception as exc:
+            logger.error("Arret du scan MCC impossible: %s", exc)
+            return False
+        finally:
+            self._running = False
+
+    def get_available_ranges(self) -> list[MCCRanges]:
+        return list(self.SUPPORTED_RANGES)
+
+    def get_channel_info(self, channel: int) -> dict[str, Any] | None:
+        config = self.channels_config.get(channel)
+        if config is None:
+            return None
         return {
             "channel": config.channel,
             "range": config.range_type.name,
             "enabled": config.enabled,
             "label": config.label,
             "units": config.units,
-            "scale_factor": config.scale_factor,
-            "offset": config.offset
         }
-        
-    def calibrate_channel(self, channel: int) -> bool:
-        """
-        Lance une calibration de canal (fonction avancée)
-        
-        Args:
-            channel: Numéro du canal
-            
-        Returns:
-            True si la calibration réussit
-        """
-        # Cette fonction nécessiterait l'accès aux fonctions de calibration
-        # de la bibliothèque MCC, ce qui dépasse le scope de base
-        logger.info(f"Calibration du canal {channel} - Non implémentée dans cette version")
-        return True
-        
-    def close(self):
-        """Ferme la connexion et libère les ressources"""
-        if self.is_initialized:
-            self.stop_acquisition()
-            self.is_initialized = False
-            logger.info("Carte fermée")
-            
+
+    def close(self) -> None:
+        self.stop_acquisition()
+        if self._memhandle:
+            try:
+                self.api.ul.win_buf_free(self._memhandle)
+            except Exception as exc:
+                logger.warning("Liberation du buffer MCC impossible: %s", exc)
+            finally:
+                self._memhandle = None
+        self.is_initialized = False
+
     def __enter__(self):
-        """Support du context manager"""
         return self
-        
+
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Support du context manager"""
         self.close()
 
-# Fonctions utilitaires
-def scan_available_boards() -> List[int]:
-    """
-    Scanne les cartes disponibles
-    
-    Returns:
-        Liste des numéros de cartes détectées
-    """
-    available_boards = []
-    
-    try:
-        # Tentative de chargement de cbw32.dll
-        cbw32 = ctypes.windll.cbw32
-        
-        # Test de 10 cartes possibles
-        for board_num in range(10):
-            board_name = ctypes.create_string_buffer(64)
-            result = cbw32.cbGetBoardName(board_num, board_name)
-            
-            if result == MCCErrorCodes.NOERRORS:
-                available_boards.append(board_num)
-                logger.info(f"Carte trouvée {board_num}: {board_name.value.decode('utf-8')}")
-                
-    except Exception as e:
-        logger.error(f"Erreur lors du scan: {e}")
-        
-    return available_boards
+
+def scan_available_boards(api: Any | None = None) -> list[int]:
+    """Fonction de compatibilite utilisee par le controleur et l'interface."""
+
+    return MCCDAQ_USB1608FS.detect_boards(api=api)
+
 
 def get_error_message(error_code: int) -> str:
-    """
-    Retourne le message d'erreur correspondant au code
-    
-    Args:
-        error_code: Code d'erreur MCC
-        
-    Returns:
-        Message d'erreur
-    """
-    error_messages = {
+    messages = {
         MCCErrorCodes.NOERRORS: "Aucune erreur",
-        MCCErrorCodes.BADBOARD: "Numéro de carte invalide",
-        MCCErrorCodes.DEADDIGITALDEV: "Périphérique numérique défaillant",
-        MCCErrorCodes.DEADCOUNTERDEV: "Compteur défaillant",
-        MCCErrorCodes.DEADDADEV: "D/A défaillant",
-        MCCErrorCodes.DEADADDEV: "A/D défaillant",
-        MCCErrorCodes.NOTDIGITALCONF: "Pas configuré pour numérique",
-        MCCErrorCodes.NOTCOUNTERCONF: "Pas configuré pour compteur",
-        MCCErrorCodes.NOTDACONF: "Pas configuré pour D/A",
-        MCCErrorCodes.NOTADCONF: "Pas configuré pour A/D",
-        MCCErrorCodes.NOTMUXCONF: "Pas configuré pour multiplexeur",
-        MCCErrorCodes.BADPORTNUM: "Numéro de port invalide",
-        MCCErrorCodes.BADCOUNTERDEVNUM: "Numéro de compteur invalide",
-        MCCErrorCodes.BADDADEVNUM: "Numéro D/A invalide",
-        MCCErrorCodes.BADADDEVNUM: "Numéro A/D invalide",
-        MCCErrorCodes.BADCHANNEL: "Numéro de canal invalide",
-        MCCErrorCodes.BADRANGE: "Plage invalide",
-        MCCErrorCodes.BADCOUNTERCHAN: "Canal compteur invalide",
-        MCCErrorCodes.BADCOUNTERPARAM: "Paramètre compteur invalide",
-        MCCErrorCodes.BADEVENTTYPE: "Type d'événement invalide",
-        MCCErrorCodes.WRONGDIGCONFIG: "Configuration numérique incorrecte",
-        MCCErrorCodes.WRONGDIOCONFIG: "Configuration DIO incorrecte",
-        MCCErrorCodes.WRONGCOUNTERCONFIG: "Configuration compteur incorrecte",
-        MCCErrorCodes.WRONGDACONFIG: "Configuration D/A incorrecte",
-        MCCErrorCodes.WRONGADCONFIG: "Configuration A/D incorrecte"
+        MCCErrorCodes.BADBOARD: "Numero de carte invalide",
+        MCCErrorCodes.BADCHANNEL: "Numero de canal invalide",
+        MCCErrorCodes.BADRANGE: "Plage analogique invalide",
     }
-    
-    return error_messages.get(error_code, f"Erreur inconnue: {error_code}")
-
-if __name__ == "__main__":
-    # Test basique du wrapper
-    print("Test du wrapper MCC DAQ USB-1608FS")
-    print("=" * 50)
-    
-    # Scan des cartes disponibles
-    print("Recherche des cartes disponibles...")
-    boards = scan_available_boards()
-    print(f"Cartes trouvées: {boards}")
-    
-    if boards:
-        # Test avec la première carte
-        with MCCDAQ_USB1608FS() as daq:
-            if daq.initialize(boards[0]):
-                print(f"Carte {boards[0]} initialisée avec succès")
-                
-                # Configuration des canaux
-                daq.configure_channel(0, MCCRanges.BIP10VOLTS, "Canal Test")
-                
-                # Lecture d'un échantillon
-                value = daq.read_single_channel(0)
-                if value is not None:
-                    print(f"Valeur lue: {value:.3f} V")
-                    
-            else:
-                print("Erreur d'initialisation")
-    else:
-        print("Aucune carte MCC détectée")
-
+    try:
+        normalized = MCCErrorCodes(error_code)
+    except ValueError:
+        return f"Erreur MCC inconnue: {error_code}"
+    return messages.get(normalized, f"Erreur MCC: {error_code}")

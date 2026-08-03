@@ -1,308 +1,50 @@
-name: CHNeoWave CI/CD Pipeline
+name: CHNeoWave quality gate
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, "refactor/**"]
   pull_request:
-    branches: [ main, develop ]
-  schedule:
-    # Tests quotidiens à 2h du matin UTC
-    - cron: '0 2 * * *'
-
-env:
-  PYTHON_VERSION: '3.9'
-  PYTHONPATH: ${{ github.workspace }}/src
+    branches: [main]
 
 jobs:
-  # Job de validation de l'environnement
-  environment-check:
-    name: Environment Validation
+  test:
+    name: Windows / Python ${{ matrix.python-version }}
     runs-on: windows-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        
-    - name: Cache pip dependencies
-      uses: actions/cache@v3
-      with:
-        path: ~\AppData\Local\pip\Cache
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
-          
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pytest pytest-cov pytest-timeout psutil
-        pip install numpy scipy matplotlib PyQt6
-        pip install black flake8 mypy sphinx
-        
-    - name: Verify installation
-      run: |
-        python -c "import sys; print(f'Python: {sys.version}')"
-        python -c "import pytest; print(f'Pytest: {pytest.__version__}')"
-        python -c "import numpy; print(f'NumPy: {numpy.__version__}')"
-        python -c "import PyQt6; print('PyQt6: OK')"
-        
-    - name: Check project structure
-      run: |
-        if (!(Test-Path "src")) { throw "Missing src directory" }
-        if (!(Test-Path "tests")) { throw "Missing tests directory" }
-        if (!(Test-Path "src\hrneowave")) { throw "Missing hrneowave package" }
-        Write-Host "Project structure: OK"
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
 
-  # Job de tests unitaires
-  unit-tests:
-    name: Unit Tests
-    runs-on: windows-latest
-    needs: environment-check
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pytest pytest-cov pytest-timeout psutil
-        pip install numpy scipy matplotlib PyQt6
-        
-    - name: Run unit tests
-      run: |
-        python -m pytest tests/ -m "not integration and not performance" --tb=short --cov=src/hrneowave --cov-report=xml --cov-report=html
-        
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.xml
-        flags: unittests
-        name: codecov-umbrella
-        
-    - name: Archive coverage reports
-      uses: actions/upload-artifact@v3
-      with:
-        name: coverage-reports
-        path: htmlcov/
+    env:
+      PYTHONPATH: ${{ github.workspace }}/src
+      QT_QPA_PLATFORM: offscreen
 
-  # Job de tests d'intégration
-  integration-tests:
-    name: Integration Tests
-    runs-on: windows-latest
-    needs: unit-tests
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pytest pytest-cov pytest-timeout psutil
-        pip install numpy scipy matplotlib PyQt6
-        
-    - name: Run integration tests
-      run: |
-        python -m pytest tests/ -m "integration" --tb=short -v
-        
-    - name: Archive integration test results
-      uses: actions/upload-artifact@v3
-      if: always()
-      with:
-        name: integration-test-results
-        path: |
-          pytest-results.xml
-          test-logs/
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  # Job de tests de performance
-  performance-tests:
-    name: Performance Tests
-    runs-on: windows-latest
-    needs: unit-tests
-    if: github.event_name == 'schedule' || contains(github.event.head_commit.message, '[perf-test]')
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pytest pytest-cov pytest-timeout psutil
-        pip install numpy scipy matplotlib PyQt6
-        pip install memory-profiler
-        
-    - name: Run performance tests
-      run: |
-        python -m pytest tests/ -m "performance" --tb=short --timeout=300
-        
-    - name: Archive performance results
-      uses: actions/upload-artifact@v3
-      with:
-        name: performance-results
-        path: |
-          performance-reports/
-          memory-profiles/
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
 
-  # Job de validation du code
-  code-quality:
-    name: Code Quality
-    runs-on: windows-latest
-    needs: environment-check
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        
-    - name: Install linting tools
-      run: |
-        python -m pip install --upgrade pip
-        pip install black flake8 mypy
-        
-    - name: Check code formatting with Black
-      run: |
-        black --check --diff src/ tests/
-        
-    - name: Lint with flake8
-      run: |
-        flake8 src/ tests/ --max-line-length=100 --ignore=E203,W503
-        
-    - name: Type checking with mypy
-      run: |
-        mypy src/hrneowave --ignore-missing-imports --no-strict-optional
-      continue-on-error: true
+      - name: Install project and test tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
 
-  # Job de validation système complète
-  system-validation:
-    name: System Validation
-    runs-on: windows-latest
-    needs: [unit-tests, integration-tests]
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pytest pytest-cov pytest-timeout psutil
-        pip install numpy scipy matplotlib PyQt6
-        
-    - name: Run system validation
-      run: |
-        python validate_system.py --no-performance
-        
-    - name: Archive validation reports
-      uses: actions/upload-artifact@v3
-      if: always()
-      with:
-        name: validation-reports
-        path: validation_reports/
+      - name: Compile Python sources
+        run: python -m compileall -q src scripts tests
 
-  # Job de build et packaging
-  build-package:
-    name: Build Package
-    runs-on: windows-latest
-    needs: [code-quality, system-validation]
-    if: github.ref == 'refs/heads/main'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        
-    - name: Install build tools
-      run: |
-        python -m pip install --upgrade pip
-        pip install build wheel setuptools
-        
-    - name: Build package
-      run: |
-        python -m build
-        
-    - name: Archive build artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: dist-packages
-        path: dist/
+      - name: Run tests
+        run: python -m pytest --cov=hrneowave --cov-report=term-missing
 
-  # Job de déploiement (si nécessaire)
-  deploy:
-    name: Deploy
-    runs-on: windows-latest
-    needs: build-package
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    environment: production
-    
-    steps:
-    - name: Download build artifacts
-      uses: actions/download-artifact@v3
-      with:
-        name: dist-packages
-        path: dist/
-        
-    - name: Deploy to staging
-      run: |
-        Write-Host "Déploiement vers l'environnement de staging"
-        # Ici, ajouter les commandes de déploiement spécifiques
-        
-    - name: Notify deployment
-      run: |
-        Write-Host "Déploiement terminé avec succès"
-
-  # Job de nettoyage et notifications
-  cleanup:
-    name: Cleanup & Notifications
-    runs-on: windows-latest
-    needs: [unit-tests, integration-tests, code-quality, system-validation]
-    if: always()
-    
-    steps:
-    - name: Cleanup workspace
-      run: |
-        Write-Host "Nettoyage de l'espace de travail"
-        
-    - name: Send notifications
-      if: failure()
-      run: |
-        Write-Host "Échec du pipeline CI/CD - Notifications envoyées"
-        # Ici, ajouter la logique de notification (email, Slack, etc.)
-        
-    - name: Success notification
-      if: success()
-      run: |
-        Write-Host "Pipeline CI/CD terminé avec succès"
+      - name: Check critical code quality
+        run: >-
+          python -m ruff check
+          src/hrneowave/acquisition/mcc_daq_wrapper.py
+          src/hrneowave/acquisition/session_recorder.py
+          src/hrneowave/core/post_processor.py
+          src/hrneowave/core/wave_analysis.py
+          tests

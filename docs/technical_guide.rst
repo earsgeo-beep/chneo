@@ -43,7 +43,22 @@ Contraintes techniques reelles
 - ``ThemeManager`` importe directement ``PySide6``: dans l'etat actuel, ``PyQt6`` n'est pas un runtime garanti
 - ``PostProcessor`` charge ``pandas`` pour CSV et ``h5py`` pour HDF5
 - ``ReportView`` genere les PDF via ``QTextDocument`` et ``QPrinter``
-- le wrapper MCC cherche encore des DLLs locales ou systeme sous ``Measurement Computing``
+- le backend MCC charge ``mcculw`` localement, au-dessus de l'Universal
+  Library installee avec InstaCal
+
+Stockage pendant l'acquisition MCC
+----------------------------------
+
+``ContinuousHDF5Recorder`` est branche directement au controleur MCC. Chaque
+bloc est ecrit dans deux groupes extensibles: ``raw_voltage`` pour la mesure en
+volts et ``acquisition_data`` pour la valeur physique calibree. Le tampon du
+controleur sert uniquement a l'affichage recent et ne constitue pas le stockage
+de reference.
+
+Une erreur HDF5 interrompt l'acquisition et incremente ``recording_errors``.
+Une session terminee normalement est marquee ``recording_status = complete``;
+un fichier interrompu reste marque ``recording`` ou ``error`` afin d'eviter de
+le confondre avec une acquisition valide.
 
 Modules secondaires
 -------------------

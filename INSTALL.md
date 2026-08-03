@@ -11,15 +11,34 @@ Ce guide correspond au depot actuel, pas a un ancien executable autonome.
 ## Installation rapide
 
 ```powershell
-git clone https://github.com/Gameminde/Chneowave.git
-cd Chneowave
+git clone https://github.com/earsgeo-beep/chneo.git
+cd chneo
 
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 
 python -m pip install --upgrade pip
-pip install PySide6 numpy pandas h5py
+pip install -e ".[mcc]"
 ```
+
+## Installation hors ligne au laboratoire
+
+CHNeoWave n'a besoin d'aucune connexion internet pendant l'acquisition. Sur un
+poste connecte servant uniquement a preparer l'installation:
+
+```powershell
+python -m pip download ".[mcc]" --dest wheelhouse
+```
+
+Copier ensuite le depot et le dossier ``wheelhouse`` sur le poste du laboratoire:
+
+```powershell
+python -m pip install --no-index --find-links wheelhouse -e ".[mcc]"
+```
+
+Le pilote MCC Universal Library et InstaCal doivent etre installes localement.
+Le paquet Python ``mcculw`` utilise cette installation locale; aucune connexion
+internet n'est requise a l'execution.
 
 ## Dependances optionnelles
 

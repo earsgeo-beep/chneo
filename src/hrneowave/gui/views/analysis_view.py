@@ -4,10 +4,15 @@
 from pathlib import Path
 from typing import Dict, Optional
 
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
     QFileDialog,
+    QFormLayout,
     QFrame,
     QGroupBox,
     QHBoxLayout,
@@ -16,6 +21,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
@@ -70,18 +76,36 @@ class AnalysisToolsPanel(QFrame):
         layout.addWidget(files_group)
 
         analysis_group = QGroupBox("Analyses")
-        analysis_layout = QVBoxLayout(analysis_group)
+        analysis_layout = QFormLayout(analysis_group)
         self.analysis_type_combo = QComboBox()
-        self.analysis_type_combo.addItems([
-            "statistics",
-            "spectral",
-            "temporal",
-            "correlation",
-        ])
+        self.analysis_type_combo.addItem("Analyse complete", "complete")
+        self.segment_length_combo = QComboBox()
+        self.segment_length_combo.addItems(["256", "512", "1024", "2048", "4096", "8192"])
+        self.segment_length_combo.setCurrentText("1024")
+        self.overlap_spin = QSpinBox()
+        self.overlap_spin.setRange(0, 90)
+        self.overlap_spin.setValue(50)
+        self.overlap_spin.setSuffix(" %")
+        self.min_frequency_spin = QDoubleSpinBox()
+        self.min_frequency_spin.setRange(0.0, 10000.0)
+        self.min_frequency_spin.setDecimals(4)
+        self.min_frequency_spin.setSuffix(" Hz")
+        self.max_frequency_spin = QDoubleSpinBox()
+        self.max_frequency_spin.setRange(0.0, 10000.0)
+        self.max_frequency_spin.setDecimals(4)
+        self.max_frequency_spin.setSpecialValueText("Nyquist")
+        self.max_frequency_spin.setSuffix(" Hz")
+        self.detrend_check = QCheckBox("Retirer moyenne et derive lineaire")
+        self.detrend_check.setChecked(True)
         self.run_button = QPushButton("Lancer l'analyse")
         self.run_button.clicked.connect(self._emit_analysis_request)
-        analysis_layout.addWidget(self.analysis_type_combo)
-        analysis_layout.addWidget(self.run_button)
+        analysis_layout.addRow("Methode:", self.analysis_type_combo)
+        analysis_layout.addRow("Segment Welch:", self.segment_length_combo)
+        analysis_layout.addRow("Recouvrement:", self.overlap_spin)
+        analysis_layout.addRow("Frequence min:", self.min_frequency_spin)
+        analysis_layout.addRow("Frequence max:", self.max_frequency_spin)
+        analysis_layout.addRow("", self.detrend_check)
+        analysis_layout.addRow("", self.run_button)
         layout.addWidget(analysis_group)
 
         export_group = QGroupBox("Exports")
@@ -112,7 +136,17 @@ class AnalysisToolsPanel(QFrame):
         """)
 
     def _emit_analysis_request(self) -> None:
-        self.analysis_requested.emit(self.analysis_type_combo.currentText(), {})
+        max_frequency = self.max_frequency_spin.value()
+        self.analysis_requested.emit(
+            self.analysis_type_combo.currentData(),
+            {
+                "window_size": int(self.segment_length_combo.currentText()),
+                "overlap": self.overlap_spin.value() / 100.0,
+                "min_frequency": self.min_frequency_spin.value(),
+                "max_frequency": max_frequency if max_frequency > 0 else None,
+                "detrend": self.detrend_check.isChecked(),
+            },
+        )
 
 
 class AnalysisResultsArea(QFrame):
@@ -146,6 +180,15 @@ class AnalysisResultsArea(QFrame):
         self.stats_table.verticalHeader().setVisible(False)
         self.stats_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tab_widget.addTab(self.stats_table, "Statistiques")
+
+        self.wave_table = QTableWidget()
+        self.wave_table.verticalHeader().setVisible(False)
+        self.wave_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tab_widget.addTab(self.wave_table, "Parametres de houle")
+
+        self.spectrum_figure = Figure(figsize=(7, 4), tight_layout=True)
+        self.spectrum_canvas = FigureCanvas(self.spectrum_figure)
+        self.tab_widget.addTab(self.spectrum_canvas, "Spectres")
 
         self.report_text = QTextEdit()
         self.report_text.setReadOnly(True)
@@ -261,6 +304,8 @@ class AnalysisView(QWidget):
         self.analysis_count += 1
         self.results_area.update_analysis_status("Analyse en cours...", self.analysis_count)
 
+        self.post_processor.config["analysis"].update(params)
+
         if not self.post_processor.run_analysis():
             self.analysis_count -= 1
             self.results_area.update_analysis_status("Echec analyse", self.analysis_count)
@@ -336,6 +381,10 @@ class AnalysisView(QWidget):
         self.current_analysis_result = None
         self.results_area.stats_table.clearContents()
         self.results_area.stats_table.setRowCount(0)
+        self.results_area.wave_table.clearContents()
+        self.results_area.wave_table.setRowCount(0)
+        self.results_area.spectrum_figure.clear()
+        self.results_area.spectrum_canvas.draw_idle()
         self.results_area.report_text.clear()
         self.results_area.update_analysis_status("Pret", 0)
 
@@ -385,6 +434,7 @@ class AnalysisView(QWidget):
     def _update_results_views(self) -> None:
         results = self.current_analysis_result or {}
         basic_stats = results.get("basic_stats", {})
+        wave_parameters = results.get("wave_parameters", {})
         channels = list(basic_stats.keys())
         metrics = ["mean", "std", "min", "max", "rms", "skewness", "kurtosis"]
 
@@ -401,13 +451,59 @@ class AnalysisView(QWidget):
                     value = f"{value:.6f}"
                 self.results_area.stats_table.setItem(row, col, QTableWidgetItem(str(value)))
 
+        wave_metrics = [
+            "H1_3",
+            "Hm0",
+            "H_max",
+            "Tp",
+            "Tm01",
+            "Tm02",
+            "T_mean",
+            "n_waves",
+        ]
+        self.results_area.wave_table.clearContents()
+        self.results_area.wave_table.setColumnCount(len(channels) + 1)
+        self.results_area.wave_table.setHorizontalHeaderLabels(["Parametre"] + channels)
+        self.results_area.wave_table.setRowCount(len(wave_metrics))
+        for row, metric in enumerate(wave_metrics):
+            self.results_area.wave_table.setItem(row, 0, QTableWidgetItem(metric))
+            for col, channel in enumerate(channels, start=1):
+                value = wave_parameters.get(channel, {}).get(metric, "")
+                if isinstance(value, float):
+                    value = f"{value:.6f}"
+                self.results_area.wave_table.setItem(row, col, QTableWidgetItem(str(value)))
+
+        self._update_spectrum_plot()
+
         self.results_area.report_text.setPlainText(self._build_report_text())
+
+    def _update_spectrum_plot(self) -> None:
+        import numpy as np
+
+        spectral = (self.current_analysis_result or {}).get("spectral_analysis", {})
+        figure = self.results_area.spectrum_figure
+        figure.clear()
+        axis = figure.add_subplot(111)
+        for channel, values in spectral.items():
+            frequencies = np.asarray(values.get("frequencies", []), dtype=float)
+            density = np.asarray(values.get("psd", []), dtype=float)
+            valid = (frequencies > 0) & np.isfinite(density) & (density > 0)
+            if np.any(valid):
+                axis.semilogy(frequencies[valid], density[valid], label=channel)
+        axis.set_xlabel("Frequence (Hz)")
+        axis.set_ylabel("Densite spectrale")
+        axis.grid(True, which="both", alpha=0.25)
+        if spectral:
+            axis.legend(loc="best")
+        self.results_area.spectrum_canvas.draw_idle()
 
     def _build_report_text(self) -> str:
         results = self.current_analysis_result or {}
         basic_stats = results.get("basic_stats", {})
         spectral = results.get("spectral_analysis", {})
-        goda = results.get("goda_metrics", {})
+        waves = results.get("wave_parameters", {})
+        quality = results.get("quality", {})
+        cross_spectral = results.get("cross_spectral_analysis", {})
 
         lines = ["Rapport d'analyse CHNeoWave"]
         if self.current_data_file:
@@ -422,9 +518,25 @@ class AnalysisView(QWidget):
             lines.append(f"  min/max: {stats.get('min', 0):.6f} / {stats.get('max', 0):.6f}")
             if channel in spectral:
                 lines.append(f"  frequence pic: {spectral[channel].get('peak_frequency', 0):.6f} Hz")
-            if channel in goda:
-                lines.append(f"  Hs: {goda[channel].get('Hs', 0):.6f}")
-                lines.append(f"  Tp: {goda[channel].get('Tp', 0):.6f}")
+                lines.append(f"  resolution: {spectral[channel].get('frequency_resolution', 0):.6f} Hz")
+            if channel in waves:
+                lines.append(f"  H1/3 temporel: {waves[channel].get('H1_3', 0):.6f}")
+                lines.append(f"  Hm0 spectral: {waves[channel].get('Hm0', 0):.6f}")
+                lines.append(f"  Hmax: {waves[channel].get('H_max', 0):.6f}")
+                lines.append(f"  Tp: {waves[channel].get('Tp', 0):.6f} s")
+                lines.append(f"  Tm01/Tm02: {waves[channel].get('Tm01', 0):.6f} / {waves[channel].get('Tm02', 0):.6f} s")
+                lines.append(f"  vagues detectees: {waves[channel].get('n_waves', 0)}")
+            channel_warnings = quality.get(channel, {}).get("warnings", [])
+            for warning in channel_warnings:
+                lines.append(f"  ATTENTION: {warning}")
             lines.append("")
+
+        if cross_spectral:
+            lines.append("Analyse croisee par rapport au canal de reference")
+            for pair, metrics in cross_spectral.items():
+                lines.append(
+                    f"  {pair}: coherence={metrics.get('coherence_at_reference_peak', 0):.4f}, "
+                    f"phase={metrics.get('phase_at_reference_peak_degrees', 0):.2f} deg"
+                )
 
         return "\n".join(lines).strip()

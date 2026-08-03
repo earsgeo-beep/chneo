@@ -8,7 +8,12 @@ Modules actifs
    Vue Qt chargee de selectionner un fichier d'entree, de lancer le traitement et d'afficher un resume des resultats.
 
 ``hrneowave.core.post_processor``
-   Moteur de post-traitement capable de lire ``csv``, ``json`` et ``hdf5`` puis de calculer statistiques, spectres et metriques de type Goda.
+   Orchestrateur capable de lire ``csv``, ``json`` et ``hdf5`` sans charger en
+   bloc les longues sessions, puis d'exporter les resultats.
+
+``hrneowave.core.wave_analysis``
+   Moteur scientifique pour Welch, moments spectraux, parametres ITTC,
+   zero-upcrossing, coherence, phase et indicateurs de qualite.
 
 Formats supportes
 -----------------

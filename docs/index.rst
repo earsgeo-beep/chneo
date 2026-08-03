@@ -17,6 +17,8 @@ Le depot ne doit plus etre lu comme un prototype web ni comme une release autono
 
    user_guide
    technical_guide
+   mcc_first_test
+   data_analysis
 
 .. toctree::
    :maxdepth: 2
@@ -35,7 +37,7 @@ Demarrage rapide
 
    python -m venv .venv
    .venv\Scripts\Activate.ps1
-   pip install PySide6 numpy pandas h5py
+   pip install -e ".[mcc]"
    python chneowave.py
 
 Points a retenir

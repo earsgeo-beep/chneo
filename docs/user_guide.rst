@@ -53,12 +53,17 @@ La vue active est ``AnalysisView``. Elle peut charger:
 
 Les analyses exposees dans l'interface sont:
 
-- ``statistics``
-- ``spectral``
-- ``temporal``
-- ``correlation``
+- statistiques descriptives;
+- densite spectrale de Welch et moments ``m-1``, ``m0``, ``m1``, ``m2`` et
+  ``m4``;
+- ``Hm0``, ``Tp``, ``Tm01``, ``Tm02`` et ``Te``;
+- vagues par passage ascendant: ``H1/3``, ``H1/10``, ``Hmax`` et periodes;
+- coherence et phase de chaque canal par rapport au premier canal;
+- indicateurs de qualite et avertissements d'interpretation.
 
-Le traitement est delegue a ``PostProcessor`` qui produit un resume et des resultats exportables.
+Le traitement est delegue a ``PostProcessor`` qui produit un resume, un trace
+spectral et des resultats exportables. Voir :doc:`data_analysis` pour les
+definitions et les limites d'interpretation.
 
 Rapports
 --------
