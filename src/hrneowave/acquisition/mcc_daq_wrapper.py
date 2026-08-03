@@ -237,6 +237,13 @@ class MCCDAQ_USB1608FS:
             self.board_num = board_num
             self.board_name = str(board_name)
             self.is_initialized = True
+
+            # Stopper tout scan residuel sur la carte
+            try:
+                self.api.ul.stop_background(self.board_num, self.api.FunctionType.AIFUNCTION)
+            except Exception:
+                pass
+
             logger.info("Carte MCC initialisee: %s (board %s)", self.board_name, board_num)
             return True
         except Exception as exc:
@@ -351,6 +358,11 @@ class MCCDAQ_USB1608FS:
         buffer_count = int(buffer_size) * n_scan_channels
 
         try:
+            try:
+                self.api.ul.stop_background(self.board_num, self.api.FunctionType.AIFUNCTION)
+            except Exception:
+                pass
+
             channel_queue = [item.channel for item in scan_channels]
             gain_queue = [self._ul_range(item.range_type) for item in scan_channels]
             self.api.ul.a_load_queue(
