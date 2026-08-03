@@ -95,7 +95,7 @@ def _load_mcc_api() -> SimpleNamespace:
 
     try:
         from mcculw import ul
-        from mcculw.enums import FunctionType, ScanOptions, ULRange
+        from mcculw.enums import FunctionType, InterfaceType, ScanOptions, ULRange
     except (ImportError, OSError) as exc:
         raise MCCUniversalLibraryUnavailable(
             "MCC Universal Library indisponible. Installer InstaCal/Universal Library "
@@ -105,6 +105,7 @@ def _load_mcc_api() -> SimpleNamespace:
     return SimpleNamespace(
         ul=ul,
         FunctionType=FunctionType,
+        InterfaceType=InterfaceType,
         ScanOptions=ScanOptions,
         ULRange=ULRange,
     )
@@ -152,7 +153,12 @@ class MCCDAQ_USB1608FS:
 
     @classmethod
     def detect_boards(cls, api: Any | None = None, max_boards: int = 10) -> list[int]:
-        """Retourne les numeros InstaCal valides sans modifier leur configuration."""
+        """Detecte les cartes MCC connectees en USB.
+
+        Tente d'abord la detection directe via ``get_daq_device_inventory``
+        (ne necessite pas InstaCal). Si aucune carte n'est trouvee, retombe
+        sur l'ancienne methode InstaCal ``get_board_name``.
+        """
 
         try:
             active_api = api or _load_mcc_api()
@@ -160,6 +166,34 @@ class MCCDAQ_USB1608FS:
             return []
 
         boards: list[int] = []
+
+        # --- Methode 1 : detection USB directe (ignore InstaCal) ---
+        try:
+            active_api.ul.ignore_instacal()
+            devices = active_api.ul.get_daq_device_inventory(
+                active_api.InterfaceType.ANY
+            )
+            for board_num, dev in enumerate(devices):
+                if board_num >= max_boards:
+                    break
+                try:
+                    active_api.ul.create_daq_device(board_num, dev)
+                    boards.append(board_num)
+                    logger.info(
+                        "Carte MCC detectee (USB): %s (SN: %s) -> board %s",
+                        dev.product_name,
+                        dev.unique_id,
+                        board_num,
+                    )
+                except Exception as exc:
+                    logger.debug("create_daq_device(%s) echoue: %s", board_num, exc)
+        except Exception as exc:
+            logger.debug("Detection USB directe impossible: %s", exc)
+
+        if boards:
+            return boards
+
+        # --- Methode 2 : fallback InstaCal (anciennes installations) ---
         for board_num in range(max_boards):
             try:
                 name = active_api.ul.get_board_name(board_num)
@@ -170,12 +204,36 @@ class MCCDAQ_USB1608FS:
         return boards
 
     def initialize(self, board_num: int = 0) -> bool:
-        """Ouvre logiquement une carte deja enregistree dans InstaCal."""
+        """Ouvre logiquement une carte MCC.
+
+        Si la carte a ete creee par ``detect_boards`` (detection USB directe),
+        ``get_board_name`` fonctionnera deja. Sinon, on tente d'enregistrer
+        le peripherique USB automatiquement.
+        """
 
         try:
-            board_name = self.api.ul.get_board_name(board_num)
+            board_name = ""
+            try:
+                board_name = self.api.ul.get_board_name(board_num)
+            except Exception:
+                pass
+
+            if not board_name:
+                # Tenter la detection USB directe pour ce board_num
+                try:
+                    self.api.ul.ignore_instacal()
+                    devices = self.api.ul.get_daq_device_inventory(
+                        self.api.InterfaceType.ANY
+                    )
+                    if board_num < len(devices):
+                        self.api.ul.create_daq_device(board_num, devices[board_num])
+                        board_name = self.api.ul.get_board_name(board_num)
+                except Exception as inner_exc:
+                    logger.debug("Detection USB dans initialize() echouee: %s", inner_exc)
+
             if not board_name:
                 raise MCCBackendError(f"Aucune carte MCC configuree au numero {board_num}")
+
             self.board_num = board_num
             self.board_name = str(board_name)
             self.is_initialized = True
