@@ -20,6 +20,7 @@ Le depot ne doit plus etre lu comme un prototype web ni comme une release autono
    user_guide
    technical_guide
    mcc_first_test
+   mcc_qualification_protocol
    data_analysis
    scientific_processing_v2
    interface_design

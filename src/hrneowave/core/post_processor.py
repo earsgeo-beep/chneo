@@ -129,7 +129,12 @@ class PostProcessor(QObject):
         """Refuse les sessions CHNeoWave incomplètes ou non matérielles."""
 
         counters = dict(statistics or {})
-        for key in ("errors", "buffer_overruns", "recording_errors"):
+        for key in (
+            "errors",
+            "buffer_overruns",
+            "recording_errors",
+            "timing_discontinuities",
+        ):
             counters.setdefault(key, metadata.get(key, 0))
             if int(counters.get(key, 0) or 0) > 0:
                 raise ValueError(

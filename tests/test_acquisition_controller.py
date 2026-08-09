@@ -5,9 +5,14 @@ import json
 import tempfile
 import time
 import unittest
+from datetime import datetime
 from pathlib import Path
 
-from hrneowave.acquisition.acquisition_controller import AcquisitionController
+import numpy as np
+
+from hrneowave.acquisition.acquisition_controller import AcquisitionController, AcquisitionSession
+from hrneowave.acquisition.daq_backend import DaqReadResult
+from hrneowave.acquisition.hardware_qualification import QualificationCriteria
 from hrneowave.core.post_processor import PostProcessor
 from hrneowave.hardware import HardwareRegistry
 from tests.hardware_test_doubles import DeterministicPhysicalBackend, StaticPhysicalProvider
@@ -106,6 +111,33 @@ class AcquisitionControllerTests(unittest.TestCase):
                 channels=[0],
             )
         )
+
+    def test_backend_time_discontinuity_is_counted_and_refused(self):
+        self.controller.current_session = AcquisitionSession(
+            session_id="timing-check",
+            project_name="Timing",
+            start_time=datetime.now(),
+            sampling_rate=100.0,
+            channels=list(self.controller.channels_config.values()),
+        )
+        first = DaqReadResult(
+            raw_data=np.zeros((2, 1)),
+            time=np.array([0.0, 0.01]),
+            sample_rate_hz=100.0,
+            backend_name=self.controller._daq_backend.name,
+        )
+        discontinuous = DaqReadResult(
+            raw_data=np.zeros((2, 1)),
+            time=np.array([0.03, 0.04]),
+            sample_rate_hz=100.0,
+            backend_name=self.controller._daq_backend.name,
+        )
+
+        self.controller._validate_backend_timing(first)
+        with self.assertRaisesRegex(RuntimeError, "Discontinuité temporelle"):
+            self.controller._validate_backend_timing(discontinuous)
+
+        self.assertEqual(self.controller.stats["timing_discontinuities"], 1)
 
     def test_hardware_scan_can_be_deferred_until_operator_request(self):
         calls: list[str] = []
@@ -236,6 +268,29 @@ class AcquisitionControllerTests(unittest.TestCase):
         )
         self.controller.acquisition_thread.join(timeout=2)
         self.assertEqual(self.controller.stats["samples_acquired"], 60)
+
+    def test_completed_session_can_be_qualified_from_master_file(self):
+        self.assertTrue(
+            self._start(
+                "qualification",
+                sampling_rate=100,
+                duration_seconds=1.0,
+                channels=[0],
+            )
+        )
+        self.controller.acquisition_thread.join(timeout=2)
+
+        report = self.controller.qualify_current_session(
+            QualificationCriteria.quick_functional(
+                minimum_duration_seconds=1.0,
+                check_wall_clock=False,
+            )
+        )
+
+        self.assertTrue(report.accepted)
+        self.assertIsNotNone(self.controller.last_qualification_files)
+        for path in self.controller.last_qualification_files:
+            self.assertTrue(Path(path).is_file())
 
     def test_continuous_recorder_receives_every_acquired_sample(self):
         recorder = FakeRecorder()

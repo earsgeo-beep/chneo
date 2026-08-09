@@ -30,6 +30,12 @@ from hrneowave.hardware import (
 )
 
 from .daq_backend import DaqBackend
+from .hardware_qualification import (
+    HardwareQualificationService,
+    QualificationCriteria,
+    QualificationReport,
+    QualificationReportWriter,
+)
 from .session_exporter import SessionExporter
 from .session_recorder import ContinuousHDF5Recorder, RecordingError
 
@@ -111,6 +117,10 @@ class AcquisitionController:
         self.buffer_size = 10_000
         self._data_lock = threading.RLock()
         self.last_exported_path: str | None = None
+        self.last_qualification_report: QualificationReport | None = None
+        self.last_qualification_files: tuple[str, str] | None = None
+        self._last_backend_time_seconds: float | None = None
+        self._acquisition_started_monotonic: float | None = None
 
         if auto_initialize and daq_backend is None:
             self.refresh_hardware()
@@ -124,6 +134,9 @@ class AcquisitionController:
             "errors": 0,
             "buffer_overruns": 0,
             "recording_errors": 0,
+            "timing_discontinuities": 0,
+            "max_timing_error_seconds": 0.0,
+            "backend_blocks": 0,
         }
 
     def discover_hardware(self) -> DiscoveryReport:
@@ -338,6 +351,10 @@ class AcquisitionController:
         with self._data_lock:
             self.data_buffer.clear()
         self.stats = self._new_statistics()
+        self._last_backend_time_seconds = None
+        self._acquisition_started_monotonic = None
+        self.last_qualification_report = None
+        self.last_qualification_files = None
 
         start_time = datetime.now()
         project_slug = re.sub(r"[^A-Za-z0-9._-]+", "_", project_name.strip())
@@ -402,6 +419,7 @@ class AcquisitionController:
 
     def _acquisition_loop(self, duration_seconds: float | None) -> None:
         start_monotonic = time.monotonic()
+        self._acquisition_started_monotonic = start_monotonic
         last_stats_update = start_monotonic
         samples_since_update = 0
         target_samples = (
@@ -432,6 +450,7 @@ class AcquisitionController:
                     continue
                 if result.backend_name != self._daq_backend.name:
                     raise RuntimeError("Le bloc reçu ne correspond pas au pilote actif")
+                self._validate_backend_timing(result)
                 if result.warnings:
                     self.current_session.metadata.setdefault("warnings", []).extend(result.warnings)
                 self._process_acquired_data(result.raw_data)
@@ -518,13 +537,29 @@ class AcquisitionController:
         return True
 
     def _finalize_acquisition(self) -> None:
+        final_hardware_status: dict[str, Any] | None = None
         try:
             if self._daq_backend is not None:
+                try:
+                    final_hardware_status = self._daq_backend.status()
+                    self.stats["buffer_overruns"] = max(
+                        int(self.stats.get("buffer_overruns", 0)),
+                        int(final_hardware_status.get("buffer_overruns", 0)),
+                    )
+                except Exception as exc:
+                    logger.warning("Diagnostic final du pilote indisponible: %s", exc)
                 self._daq_backend.stop()
         finally:
             if self.current_session is not None:
                 self.current_session.end_time = datetime.now()
                 self.current_session.total_samples = int(self.stats["samples_acquired"])
+                if self._acquisition_started_monotonic is not None:
+                    self.current_session.metadata["acquisition_wall_elapsed_seconds"] = max(
+                        0.0,
+                        time.monotonic() - self._acquisition_started_monotonic,
+                    )
+                if final_hardware_status is not None:
+                    self.current_session.metadata["final_hardware_status"] = final_hardware_status
                 if self._recorder is not None:
                     try:
                         self._recorder.finalize(self.current_session, self.stats)
@@ -534,7 +569,59 @@ class AcquisitionController:
                         logger.exception("Finalisation HDF5 impossible: %s", exc)
                     finally:
                         self._recorder = None
+            self._acquisition_started_monotonic = None
             self.is_acquiring = False
+
+    def _validate_backend_timing(self, result) -> None:
+        """Vérifie la cadence interne et la continuité entre deux blocs DAQ."""
+
+        if self.current_session is None:
+            raise RuntimeError("Bloc matériel reçu sans session active")
+        sample_rate = float(self.current_session.sampling_rate)
+        relative_rate_error = abs(float(result.sample_rate_hz) - sample_rate) / sample_rate
+        if relative_rate_error > 1e-6:
+            self.stats["timing_discontinuities"] += 1
+            raise RuntimeError(
+                "La fréquence annoncée par le bloc diffère de la fréquence de session"
+            )
+
+        time_values = np.asarray(result.time, dtype=np.float64)
+        expected_interval = 1.0 / sample_rate
+        intervals: list[np.ndarray] = []
+        if time_values.size > 1:
+            intervals.append(np.diff(time_values))
+        if self._last_backend_time_seconds is not None and time_values.size:
+            intervals.append(
+                np.asarray(
+                    [time_values[0] - self._last_backend_time_seconds],
+                    dtype=np.float64,
+                )
+            )
+
+        maximum_error = 0.0
+        if intervals:
+            maximum_error = max(
+                float(np.max(np.abs(values - expected_interval)))
+                for values in intervals
+                if values.size
+            )
+        self.stats["max_timing_error_seconds"] = max(
+            float(self.stats["max_timing_error_seconds"]),
+            maximum_error,
+        )
+        self.stats["backend_blocks"] += 1
+        if time_values.size:
+            if self._last_backend_time_seconds is None:
+                self.current_session.metadata["backend_time_start_seconds"] = float(time_values[0])
+            self._last_backend_time_seconds = float(time_values[-1])
+            self.current_session.metadata["backend_time_end_seconds"] = float(time_values[-1])
+
+        if maximum_error > expected_interval * 0.05:
+            self.stats["timing_discontinuities"] += 1
+            raise RuntimeError(
+                "Discontinuité temporelle du pilote: "
+                f"erreur={maximum_error:.9g} s, limite={expected_interval * 0.05:.9g} s"
+            )
 
     def get_acquisition_status(self) -> dict[str, Any]:
         status: dict[str, Any] = {
@@ -611,6 +698,39 @@ class AcquisitionController:
         except Exception as exc:
             logger.exception("Export intègre impossible: %s", exc)
             return False
+
+    def qualify_current_session(
+        self,
+        criteria: QualificationCriteria | None = None,
+        output_directory: str | None = None,
+    ) -> QualificationReport:
+        """Qualifie la dernière session terminée et écrit ses rapports autonomes."""
+
+        if self.is_acquiring:
+            raise RuntimeError("Qualification interdite pendant l'acquisition")
+        if self.current_session is None or not self.current_session.data_file_path:
+            raise RuntimeError("Aucun fichier HDF5 maître à qualifier")
+        selected_criteria = criteria or QualificationCriteria.quick_functional()
+        source = Path(self.current_session.data_file_path)
+        report = HardwareQualificationService().evaluate(source, selected_criteria)
+        target_directory = (
+            Path(output_directory)
+            if output_directory is not None
+            else source.parent / "qualification_reports"
+        )
+        json_path, hdf5_path = QualificationReportWriter().write_bundle(
+            report,
+            target_directory,
+        )
+        self.last_qualification_report = report
+        self.last_qualification_files = (str(json_path), str(hdf5_path))
+        logger.info(
+            "Qualification %s: %s (%s)",
+            report.qualification_id,
+            report.verdict,
+            source,
+        )
+        return report
 
     def _build_time_vector(self, sample_count: int) -> np.ndarray:
         if sample_count <= 0:

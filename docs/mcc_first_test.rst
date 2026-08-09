@@ -49,6 +49,14 @@ Effectuer les essais dans cet ordre:
 3. huit canaux, 100 Hz, 10 minutes;
 4. recommencer aux frequences reellement utilisees au laboratoire.
 
+Chaque fichier doit ensuite etre qualifie avec le protocole detaille dans
+``mcc_qualification_protocol``. Par exemple:
+
+.. code-block:: powershell
+
+   python scripts\qualify_hardware_session.py "C:\chemin\session.h5" `
+     --profile quick --minimum-duration 60
+
 Pour chaque essai, conserver:
 
 - le journal CHNeoWave;
@@ -59,6 +67,7 @@ Pour chaque essai, conserver:
 - un export CSV seulement pour les essais courts qui doivent etre relus dans
   un tableur;
 - le rapport du diagnostic USB direct CHNeoWave.
+- les rapports de qualification JSON et HDF5 et le SHA-256 du fichier maitre.
 
 Enregistrement continu
 ----------------------
@@ -85,8 +94,8 @@ Verifier chaque fichier sans charger tous les signaux en memoire:
    python scripts\inspect_mcc_session.py "C:\chemin\session.h5"
 
 Le code de sortie est zero uniquement si la session est complete, si toutes
-les longueurs de canaux correspondent, et si les compteurs ``errors`` et
-``buffer_overruns`` sont nuls.
+les longueurs de canaux correspondent, et si les compteurs ``errors``,
+``buffer_overruns`` et ``timing_discontinuities`` sont nuls.
 
 Particularite du USB-1608FS classique
 -------------------------------------
@@ -116,12 +125,11 @@ produit:
 - la valeur mesuree ne respecte pas la plage configuree;
 - l'application ou l'interface se bloque.
 
-Limite actuelle
----------------
+Etat de validation terrain
+--------------------------
 
-Le stockage HDF5 continu est integre et valide par des doubles de banc dans la
-suite automatisee. Ne pas encore lancer de campagne de deux heures: il reste a
-valider sur le PC Windows
-du laboratoire les paliers de 60 secondes, 10 minutes puis 60 minutes, avec
-``recording_status = complete``, le compte exact d'echantillons et zero
-``buffer_overruns``. La campagne longue sera autorisee apres ces trois paliers.
+Le stockage HDF5 continu, la preuve de continuite des blocs et le moteur de
+qualification sont integres et testes automatiquement. Cela ne remplace pas
+l'essai reel. Ne pas encore lancer de campagne de deux heures: il reste a
+executer sur le PC Windows du laboratoire les paliers Q0 a Q4, avec verdict
+``accepted``. La campagne longue sera autorisee apres le palier Q4.

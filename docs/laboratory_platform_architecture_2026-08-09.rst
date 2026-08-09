@@ -154,7 +154,7 @@ Priorite 1 - fiabilite de la mesure
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 * terminer les essais MCC sur le PC Windows reel;
-* produire un rapport de diagnostic automatique avant chaque campagne;
+* executer et archiver les rapports de qualification automatique avant chaque campagne;
 * mesurer le taux reel, les pertes, le bruit a entree court-circuitee et la
   saturation pour chaque plage;
 * tester l'arret, la deconnexion USB et le disque plein sans presenter le
@@ -219,7 +219,7 @@ Plan d'execution
      - tests automatises verts
      - regressions de l'ancien prototype
    * - 1 - MCC
-     - diagnostic et protocole terrain
+     - moteur de qualification, rapports lies au maitre par hash et protocole terrain
      - 60 min, compte exact, zero perte
      - pilote Windows/USB
    * - 2 - metrologie

@@ -217,6 +217,11 @@ class SessionExporter:
             "errors": int(handle.attrs.get("errors", 0)),
             "buffer_overruns": int(handle.attrs.get("buffer_overruns", 0)),
             "recording_errors": int(handle.attrs.get("recording_errors", 0)),
+            "timing_discontinuities": int(handle.attrs.get("timing_discontinuities", 0)),
+            "max_timing_error_seconds": float(
+                handle.attrs.get("max_timing_error_seconds", 0.0)
+            ),
+            "backend_blocks": int(handle.attrs.get("backend_blocks", 0)),
         }
         metadata.update(statistics)
         metadata["recording_status"] = str(handle.attrs.get("recording_status", "unknown"))

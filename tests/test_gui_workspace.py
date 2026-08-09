@@ -100,10 +100,13 @@ def test_hardware_panel_uses_one_connected_state(qt_app):
 
     view.update_hardware_status()
 
-    assert view.hardware_status_label.text() == "MATÉRIEL OPÉRATIONNEL"
+    assert view.hardware_status_label.text() == "MATÉRIEL CONNECTÉ"
+    assert view.qualification_status_label.text() == "Non exécutée"
     assert view.board_name_label.text() == "Test Laboratory Deterministic DAQ"
     assert view.driver_status_label.text() == "test.physical.driver"
-    assert view.operation_mode_label.text() == "Acquisition physique"
+    assert view.operation_mode_label.text() == "Qualification à exécuter"
+    assert not view.start_acquisition_btn.isEnabled()
+    assert view.test_acquisition_btn.isEnabled()
 
 
 def test_acquisition_configuration_round_trip_preserves_scientific_geometry(qt_app):

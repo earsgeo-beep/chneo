@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ...acquisition import MARITIME_SENSOR_TYPES
+from ...acquisition import MARITIME_SENSOR_TYPES, QualificationCriteria
 from ...acquisition.acquisition_controller import AcquisitionController, create_default_maritime_config
 from ...core.calibration import CalibrationRecord
 from ...hardware import VoltageRange
@@ -51,6 +51,7 @@ class AcquisitionConfigView(QWidget):
     data_block_received = Signal(object, object)
     hardware_state_changed = Signal(bool, str)
     hardware_channels_changed = Signal(int)
+    qualification_completed = Signal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -59,6 +60,9 @@ class AcquisitionConfigView(QWidget):
         self.project_metadata: dict[str, Any] = {}
         self.project_dir: Path | None = None
         self._hardware_state = "not_scanned"
+        self._qualification_pending = False
+        self._last_qualification_verdict = "not_run"
+        self._qualified_setup_signature: tuple[Any, ...] | None = None
         self.calibration_records: dict[int, CalibrationRecord] = {}
 
         self._build_ui()
@@ -155,7 +159,7 @@ class AcquisitionConfigView(QWidget):
         self.board_combo = QComboBox()
         self.scan_boards_btn = QPushButton("Détecter les équipements")
         self.scan_boards_btn.setProperty("kind", "primaryLarge")
-        self.test_connection_btn = QPushButton("Valider le fonctionnement")
+        self.test_connection_btn = QPushButton("Lire le diagnostic pilote")
         self.test_connection_btn.setProperty("kind", "secondary")
         detection_layout.addWidget(QLabel("Carte sélectionnée"), 0, 0)
         detection_layout.addWidget(self.board_combo, 0, 1, 1, 2)
@@ -172,12 +176,15 @@ class AcquisitionConfigView(QWidget):
         self.driver_status_label = QLabel("Non vérifié")
         self.operation_mode_label = QLabel("En attente du scan")
         self.last_hardware_check_label = QLabel("Aucun contrôle effectué")
+        self.qualification_status_label = QLabel("Non exécutée")
+        self.qualification_status_label.setProperty("state", "neutral")
         info_layout.addRow("Périphérique", self.board_name_label)
         info_layout.addRow("Backend", self.backend_label)
         info_layout.addRow("Détection", self.discovery_mode_label)
         info_layout.addRow("Pilote", self.driver_status_label)
         info_layout.addRow("Mode logiciel", self.operation_mode_label)
         info_layout.addRow("Dernier contrôle", self.last_hardware_check_label)
+        info_layout.addRow("Qualification", self.qualification_status_label)
 
         layout.addWidget(summary)
         layout.addWidget(detection_group)
@@ -259,7 +266,7 @@ class AcquisitionConfigView(QWidget):
         self.stop_acquisition_btn.setText("Arrêter")
         self.stop_acquisition_btn.setProperty("kind", "danger")
         self.stop_acquisition_btn.setEnabled(False)
-        self.test_acquisition_btn = QPushButton("Essai matériel 3 s")
+        self.test_acquisition_btn = QPushButton("Essai qualifié 3 s")
         self.calibrate_btn = QPushButton("Calibration")
         self.test_acquisition_btn.setProperty("kind", "secondary")
         self.calibrate_btn.setProperty("kind", "secondary")
@@ -400,6 +407,8 @@ class AcquisitionConfigView(QWidget):
             self.board_combo.clear()
             self.board_combo.addItem("Inventaire matériel non lancé", None)
             self._hardware_state = "not_scanned"
+            self._qualification_pending = False
+            self._set_qualification_status("not_run")
             self.start_acquisition_btn.setEnabled(False)
             self.test_acquisition_btn.setEnabled(False)
             self.update_hardware_status()
@@ -425,6 +434,11 @@ class AcquisitionConfigView(QWidget):
     def scan_boards(self) -> None:
         if not self.controller:
             return
+        if self.controller.is_acquiring:
+            self.log_message("Inventaire interdit pendant une acquisition")
+            return
+        self._qualification_pending = False
+        self._set_qualification_status("not_run")
         self.scan_boards_btn.setEnabled(False)
         self._hardware_state = "scanning"
         self.update_hardware_status()
@@ -467,6 +481,9 @@ class AcquisitionConfigView(QWidget):
     def select_hardware_device(self, index: int) -> None:
         if not self.controller or index < 0:
             return
+        if self.controller.is_acquiring:
+            self.log_message("Changement de carte interdit pendant une acquisition")
+            return
         device_key = self.board_combo.itemData(index)
         if not device_key:
             return
@@ -491,8 +508,10 @@ class AcquisitionConfigView(QWidget):
             min(1000.0, capabilities.max_sample_rate_hz_per_channel)
         )
         self._hardware_state = "connected"
+        self._qualification_pending = False
+        self._set_qualification_status("not_run")
         self.last_hardware_check_label.setText(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
-        self.start_acquisition_btn.setEnabled(True)
+        self.start_acquisition_btn.setEnabled(False)
         self.test_acquisition_btn.setEnabled(True)
         self.log_message(f"Équipement connecté: {device.display_name}")
         self.update_hardware_status()
@@ -536,15 +555,37 @@ class AcquisitionConfigView(QWidget):
                 "Acquisition verrouillée",
                 "Le contrôle matériel a échoué. Consultez le journal avant une acquisition réelle.",
             ),
-            "connected": (
-                "MATÉRIEL OPÉRATIONNEL",
+        }
+        connected_content = {
+            "not_run": (
+                "MATÉRIEL CONNECTÉ",
+                "neutral",
+                device_name or "Équipement connecté",
+                driver_name,
+                "Qualification à exécuter",
+                "La connexion est établie; l'essai court qualifié n'a pas encore été exécuté.",
+            ),
+            "accepted": (
+                "ESSAI COURT ACCEPTÉ",
                 "success",
                 device_name or "Équipement connecté",
                 driver_name,
                 "Acquisition physique",
-                "Le pilote et l'équipement ont répondu à la séquence de connexion.",
+                "Le dernier essai court respecte tous les critères automatiques.",
+            ),
+            "refused": (
+                "ESSAI COURT REFUSÉ",
+                "danger",
+                device_name or "Équipement connecté",
+                driver_name,
+                "Diagnostic requis",
+                "Le matériel répond, mais au moins un critère de qualification a échoué.",
             ),
         }
+        state_content["connected"] = connected_content.get(
+            self._last_qualification_verdict,
+            connected_content["not_run"],
+        )
         effective_state = "connected" if connected else self._hardware_state
         badge, style_state, device, driver, mode, summary = state_content.get(
             effective_state,
@@ -559,6 +600,10 @@ class AcquisitionConfigView(QWidget):
         self.hardware_summary_label.setText(summary)
         self.hardware_status_label.style().unpolish(self.hardware_status_label)
         self.hardware_status_label.style().polish(self.hardware_status_label)
+        self.test_acquisition_btn.setEnabled(
+            connected and not bool(self.controller and self.controller.is_acquiring)
+        )
+        self.test_connection_btn.setEnabled(connected)
         self.hardware_state_changed.emit(connected, badge)
 
     def test_connection(self) -> None:
@@ -570,15 +615,13 @@ class AcquisitionConfigView(QWidget):
                 status = self.controller.get_hardware_status()
                 self.last_hardware_check_label.setText(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
                 model_name = status.get("model", status.get("board_name", "équipement"))
-                self.log_message(
-                    f"Validation matérielle OK · {model_name}"
-                )
+                self.log_message(f"Diagnostic pilote reçu · {model_name} · {status}")
             except Exception as exc:
                 self._hardware_state = "error"
                 self.update_hardware_status()
-                self.log_message(f"Validation matérielle échouée: {exc}")
+                self.log_message(f"Diagnostic pilote échoué: {exc}")
         else:
-            self.log_message("Validation impossible: connectez d'abord un équipement pris en charge")
+            self.log_message("Diagnostic impossible: connectez d'abord un équipement pris en charge")
 
     def load_maritime_preset(self) -> None:
         if not self.controller:
@@ -705,21 +748,37 @@ class AcquisitionConfigView(QWidget):
                     return False
         return True
 
-    def start_acquisition(self) -> None:
+    def start_acquisition(self) -> bool:
+        return self._start_acquisition(require_qualified_setup=True)
+
+    def _start_acquisition(self, *, require_qualified_setup: bool) -> bool:
         if not self.controller:
             self.log_message("Pas de controleur disponible")
-            return
+            return False
         if not self.controller.is_hardware_available():
             self.log_message("Acquisition verrouillée: connectez un équipement physique")
-            return
+            return False
 
         if not self.apply_channels_configuration():
             self.log_message("Acquisition annulée: corrigez la configuration des canaux")
-            return
+            return False
         active_channels = self._get_active_channels()
         if not active_channels:
             self.log_message("Aucun canal actif")
-            return
+            return False
+        if require_qualified_setup:
+            current_signature = self._current_setup_signature(active_channels)
+            if (
+                self._last_qualification_verdict != "accepted"
+                or current_signature != self._qualified_setup_signature
+            ):
+                self._set_qualification_status("not_run")
+                self.update_hardware_status()
+                self.log_message(
+                    "Acquisition verrouillée: exécutez l'essai qualifié avec ces voies, "
+                    "ces plages et cette fréquence"
+                )
+                return False
 
         project_name = self.project_name_edit.text().strip() or "Acquisition_Maritime"
         duration = None if self.continuous_check.isChecked() else self.duration_spin.value()
@@ -734,23 +793,32 @@ class AcquisitionConfigView(QWidget):
         )
         if not success:
             self.log_message("Erreur de demarrage d'acquisition")
-            return
+            return False
 
         self.log_message(f"Acquisition physique démarrée: {project_name}")
         if self.controller.current_session.data_file_path:
             self.log_message(f"Enregistrement continu: {self.controller.current_session.data_file_path}")
         self.start_acquisition_btn.setEnabled(False)
         self.stop_acquisition_btn.setEnabled(True)
+        self.test_acquisition_btn.setEnabled(False)
+        self.scan_boards_btn.setEnabled(False)
+        self.board_combo.setEnabled(False)
+        self.test_connection_btn.setEnabled(False)
         self.progress_bar.setVisible(duration is not None)
         if duration is not None:
             self.progress_bar.setMaximum(max(1, int(duration)))
             self.progress_bar.setValue(0)
+        return True
 
     def stop_acquisition(self) -> None:
         if self.controller and self.controller.is_acquiring:
             self.controller.stop_acquisition()
             self.log_message("Acquisition arretee")
+        qualification_pending = self._qualification_pending
+        self._qualification_pending = False
         self._reset_acquisition_controls()
+        if qualification_pending:
+            self._complete_quick_qualification()
 
     def test_acquisition(self) -> None:
         if not self.controller or not self.controller.is_hardware_available():
@@ -761,7 +829,7 @@ class AcquisitionConfigView(QWidget):
         self.duration_spin.setValue(3.0)
         self.continuous_check.setChecked(False)
         self.log_message("Essai matériel de 3 secondes lancé")
-        self.start_acquisition()
+        self._qualification_pending = self._start_acquisition(require_qualified_setup=False)
         self.duration_spin.setValue(original_duration)
         self.continuous_check.setChecked(original_continuous)
 
@@ -824,7 +892,45 @@ class AcquisitionConfigView(QWidget):
             )
 
         if not status.get("is_acquiring") and self.stop_acquisition_btn.isEnabled():
+            qualification_pending = self._qualification_pending
+            self._qualification_pending = False
             self._reset_acquisition_controls()
+            if qualification_pending:
+                self._complete_quick_qualification()
+
+    def _complete_quick_qualification(self) -> None:
+        if not self.controller:
+            return
+        try:
+            report = self.controller.qualify_current_session(
+                QualificationCriteria.quick_functional(minimum_duration_seconds=3.0)
+            )
+        except Exception as exc:
+            logger.exception("Qualification automatique impossible")
+            self._set_qualification_status("refused")
+            self.log_message(f"Qualification impossible: {exc}")
+            self.update_hardware_status()
+            return
+
+        if report.accepted:
+            self._qualified_setup_signature = self._session_setup_signature()
+        self._set_qualification_status(report.verdict, preserve_signature=report.accepted)
+        summary = report.to_dict()["summary"]
+        self.log_message(
+            "Qualification courte "
+            f"{report.verdict.upper()} · {summary['checks_passed']}/{summary['checks_total']} contrôles"
+        )
+        if self.controller.last_qualification_files:
+            json_path, hdf5_path = self.controller.last_qualification_files
+            self.log_message(f"Rapport JSON: {json_path}")
+            self.log_message(f"Rapport HDF5: {hdf5_path}")
+        for check in report.checks:
+            if not check.passed:
+                self.log_message(
+                    f"Échec {check.scope}/{check.code}: observé={check.observed}, limite={check.limit}"
+                )
+        self.qualification_completed.emit(report.to_dict())
+        self.update_hardware_status()
 
     def export_csv(self) -> None:
         self._export_data("csv", "Fichiers CSV (*.csv)", "csv")
@@ -1111,6 +1217,32 @@ class AcquisitionConfigView(QWidget):
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.log_text.append(f"[{timestamp}] {message}")
 
+    def _set_qualification_status(
+        self,
+        verdict: str,
+        *,
+        preserve_signature: bool = False,
+    ) -> None:
+        normalized = verdict if verdict in {"accepted", "refused"} else "not_run"
+        labels = {
+            "not_run": ("Non exécutée", "neutral"),
+            "accepted": ("Essai court accepté", "success"),
+            "refused": ("Essai court refusé", "danger"),
+        }
+        text, state = labels[normalized]
+        if not preserve_signature:
+            self._qualified_setup_signature = None
+        self._last_qualification_verdict = normalized
+        self.qualification_status_label.setText(text)
+        self.qualification_status_label.setProperty("state", state)
+        self.qualification_status_label.style().unpolish(self.qualification_status_label)
+        self.qualification_status_label.style().polish(self.qualification_status_label)
+        connected = bool(self.controller and self.controller.is_hardware_available())
+        acquiring = bool(self.controller and self.controller.is_acquiring)
+        self.start_acquisition_btn.setEnabled(
+            connected and not acquiring and normalized == "accepted"
+        )
+
     def data_received_callback(self, data, session) -> None:
         """Relaye le bloc vers le thread Qt au lieu de modifier l'UI ici."""
         self.data_block_received.emit(data, session)
@@ -1140,6 +1272,41 @@ class AcquisitionConfigView(QWidget):
                 active_channels.append(row)
         return active_channels
 
+    def _current_setup_signature(self, active_channels: list[int]) -> tuple[Any, ...]:
+        if not self.controller or not self.controller.selected_device:
+            return ()
+        channel_contract = tuple(
+            (
+                channel,
+                float(self.controller.channels_config[channel].voltage_range.value),
+            )
+            for channel in active_channels
+        )
+        return (
+            self.controller.selected_device.key,
+            float(self.sampling_rate_spin.value()),
+            channel_contract,
+        )
+
+    def _session_setup_signature(self) -> tuple[Any, ...] | None:
+        if (
+            not self.controller
+            or not self.controller.selected_device
+            or not self.controller.current_session
+        ):
+            return None
+        session = self.controller.current_session
+        requested_rate = session.metadata.get("requested_sampling_rate", session.sampling_rate)
+        channel_contract = tuple(
+            (channel.channel, float(channel.voltage_range.value))
+            for channel in session.channels
+        )
+        return (
+            self.controller.selected_device.key,
+            float(requested_rate),
+            channel_contract,
+        )
+
     def _update_realtime_table(self, sample_row, labels, units) -> None:
         self.data_table.setRowCount(len(sample_row))
         for index, value in enumerate(sample_row):
@@ -1150,8 +1317,15 @@ class AcquisitionConfigView(QWidget):
             self.data_table.setItem(index, 2, QTableWidgetItem(unit))
 
     def _reset_acquisition_controls(self) -> None:
-        self.start_acquisition_btn.setEnabled(True)
+        connected = bool(self.controller and self.controller.is_hardware_available())
+        self.start_acquisition_btn.setEnabled(
+            connected and self._last_qualification_verdict == "accepted"
+        )
         self.stop_acquisition_btn.setEnabled(False)
+        self.test_acquisition_btn.setEnabled(connected)
+        self.scan_boards_btn.setEnabled(True)
+        self.board_combo.setEnabled(True)
+        self.test_connection_btn.setEnabled(connected)
         self.progress_bar.setVisible(False)
 
     def _get_default_export_directory(self) -> Path:

@@ -244,11 +244,19 @@ class ContinuousHDF5Recorder:
         try:
             expected_samples = session.metadata.get("expected_samples")
             counters_are_clean = not any(
-                int(statistics.get(key, 0)) for key in ("errors", "buffer_overruns", "recording_errors")
+                int(statistics.get(key, 0))
+                for key in (
+                    "errors",
+                    "buffer_overruns",
+                    "recording_errors",
+                    "timing_discontinuities",
+                )
             )
             sample_count_is_valid = expected_samples is None or int(expected_samples) == self.sample_count
             recording_status = "complete" if counters_are_clean and sample_count_is_valid else "error"
             session_group = self._file["metadata/session"]
+            for key, value in session.metadata.items():
+                session_group.attrs[key] = self._attribute_value(value)
             session_group.attrs["end_time"] = session.end_time.isoformat() if session.end_time else ""
             session_group.attrs["total_samples"] = int(self.sample_count)
             self._file.attrs["n_samples"] = int(self.sample_count)
@@ -270,6 +278,13 @@ class ContinuousHDF5Recorder:
             self._file.attrs["errors"] = int(statistics.get("errors", 0))
             self._file.attrs["buffer_overruns"] = int(statistics.get("buffer_overruns", 0))
             self._file.attrs["recording_errors"] = int(statistics.get("recording_errors", 0))
+            self._file.attrs["timing_discontinuities"] = int(
+                statistics.get("timing_discontinuities", 0)
+            )
+            self._file.attrs["max_timing_error_seconds"] = float(
+                statistics.get("max_timing_error_seconds", 0.0)
+            )
+            self._file.attrs["backend_blocks"] = int(statistics.get("backend_blocks", 0))
             self.flush()
         finally:
             self._close_handle()
@@ -324,6 +339,7 @@ def inspect_recording(file_path: str | Path) -> dict[str, Any]:
             errors = int(handle.attrs.get("errors", 0))
             overruns = int(handle.attrs.get("buffer_overruns", 0))
             recording_errors = int(handle.attrs.get("recording_errors", 0))
+            timing_discontinuities = int(handle.attrs.get("timing_discontinuities", 0))
             processed_group = handle.get("acquisition_data")
             raw_group = handle.get("raw_voltage")
             session_group = handle.get("metadata/session")
@@ -374,6 +390,8 @@ def inspect_recording(file_path: str | Path) -> dict[str, Any]:
                 issues.append(f"{overruns} debordement(s) de buffer")
             if recording_errors:
                 issues.append(f"{recording_errors} erreur(s) d'enregistrement")
+            if timing_discontinuities:
+                issues.append(f"{timing_discontinuities} discontinuite(s) temporelle(s)")
             if not hardware_available:
                 issues.append("Equipement physique non atteste")
             if acquisition_source != "physical_hardware":
@@ -393,6 +411,11 @@ def inspect_recording(file_path: str | Path) -> dict[str, Any]:
                 "errors": errors,
                 "buffer_overruns": overruns,
                 "recording_errors": recording_errors,
+                "timing_discontinuities": timing_discontinuities,
+                "max_timing_error_seconds": float(
+                    handle.attrs.get("max_timing_error_seconds", 0.0)
+                ),
+                "backend_blocks": int(handle.attrs.get("backend_blocks", 0)),
                 "hardware_available": hardware_available,
                 "acquisition_source": acquisition_source,
                 "channel_lengths": lengths,

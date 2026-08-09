@@ -9,6 +9,14 @@ from .acquisition_controller import (
     create_default_maritime_config,
 )
 from .daq_backend import DaqBackend, DaqReadResult
+from .hardware_qualification import (
+    HardwareQualificationService,
+    QualificationCheck,
+    QualificationCriteria,
+    QualificationError,
+    QualificationReport,
+    QualificationReportWriter,
+)
 from .session_exporter import SessionExportError, SessionExporter
 from .session_recorder import ContinuousHDF5Recorder, RecordingError, inspect_recording
 
@@ -37,9 +45,15 @@ __all__ = [
     "ContinuousHDF5Recorder",
     "DaqBackend",
     "DaqReadResult",
+    "HardwareQualificationService",
     "MARITIME_SENSOR_TYPES",
     "MaritimeChannelConfig",
     "RecordingError",
+    "QualificationCheck",
+    "QualificationCriteria",
+    "QualificationError",
+    "QualificationReport",
+    "QualificationReportWriter",
     "SessionExportError",
     "SessionExporter",
     "VOLTAGE_RANGES",
