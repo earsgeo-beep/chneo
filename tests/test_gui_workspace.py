@@ -58,8 +58,8 @@ def test_analysis_parameters_panel_is_collapsible(qt_app):
 
     view._toggle_tools_panel()
     assert not view._tools_panel_expanded
-    assert view.tools_panel.isHidden()
-    assert view.tools_toggle_button.text() == "Afficher les paramètres"
+    assert view.tools_panel.parameters_panel.isHidden()
+    assert view.tools_toggle_button.text() == "Afficher les réglages"
 
 
 def test_hardware_panel_uses_one_connected_state(qt_app):

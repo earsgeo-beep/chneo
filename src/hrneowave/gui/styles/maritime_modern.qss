@@ -126,7 +126,7 @@ QLabel#pageEyebrow {
 
 QLabel#pageTitle {
     color: #172B35;
-    font-size: 20px;
+    font-size: 21px;
     font-weight: 650;
 }
 
@@ -186,7 +186,7 @@ QLabel#viewTitle {
 
 QLabel#sectionTitle {
     color: #203843;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 650;
 }
 
@@ -198,7 +198,7 @@ QLabel#metricLabel {
 
 QLabel#metricValue {
     color: #172B35;
-    font-size: 21px;
+    font-size: 18px;
     font-weight: 650;
 }
 

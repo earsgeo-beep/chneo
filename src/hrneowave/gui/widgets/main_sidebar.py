@@ -176,6 +176,7 @@ class MainSidebar(QFrame):
         self.version.setVisible(not self.is_collapsed)
 
         self.header_layout.setContentsMargins(18, 16, 14 if not self.is_collapsed else 18, 14)
+        self.header_layout.setSpacing(0 if self.is_collapsed else 11)
         self.footer_layout.setContentsMargins(
             18 if not self.is_collapsed else 28,
             10,

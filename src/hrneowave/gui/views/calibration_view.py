@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QDoubleSpinBox,
-    QFormLayout,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -40,7 +39,7 @@ class CalibrationMetric(QFrame):
     def __init__(self, label: str, value: str = "—", parent=None):
         super().__init__(parent)
         self.setObjectName("metricCard")
-        self.setMinimumHeight(64)
+        self.setMinimumHeight(58)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8)
@@ -82,19 +81,18 @@ class CalibrationView(QWidget):
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(20, 16, 20, 18)
-        root.setSpacing(12)
+        root.setContentsMargins(20, 14, 20, 16)
+        root.setSpacing(10)
 
-        root.addWidget(self._create_workflow_bar())
         root.addWidget(self._create_configuration_strip())
 
         self.workspace_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.workspace_splitter.setChildrenCollapsible(False)
         self.workspace_splitter.addWidget(self._create_plot_panel())
         self.workspace_splitter.addWidget(self._create_points_panel())
-        self.workspace_splitter.setStretchFactor(0, 3)
-        self.workspace_splitter.setStretchFactor(1, 2)
-        self.workspace_splitter.setSizes([760, 430])
+        self.workspace_splitter.setStretchFactor(0, 5)
+        self.workspace_splitter.setStretchFactor(1, 3)
+        self.workspace_splitter.setSizes([720, 500])
         root.addWidget(self.workspace_splitter, 1)
 
         metrics = QHBoxLayout()
@@ -114,47 +112,36 @@ class CalibrationView(QWidget):
 
         root.addLayout(self._create_action_bar())
 
-    def _create_workflow_bar(self) -> QFrame:
-        frame = QFrame()
-        frame.setObjectName("operationalHeader")
-        layout = QHBoxLayout(frame)
-        layout.setContentsMargins(16, 10, 16, 10)
-        layout.setSpacing(12)
-
-        context = QVBoxLayout()
-        context.setSpacing(1)
-        self.channel_progress_label = QLabel("CANAL 1 / 8")
-        self.channel_progress_label.setObjectName("pageEyebrow")
-        title = QLabel("Étalonnage linéaire du capteur")
-        title.setObjectName("sectionTitle")
-        help_text = QLabel(
-            "Définissez les références, saisissez les tensions mesurées, puis validez la régression."
-        )
-        help_text.setObjectName("mutedText")
-        context.addWidget(self.channel_progress_label)
-        context.addWidget(title)
-        context.addWidget(help_text)
-
-        self.previous_channel_button = QPushButton("Canal précédent")
-        self.previous_channel_button.setProperty("kind", "secondary")
-        self.next_channel_button = QPushButton("Canal suivant")
-        self.next_channel_button.setProperty("kind", "secondary")
-        self.calibration_status_label = QLabel("À CALIBRER")
-        self.calibration_status_label.setProperty("state", "neutral")
-
-        layout.addLayout(context, 1)
-        layout.addWidget(self.previous_channel_button)
-        layout.addWidget(self.next_channel_button)
-        layout.addWidget(self.calibration_status_label)
-        return frame
-
     def _create_configuration_strip(self) -> QFrame:
         frame = QFrame()
         frame.setObjectName("surface")
-        layout = QGridLayout(frame)
-        layout.setContentsMargins(16, 10, 16, 10)
+        outer_layout = QVBoxLayout(frame)
+        outer_layout.setContentsMargins(16, 10, 16, 12)
+        outer_layout.setSpacing(9)
+
+        toolbar = QHBoxLayout()
+        toolbar.setSpacing(8)
+        self.channel_progress_label = QLabel("CANAL 1 / 8")
+        self.channel_progress_label.setObjectName("pageEyebrow")
+        context = QLabel("Configuration du capteur et traçabilité de l'étalonnage")
+        context.setObjectName("sectionTitle")
+        self.previous_channel_button = QPushButton("Précédent")
+        self.previous_channel_button.setProperty("kind", "secondary")
+        self.next_channel_button = QPushButton("Suivant")
+        self.next_channel_button.setProperty("kind", "secondary")
+        self.calibration_status_label = QLabel("À CALIBRER")
+        self.calibration_status_label.setProperty("state", "neutral")
+        toolbar.addWidget(self.channel_progress_label)
+        toolbar.addWidget(context)
+        toolbar.addStretch()
+        toolbar.addWidget(self.previous_channel_button)
+        toolbar.addWidget(self.next_channel_button)
+        toolbar.addWidget(self.calibration_status_label)
+        outer_layout.addLayout(toolbar)
+
+        layout = QGridLayout()
         layout.setHorizontalSpacing(12)
-        layout.setVerticalSpacing(6)
+        layout.setVerticalSpacing(5)
 
         self.channel_combo = QComboBox()
         for channel in range(self.CHANNEL_COUNT):
@@ -177,27 +164,34 @@ class CalibrationView(QWidget):
         self.reference_equipment_edit = QLineEdit()
         self.reference_equipment_edit.setPlaceholderText("Masses, règle étalon, banc...")
 
-        fields = (
+        primary_fields = (
             ("Canal", self.channel_combo),
             ("Identifiant capteur", self.sensor_id_edit),
             ("Type", self.sensor_type_combo),
             ("Unité physique", self.unit_combo),
             ("Nombre de points", self.point_count_spin),
-            ("Opérateur", self.operator_edit),
-            ("Référence utilisée", self.reference_equipment_edit),
         )
-        for index, (label, widget) in enumerate(fields):
-            column = index % 4
-            row = (index // 4) * 2
+        for column, (label, widget) in enumerate(primary_fields):
             label_widget = QLabel(label.upper())
             label_widget.setObjectName("metricLabel")
-            layout.addWidget(label_widget, row, column)
-            layout.addWidget(widget, row + 1, column)
+            layout.addWidget(label_widget, 0, column)
+            layout.addWidget(widget, 1, column)
+
+        operator_label = QLabel("OPÉRATEUR")
+        operator_label.setObjectName("metricLabel")
+        reference_label = QLabel("RÉFÉRENCE MÉTROLOGIQUE UTILISÉE")
+        reference_label.setObjectName("metricLabel")
+        layout.addWidget(operator_label, 2, 0, 1, 2)
+        layout.addWidget(reference_label, 2, 2, 1, 3)
+        layout.addWidget(self.operator_edit, 3, 0, 1, 2)
+        layout.addWidget(self.reference_equipment_edit, 3, 2, 1, 3)
 
         layout.setColumnStretch(0, 1)
         layout.setColumnStretch(1, 2)
         layout.setColumnStretch(2, 1)
-        layout.setColumnStretch(3, 2)
+        layout.setColumnStretch(3, 1)
+        layout.setColumnStretch(4, 1)
+        outer_layout.addLayout(layout)
         return frame
 
     def _create_plot_panel(self) -> QFrame:
@@ -220,7 +214,7 @@ class CalibrationView(QWidget):
         self.figure = Figure(figsize=(7.5, 4.8), tight_layout=True)
         self.canvas = FigureCanvas(self.figure)
         self.canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.canvas.setMinimumSize(420, 260)
+        self.canvas.setMinimumSize(400, 230)
         layout.addWidget(self.canvas, 1)
         self._draw_empty_plot()
         return panel
@@ -228,7 +222,7 @@ class CalibrationView(QWidget):
     def _create_points_panel(self) -> QFrame:
         panel = QFrame()
         panel.setObjectName("surface")
-        panel.setMinimumWidth(350)
+        panel.setMinimumWidth(400)
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(10)
@@ -258,23 +252,38 @@ class CalibrationView(QWidget):
         self.points_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.points_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.points_table.setAlternatingRowColors(True)
+        self.points_table.verticalHeader().setDefaultSectionSize(32)
+        self.points_table.setMinimumHeight(150)
         layout.addWidget(self.points_table, 1)
 
         entry_frame = QFrame()
         entry_frame.setObjectName("quietSurface")
-        entry_layout = QFormLayout(entry_frame)
+        entry_layout = QGridLayout(entry_frame)
         entry_layout.setContentsMargins(12, 10, 12, 10)
+        entry_layout.setHorizontalSpacing(10)
+        entry_layout.setVerticalSpacing(5)
         self.selected_point_label = QLabel("Point 1 · zéro")
+        self.selected_point_label.setObjectName("sectionTitle")
         self.reference_spin = QDoubleSpinBox()
         self.reference_spin.setRange(-1_000_000.0, 1_000_000.0)
         self.reference_spin.setDecimals(6)
+        self.reference_spin.setMinimumWidth(150)
         self.measured_voltage_spin = QDoubleSpinBox()
         self.measured_voltage_spin.setRange(-100.0, 100.0)
         self.measured_voltage_spin.setDecimals(8)
         self.measured_voltage_spin.setSuffix(" V")
-        entry_layout.addRow("Point sélectionné", self.selected_point_label)
-        entry_layout.addRow("Valeur de référence", self.reference_spin)
-        entry_layout.addRow("Tension mesurée", self.measured_voltage_spin)
+        self.measured_voltage_spin.setMinimumWidth(150)
+        reference_label = QLabel("VALEUR DE RÉFÉRENCE")
+        reference_label.setObjectName("metricLabel")
+        voltage_label = QLabel("TENSION MESURÉE")
+        voltage_label.setObjectName("metricLabel")
+        entry_layout.addWidget(self.selected_point_label, 0, 0, 1, 2)
+        entry_layout.addWidget(reference_label, 1, 0)
+        entry_layout.addWidget(voltage_label, 1, 1)
+        entry_layout.addWidget(self.reference_spin, 2, 0)
+        entry_layout.addWidget(self.measured_voltage_spin, 2, 1)
+        entry_layout.setColumnStretch(0, 1)
+        entry_layout.setColumnStretch(1, 1)
         layout.addWidget(entry_frame)
 
         buttons = QHBoxLayout()

@@ -4,25 +4,20 @@ from pathlib import Path
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
-    QFormLayout,
     QFrame,
     QGridLayout,
-    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QSpinBox,
-    QSplitter,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -40,6 +35,7 @@ class AnalysisToolsPanel(QFrame):
     analysis_requested = Signal(str, dict)
     filter_applied = Signal(str, dict)
     export_requested = Signal(str)
+    parameters_toggle_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -47,78 +43,107 @@ class AnalysisToolsPanel(QFrame):
 
     def _build_ui(self) -> None:
         self.setObjectName("analysis_tools_panel")
-        self.setMinimumWidth(250)
-        self.setMaximumWidth(330)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 16, 18, 16)
-        layout.setSpacing(14)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(9)
 
-        title = QLabel("Source et méthode")
-        title.setObjectName("sectionTitle")
-        layout.addWidget(title)
-
-        files_group = QGroupBox("Données de la campagne")
-        files_layout = QVBoxLayout(files_group)
-        self.data_list = QListWidget()
-        self.data_list.setMaximumHeight(130)
-        self.load_button = QPushButton("Charger un fichier")
+        source_row = QHBoxLayout()
+        source_row.setSpacing(8)
+        source_label = QLabel("FICHIER DE DONNÉES")
+        source_label.setObjectName("metricLabel")
+        self.data_combo = QComboBox()
+        self.data_combo.addItem("Aucun fichier sélectionné", None)
+        self.data_combo.setMinimumContentsLength(32)
+        self.load_button = QPushButton("Ouvrir un fichier")
         self.refresh_button = QPushButton("Actualiser")
+        self.load_button.setProperty("kind", "secondary")
         self.refresh_button.setProperty("kind", "secondary")
+        self.parameters_toggle_button = QPushButton("Réduire les réglages")
+        self.parameters_toggle_button.setProperty("kind", "quiet")
+        self.run_button = QPushButton("Lancer l'analyse")
+        self.run_button.setProperty("kind", "primaryLarge")
+        self.run_button.clicked.connect(self._emit_analysis_request)
+        self.parameters_toggle_button.clicked.connect(self.parameters_toggle_requested.emit)
+        source_row.addWidget(source_label)
+        source_row.addWidget(self.data_combo, 1)
+        source_row.addWidget(self.load_button)
+        source_row.addWidget(self.refresh_button)
+        source_row.addWidget(self.parameters_toggle_button)
+        source_row.addWidget(self.run_button)
+        layout.addLayout(source_row)
 
-        buttons_layout = QHBoxLayout()
-        buttons_layout.addWidget(self.load_button)
-        buttons_layout.addWidget(self.refresh_button)
-        files_layout.addWidget(self.data_list)
-        files_layout.addLayout(buttons_layout)
-        layout.addWidget(files_group)
+        self.parameters_panel = QFrame()
+        self.parameters_panel.setObjectName("quietSurface")
+        parameters_layout = QHBoxLayout(self.parameters_panel)
+        parameters_layout.setContentsMargins(12, 8, 12, 8)
+        parameters_layout.setSpacing(18)
 
-        analysis_group = QGroupBox("Analyse spectrale")
-        analysis_layout = QFormLayout(analysis_group)
+        method_layout = QGridLayout()
+        method_layout.setHorizontalSpacing(10)
+        method_layout.setVerticalSpacing(4)
         self.segment_length_combo = QComboBox()
         self.segment_length_combo.addItems(["256", "512", "1024", "2048", "4096", "8192"])
         self.segment_length_combo.setCurrentText("1024")
+        self.segment_length_combo.setMinimumWidth(110)
         self.overlap_spin = QSpinBox()
         self.overlap_spin.setRange(0, 90)
         self.overlap_spin.setValue(50)
         self.overlap_spin.setSuffix(" %")
+        self.overlap_spin.setMinimumWidth(110)
         self.min_frequency_spin = QDoubleSpinBox()
         self.min_frequency_spin.setRange(0.0, 10000.0)
         self.min_frequency_spin.setDecimals(4)
         self.min_frequency_spin.setSuffix(" Hz")
+        self.min_frequency_spin.setMinimumWidth(120)
         self.max_frequency_spin = QDoubleSpinBox()
         self.max_frequency_spin.setRange(0.0, 10000.0)
         self.max_frequency_spin.setDecimals(4)
         self.max_frequency_spin.setSpecialValueText("Nyquist")
         self.max_frequency_spin.setSuffix(" Hz")
+        self.max_frequency_spin.setMinimumWidth(120)
         self.detrend_check = QCheckBox("Retirer moyenne et dérive linéaire")
         self.detrend_check.setChecked(True)
-        self.run_button = QPushButton("Lancer l'analyse complète")
-        self.run_button.setProperty("kind", "primaryLarge")
-        self.run_button.clicked.connect(self._emit_analysis_request)
-        analysis_layout.addRow("Segment Welch:", self.segment_length_combo)
-        analysis_layout.addRow("Recouvrement:", self.overlap_spin)
-        analysis_layout.addRow("Frequence min:", self.min_frequency_spin)
-        analysis_layout.addRow("Frequence max:", self.max_frequency_spin)
-        analysis_layout.addRow("", self.detrend_check)
-        analysis_layout.addRow("", self.run_button)
-        layout.addWidget(analysis_group)
+        fields = (
+            ("SEGMENT WELCH", self.segment_length_combo),
+            ("RECOUVREMENT", self.overlap_spin),
+            ("FRÉQUENCE MIN.", self.min_frequency_spin),
+            ("FRÉQUENCE MAX.", self.max_frequency_spin),
+        )
+        for column, (label, widget) in enumerate(fields):
+            label_widget = QLabel(label)
+            label_widget.setObjectName("metricLabel")
+            method_layout.addWidget(label_widget, 0, column)
+            method_layout.addWidget(widget, 1, column)
+        method_layout.addWidget(self.detrend_check, 1, len(fields))
+        method_layout.setColumnStretch(len(fields), 1)
+        parameters_layout.addLayout(method_layout, 1)
 
-        export_group = QGroupBox("Exporter les résultats")
-        export_layout = QGridLayout(export_group)
+        export_block = QVBoxLayout()
+        export_block.setSpacing(4)
+        export_label = QLabel("EXPORTER LES RÉSULTATS")
+        export_label.setObjectName("metricLabel")
+        export_buttons = QHBoxLayout()
+        export_buttons.setSpacing(5)
+        self.export_format_combo = QComboBox()
         for label, export_type in (
             ("CSV", "csv"),
             ("JSON", "json"),
             ("HDF5", "hdf5"),
             ("Texte", "txt"),
         ):
-            button = QPushButton(label)
-            button.setProperty("kind", "secondary")
-            button.clicked.connect(lambda checked=False, kind=export_type: self.export_requested.emit(kind))
-            index = export_layout.count()
-            export_layout.addWidget(button, index // 2, index % 2)
-        layout.addWidget(export_group)
-        layout.addStretch()
+            self.export_format_combo.addItem(label, export_type)
+        self.export_button = QPushButton("Exporter")
+        self.export_button.setProperty("kind", "secondary")
+        self.export_button.clicked.connect(
+            lambda: self.export_requested.emit(str(self.export_format_combo.currentData()))
+        )
+        export_buttons.addWidget(self.export_format_combo)
+        export_buttons.addWidget(self.export_button)
+        export_block.addWidget(export_label)
+        export_block.addLayout(export_buttons)
+        parameters_layout.addLayout(export_block)
+        layout.addWidget(self.parameters_panel)
 
     def _emit_analysis_request(self) -> None:
         max_frequency = self.max_frequency_spin.value()
@@ -145,8 +170,8 @@ class AnalysisResultsArea(QFrame):
         self.setObjectName("analysis_results_area")
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 16, 18, 16)
-        layout.setSpacing(14)
+        layout.setContentsMargins(14, 10, 14, 12)
+        layout.setSpacing(10)
 
         header_layout = QHBoxLayout()
         title = QLabel("Résultats scientifiques")
@@ -177,6 +202,7 @@ class AnalysisResultsArea(QFrame):
         layout.addLayout(metrics)
 
         self.tab_widget = QTabWidget()
+        self.tab_widget.setDocumentMode(True)
 
         self.stats_table = QTableWidget()
         self.stats_table.verticalHeader().setVisible(False)
@@ -202,9 +228,9 @@ class AnalysisResultsArea(QFrame):
     def _metric_card(label: str, value: str) -> QFrame:
         card = QFrame()
         card.setObjectName("metricCard")
-        card.setMinimumHeight(70)
+        card.setMinimumHeight(60)
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(12, 9, 12, 9)
+        card_layout.setContentsMargins(11, 7, 11, 7)
         card_layout.setSpacing(2)
         label_widget = QLabel(label)
         label_widget.setObjectName("metricLabel")
@@ -250,39 +276,13 @@ class AnalysisView(QWidget):
     def _build_ui(self) -> None:
         self.setObjectName("analysis_view")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 16, 20, 18)
+        layout.setContentsMargins(20, 14, 20, 16)
         layout.setSpacing(10)
-
-        workspace_bar = QFrame()
-        workspace_bar.setObjectName("surface")
-        workspace_bar_layout = QHBoxLayout(workspace_bar)
-        workspace_bar_layout.setContentsMargins(14, 8, 14, 8)
-        context = QVBoxLayout()
-        context.setSpacing(1)
-        context_title = QLabel("Espace scientifique")
-        context_title.setObjectName("sectionTitle")
-        context_text = QLabel(
-            "Masquez les paramètres après lancement pour consacrer toute la largeur aux résultats."
-        )
-        context_text.setObjectName("mutedText")
-        context.addWidget(context_title)
-        context.addWidget(context_text)
-        self.tools_toggle_button = QPushButton("Masquer les paramètres")
-        self.tools_toggle_button.setProperty("kind", "secondary")
-        workspace_bar_layout.addLayout(context, 1)
-        workspace_bar_layout.addWidget(self.tools_toggle_button)
-        layout.addWidget(workspace_bar)
-
-        self.workspace_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.workspace_splitter.setChildrenCollapsible(False)
         self.tools_panel = AnalysisToolsPanel()
+        self.tools_toggle_button = self.tools_panel.parameters_toggle_button
         self.results_area = AnalysisResultsArea()
-        self.workspace_splitter.addWidget(self.tools_panel)
-        self.workspace_splitter.addWidget(self.results_area)
-        self.workspace_splitter.setStretchFactor(0, 0)
-        self.workspace_splitter.setStretchFactor(1, 1)
-        self.workspace_splitter.setSizes([280, 960])
-        layout.addWidget(self.workspace_splitter, 1)
+        layout.addWidget(self.tools_panel)
+        layout.addWidget(self.results_area, 1)
 
     def _setup_connections(self) -> None:
         self.tools_panel.analysis_requested.connect(self.on_analysis_requested)
@@ -290,17 +290,15 @@ class AnalysisView(QWidget):
         self.tools_panel.export_requested.connect(self.on_export_requested)
         self.tools_panel.load_button.clicked.connect(self._load_selected_or_dialog)
         self.tools_panel.refresh_button.clicked.connect(self.refresh_project_files)
-        self.tools_panel.data_list.itemDoubleClicked.connect(self._load_item_from_list)
-        self.tools_toggle_button.clicked.connect(self._toggle_tools_panel)
+        self.tools_panel.data_combo.activated.connect(self._load_selected_from_combo)
+        self.tools_panel.parameters_toggle_requested.connect(self._toggle_tools_panel)
 
     def _toggle_tools_panel(self) -> None:
         self._tools_panel_expanded = not self._tools_panel_expanded
-        self.tools_panel.setVisible(self._tools_panel_expanded)
+        self.tools_panel.parameters_panel.setVisible(self._tools_panel_expanded)
         self.tools_toggle_button.setText(
-            "Masquer les paramètres" if self._tools_panel_expanded else "Afficher les paramètres"
+            "Réduire les réglages" if self._tools_panel_expanded else "Afficher les réglages"
         )
-        if self._tools_panel_expanded:
-            self.workspace_splitter.setSizes([280, 960])
 
     def set_project_context(self, project_metadata: dict, project_dir: str) -> None:
         self.current_project_metadata = project_metadata or {}
@@ -308,7 +306,9 @@ class AnalysisView(QWidget):
         self.refresh_project_files()
 
     def refresh_project_files(self) -> None:
-        self.tools_panel.data_list.clear()
+        current_file = self.tools_panel.data_combo.currentData()
+        self.tools_panel.data_combo.clear()
+        self.tools_panel.data_combo.addItem("Aucun fichier sélectionné", None)
         if not self.current_project_dir:
             return
 
@@ -325,6 +325,10 @@ class AnalysisView(QWidget):
                     continue
                 seen.add(resolved)
                 self._add_or_select_file_item(resolved, select=False)
+        if current_file:
+            current_index = self.tools_panel.data_combo.findData(current_file)
+            if current_index >= 0:
+                self.tools_panel.data_combo.setCurrentIndex(current_index)
 
     def open_file_dialog(self) -> None:
         base_dir = self._get_default_search_directory()
@@ -464,16 +468,16 @@ class AnalysisView(QWidget):
         self.results_area.update_analysis_status("Pret", 0)
 
     def _load_selected_or_dialog(self) -> None:
-        item = self.tools_panel.data_list.currentItem()
-        if item and item.data(Qt.ItemDataRole.UserRole):
-            self.load_data_file(item.data(Qt.ItemDataRole.UserRole))
+        file_path = self.tools_panel.data_combo.currentData()
+        if file_path:
+            self.load_data_file(str(file_path))
             return
         self.open_file_dialog()
 
-    def _load_item_from_list(self, item: QListWidgetItem) -> None:
-        file_path = item.data(Qt.ItemDataRole.UserRole)
+    def _load_selected_from_combo(self, _index: int) -> None:
+        file_path = self.tools_panel.data_combo.currentData()
         if file_path:
-            self.load_data_file(file_path)
+            self.load_data_file(str(file_path))
 
     def _get_default_search_directory(self) -> Path:
         if self.current_project_dir:
@@ -488,23 +492,14 @@ class AnalysisView(QWidget):
             return analysis_dir
         return Path.cwd()
 
-    def _find_file_item(self, file_path: str) -> QListWidgetItem | None:
-        target = str(Path(file_path))
-        for index in range(self.tools_panel.data_list.count()):
-            item = self.tools_panel.data_list.item(index)
-            if item.data(Qt.ItemDataRole.UserRole) == target:
-                return item
-        return None
-
     def _add_or_select_file_item(self, file_path: str, select: bool = True) -> None:
         target = str(Path(file_path))
-        item = self._find_file_item(target)
-        if item is None:
-            item = QListWidgetItem(Path(target).name)
-            item.setData(Qt.ItemDataRole.UserRole, target)
-            self.tools_panel.data_list.addItem(item)
+        index = self.tools_panel.data_combo.findData(target)
+        if index < 0:
+            self.tools_panel.data_combo.addItem(Path(target).name, target)
+            index = self.tools_panel.data_combo.count() - 1
         if select:
-            self.tools_panel.data_list.setCurrentItem(item)
+            self.tools_panel.data_combo.setCurrentIndex(index)
 
     def _update_results_views(self) -> None:
         results = self.current_analysis_result or {}
