@@ -130,8 +130,13 @@ def run_gui(debug: bool = False) -> int:
 
     logger.info("Creating MainWindow...")
     window = MainWindow()
+    app.main_window = window
+    app.setQuitOnLastWindowClosed(True)
+    
     logger.info("Showing MainWindow...")
     window.show()
+    window.raise_()
+    window.activateWindow()
 
     logger.info("Starting event loop...")
     exit_code = _exec_application(app)
