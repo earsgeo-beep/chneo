@@ -14,7 +14,7 @@ from hrneowave.acquisition.acquisition_controller import (
 )
 from hrneowave.core.optimized_goda_analyzer import OptimizedGodaAnalyzer, ProbeGeometry
 from hrneowave.core.post_processor import PostProcessor
-from hrneowave.core.session_schema import build_channel_metadata
+from hrneowave.core.session_schema import build_channel_metadata, build_session_metadata
 
 
 class ScientificP0Tests(unittest.TestCase):
@@ -32,6 +32,8 @@ class ScientificP0Tests(unittest.TestCase):
         }
         configs = create_default_maritime_config()
         channels = [configs[0], configs[1]]
+        channels[0].probe_position_m = 0.0
+        channels[1].probe_position_m = 0.4
         controller.current_session = AcquisitionSession(
             session_id="scientific_p0_export",
             project_name="scientific_p0_export",
@@ -39,6 +41,7 @@ class ScientificP0Tests(unittest.TestCase):
             sampling_rate=50.0,
             total_samples=5,
             channels=channels,
+            metadata={"water_depth_m": 0.8},
         )
         raw_data = np.array(
             [
@@ -50,12 +53,14 @@ class ScientificP0Tests(unittest.TestCase):
             ],
             dtype=float,
         )
-        controller.data_buffer.append({
-            "timestamp": datetime.now(),
-            "raw_data": raw_data,
-            "processed_data": controller._convert_to_physical_units(raw_data),
-            "sample_count": raw_data.shape[0],
-        })
+        controller.data_buffer.append(
+            {
+                "timestamp": datetime.now(),
+                "raw_data": raw_data,
+                "processed_data": controller._convert_to_physical_units(raw_data),
+                "sample_count": raw_data.shape[0],
+            }
+        )
         return controller
 
     def test_zero_crossing_returns_full_wave_height_for_sine(self):
@@ -128,6 +133,52 @@ class ScientificP0Tests(unittest.TestCase):
             abs(true_components[1]) / abs(true_components[0]),
             places=12,
         )
+        dispersion_residual = (
+            9.81 * result.wave_number * np.tanh(result.wave_number * geometry.water_depth)
+            - (2.0 * np.pi * frequency) ** 2
+        )
+        self.assertAlmostEqual(dispersion_residual, 0.0, places=11)
+        self.assertLess(result.normalized_residual, 1e-12)
+        self.assertGreaterEqual(result.condition_number, 1.0)
+
+    def test_goda_rejects_invalid_or_singular_probe_geometry(self):
+        with self.assertRaises(ValueError):
+            ProbeGeometry(
+                positions=np.array([0.0, 0.0, 1.0]),
+                water_depth=1.0,
+                frequency_range=(0.1, 2.0),
+            )
+        with self.assertRaises(ValueError):
+            ProbeGeometry(
+                positions=np.array([0.0, 1.0]),
+                water_depth=0.0,
+                frequency_range=(0.1, 2.0),
+            )
+
+        frequency = 0.8
+        seed_geometry = ProbeGeometry(
+            positions=np.array([0.0, 1.0]),
+            water_depth=1.0,
+            frequency_range=(0.1, 2.0),
+        )
+        seed_analyzer = OptimizedGodaAnalyzer(seed_geometry, enable_cache=False)
+        wave_number = seed_analyzer._solve_dispersion_relation(2.0 * np.pi * frequency)
+        singular_geometry = ProbeGeometry(
+            positions=np.array([0.0, np.pi / wave_number]),
+            water_depth=1.0,
+            frequency_range=(0.1, 2.0),
+        )
+        singular_analyzer = OptimizedGodaAnalyzer(
+            singular_geometry,
+            enable_cache=False,
+        )
+
+        with self.assertWarns(UserWarning):
+            with self.assertRaises(ValueError):
+                singular_analyzer.analyze_frequency(
+                    np.array([1.0 + 0.0j, -1.0 + 0.0j]),
+                    frequency,
+                )
 
     def test_pressure_simulation_stays_inside_default_daq_range(self):
         controller = AcquisitionController.__new__(AcquisitionController)
@@ -210,6 +261,7 @@ class ScientificP0Tests(unittest.TestCase):
                 self.assertEqual(handle.attrs["n_samples"], 5)
                 self.assertIn("metadata", handle)
                 self.assertIn("channels", handle["metadata"])
+                self.assertIn("time", handle["acquisition_data"])
 
             csv_text = csv_path.read_text(encoding="utf-8")
             self.assertIn("sample_rate_hz", csv_text.splitlines()[0])
@@ -240,11 +292,13 @@ class ScientificP0Tests(unittest.TestCase):
         self.assertEqual(metadata["dt_seconds"], 0.01)
         self.assertEqual(metadata["n_samples"], len(time))
         self.assertEqual(metadata["processing_method"], "post_processor.run_analysis")
-        self.assertEqual(metadata["psd_method"], "one_sided_periodogram")
+        self.assertEqual(metadata["psd_method"], "welch")
         self.assertEqual(metadata["window"], "hann")
         self.assertFalse(metadata["overlap_applied"])
         self.assertTrue(metadata["detrend"])
         self.assertTrue(any("CALIBRATION_NOT_PERFORMED" in warning for warning in metadata["warnings"]))
+        self.assertIn("zero_crossing_metrics", processor.current_analysis)
+        self.assertIn("goda_metrics", metadata["result_semantics"])
 
     def test_schema_requires_calibration_metadata(self):
         config = create_default_maritime_config()[0]
@@ -256,6 +310,28 @@ class ScientificP0Tests(unittest.TestCase):
         self.assertIn("calibration_coefficients", metadata)
         self.assertIn("conversion_formula", metadata)
         self.assertEqual(metadata["calibration_status"], "unverified")
+
+    def test_session_context_cannot_override_canonical_timing_metadata(self):
+        controller = self._build_export_controller()
+        controller.current_session.metadata.update(
+            {
+                "sample_rate_hz": 999.0,
+                "n_samples": 999,
+                "dt_seconds": 1.0,
+                "water_depth_m": 0.8,
+            }
+        )
+
+        metadata = build_session_metadata(
+            controller.current_session,
+            hardware_available=False,
+            sample_count=5,
+        )
+
+        self.assertEqual(metadata["sample_rate_hz"], 50.0)
+        self.assertEqual(metadata["n_samples"], 5)
+        self.assertEqual(metadata["dt_seconds"], 1.0 / 50.0)
+        self.assertEqual(metadata["water_depth_m"], 0.8)
 
     def test_csv_round_trip_uses_exact_time_column_not_time_start(self):
         controller = self._build_export_controller()
@@ -270,19 +346,52 @@ class ScientificP0Tests(unittest.TestCase):
             expected_time = np.arange(5, dtype=float) / 50.0
             self.assertTrue(np.allclose(processor.current_data["time"], expected_time))
             self.assertEqual(processor.current_data["metadata"]["sample_rate_hz"], 50.0)
+            self.assertEqual(processor.current_data["metadata"]["water_depth_m"], 0.8)
             self.assertTrue(processor.current_data["channel_metadata"])
             self.assertIn("calibration_status", processor.current_data["channel_metadata"][0])
+            self.assertEqual(
+                processor.current_data["channel_metadata"][0]["probe_position_m"],
+                0.0,
+            )
+
+    def test_csv_sidecar_cannot_override_timing_derived_from_samples(self):
+        controller = self._build_export_controller()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "session.csv"
+            self.assertTrue(controller._export_csv(str(csv_path)))
+            sidecar_path = Path(f"{csv_path}.metadata.json")
+            sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            sidecar["metadata"].update(
+                {
+                    "dt_seconds": 1.0,
+                    "n_samples": 999,
+                    "duration_s": 999.0,
+                    "water_depth_m": 1.2,
+                }
+            )
+            sidecar_path.write_text(json.dumps(sidecar), encoding="utf-8")
+
+            processor = PostProcessor()
+            self.assertTrue(processor.load_data_file(str(csv_path)))
+            metadata = processor.current_data["metadata"]
+            self.assertEqual(metadata["dt_seconds"], 1.0 / 50.0)
+            self.assertEqual(metadata["n_samples"], 5)
+            self.assertEqual(metadata["duration_s"], 5.0 / 50.0)
+            self.assertEqual(metadata["water_depth_m"], 1.2)
 
     def test_loader_rejects_sample_rate_inconsistent_with_time_axis(self):
         with tempfile.TemporaryDirectory() as tmp:
             csv_path = Path(tmp) / "bad_time.csv"
             csv_path.write_text(
-                "\n".join([
-                    "schema_version,sample_rate_hz,dt_seconds,n_samples,duration_s,time_start,time_end,clock_domain,data_kind,time,channel_00",
-                    "1.0.0,100,0.01,3,0.03,0,0.02,relative_monotonic_seconds,physical,0.00,0.0",
-                    "1.0.0,100,0.01,3,0.03,0,0.02,relative_monotonic_seconds,physical,0.02,1.0",
-                    "1.0.0,100,0.01,3,0.03,0,0.02,relative_monotonic_seconds,physical,0.04,0.0",
-                ]),
+                "\n".join(
+                    [
+                        "schema_version,sample_rate_hz,dt_seconds,n_samples,duration_s,time_start,time_end,clock_domain,data_kind,time,channel_00",
+                        "1.0.0,100,0.01,3,0.03,0,0.02,relative_monotonic_seconds,physical,0.00,0.0",
+                        "1.0.0,100,0.01,3,0.03,0,0.02,relative_monotonic_seconds,physical,0.02,1.0",
+                        "1.0.0,100,0.01,3,0.03,0,0.02,relative_monotonic_seconds,physical,0.04,0.0",
+                    ]
+                ),
                 encoding="utf-8",
             )
 
@@ -319,6 +428,7 @@ class ScientificP0Tests(unittest.TestCase):
             self.assertIn("calibration_status", channel_metadata[0])
             self.assertIn("calibration_coefficients", channel_metadata[0])
             self.assertEqual(channel_metadata[0]["calibration_status"], "unverified")
+            self.assertEqual(channel_metadata[0]["probe_position_m"], 0.0)
 
 
 if __name__ == "__main__":

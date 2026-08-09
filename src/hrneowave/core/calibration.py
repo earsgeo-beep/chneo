@@ -15,9 +15,10 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -38,14 +39,14 @@ class CalibrationPoint:
 
     reference_value: float
     measured_voltage: float
-    timestamp_utc: Optional[str] = None
-    standard_uncertainty: Optional[float] = None
+    timestamp_utc: str | None = None
+    standard_uncertainty: float | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
-    def from_mapping(cls, payload: Mapping[str, Any]) -> "CalibrationPoint":
+    def from_mapping(cls, payload: Mapping[str, Any]) -> CalibrationPoint:
         return cls(
             reference_value=float(payload["reference_value"]),
             measured_voltage=float(payload["measured_voltage"]),
@@ -72,17 +73,17 @@ class CalibrationRecord:
     operator: str
     method: str
     reference_equipment: str
-    points: List[CalibrationPoint]
+    points: list[CalibrationPoint]
     offset_volts: float
     scale: float
     sensitivity_v_per_unit: float
     intercept_volts: float
     r_squared: float
-    residuals: List[float]
+    residuals: list[float]
     residual_rms: float
     uncertainty: float
-    reference_range: Tuple[float, float]
-    measured_voltage_range: Tuple[float, float]
+    reference_range: tuple[float, float]
+    measured_voltage_range: tuple[float, float]
     validity_status: str
     validity_reason: str
     hardware_validation_status: str = HARDWARE_VALIDATION_PENDING
@@ -100,11 +101,11 @@ class CalibrationRecord:
         operator: str = "",
         method: str = "linear_least_squares_voltage_vs_physical",
         reference_equipment: str = "",
-        date_utc: Optional[str] = None,
-        calibration_id: Optional[str] = None,
+        date_utc: str | None = None,
+        calibration_id: str | None = None,
         min_r_squared: float = 0.995,
         hardware_validation_status: str = HARDWARE_VALIDATION_PENDING,
-    ) -> "CalibrationRecord":
+    ) -> CalibrationRecord:
         """Fit and validate a linear calibration record.
 
         Invalid records fail loudly. A channel must not become ``valid`` from a
@@ -122,28 +123,24 @@ class CalibrationRecord:
         intercept = float(intercept)
         if not math.isfinite(sensitivity) or not math.isfinite(intercept):
             raise CalibrationError("Calibration fit produced non-finite coefficients")
-        if sensitivity <= 0:
-            raise CalibrationError(
-                "Calibration sensitivity must be positive in the current acquisition contract"
-            )
+        if sensitivity == 0.0:
+            raise CalibrationError("Calibration sensitivity must be non-zero")
 
         predicted_volts = sensitivity * reference_values + intercept
         residual_volts = measured_volts - predicted_volts
-        ss_res = float(np.sum(residual_volts ** 2))
+        ss_res = float(np.sum(residual_volts**2))
         ss_tot = float(np.sum((measured_volts - np.mean(measured_volts)) ** 2))
         r_squared = 1.0 if ss_tot == 0.0 else float(1.0 - ss_res / ss_tot)
         if not math.isfinite(r_squared):
             raise CalibrationError("Calibration R^2 is non-finite")
         if r_squared < min_r_squared:
-            raise CalibrationError(
-                f"Calibration R^2 too low: {r_squared:.12g} < {min_r_squared:.12g}"
-            )
+            raise CalibrationError(f"Calibration R^2 too low: {r_squared:.12g} < {min_r_squared:.12g}")
 
         predicted_physical = (measured_volts - intercept) / sensitivity
         residuals = predicted_physical - reference_values
-        residual_rms = float(math.sqrt(float(np.mean(residuals ** 2))))
+        residual_rms = float(math.sqrt(float(np.mean(residuals**2))))
         dof = max(1, int(reference_values.size) - 2)
-        uncertainty = float(math.sqrt(float(np.sum(residuals ** 2)) / dof))
+        uncertainty = float(math.sqrt(float(np.sum(residuals**2)) / dof))
 
         if date_utc is None:
             date_utc = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -173,7 +170,11 @@ class CalibrationRecord:
             reference_range=(float(np.min(reference_values)), float(np.max(reference_values))),
             measured_voltage_range=(float(np.min(measured_volts)), float(np.max(measured_volts))),
             validity_status=CALIBRATION_VALID,
-            validity_reason="linear_fit_accepted",
+            validity_reason=(
+                "linear_fit_accepted"
+                if reference_values.size >= 3
+                else "two_point_transfer_function_no_linearity_assessment"
+            ),
             hardware_validation_status=str(hardware_validation_status),
         )
 
@@ -181,15 +182,15 @@ class CalibrationRecord:
         """Convert raw voltage values to physical values using this record."""
         if self.validity_status != CALIBRATION_VALID:
             raise CalibrationError(f"Calibration record is not valid: {self.validity_status}")
-        if self.sensitivity_v_per_unit <= 0:
-            raise CalibrationError("Calibration sensitivity must be positive")
+        if self.sensitivity_v_per_unit == 0:
+            raise CalibrationError("Calibration sensitivity must be non-zero")
         raw = np.asarray(raw_voltage, dtype=float)
         if not np.all(np.isfinite(raw)):
             raise CalibrationError("Raw voltage contains NaN/Inf")
         return ((raw + self.offset_volts) * self.scale) / self.sensitivity_v_per_unit
 
     @property
-    def calibration_coefficients(self) -> Dict[str, float]:
+    def calibration_coefficients(self) -> dict[str, float]:
         return {
             "offset_volts": float(self.offset_volts),
             "scale": float(self.scale),
@@ -197,7 +198,19 @@ class CalibrationRecord:
             "intercept_volts": float(self.intercept_volts),
         }
 
-    def to_dict(self) -> Dict[str, Any]:
+    @property
+    def linearity_assessable(self) -> bool:
+        """R² only assesses linearity when at least three points are available."""
+
+        return len(self.points) >= 3
+
+    @property
+    def polarity(self) -> str:
+        """Electrical polarity of the sensor transfer function."""
+
+        return "positive" if self.sensitivity_v_per_unit > 0 else "negative"
+
+    def to_dict(self) -> dict[str, Any]:
         return {
             "calibration_id": self.calibration_id,
             "sensor_id": self.sensor_id,
@@ -215,9 +228,14 @@ class CalibrationRecord:
             "sensitivity_v_per_unit": self.sensitivity_v_per_unit,
             "intercept_volts": self.intercept_volts,
             "r_squared": self.r_squared,
+            "linearity_assessable": self.linearity_assessable,
+            "polarity": self.polarity,
             "residuals": list(self.residuals),
             "residual_rms": self.residual_rms,
             "uncertainty": self.uncertainty,
+            "uncertainty_interpretation": (
+                "residual_standard_error_in_physical_units; not a complete measurement uncertainty budget"
+            ),
             "reference_range": list(self.reference_range),
             "measured_voltage_range": list(self.measured_voltage_range),
             "validity_status": self.validity_status,
@@ -228,7 +246,7 @@ class CalibrationRecord:
         }
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> "CalibrationRecord":
+    def from_dict(cls, payload: Mapping[str, Any]) -> CalibrationRecord:
         points = [CalibrationPoint.from_mapping(item) for item in payload.get("points", [])]
         reference_range = payload.get("reference_range", (0.0, 0.0))
         voltage_range = payload.get("measured_voltage_range", (0.0, 0.0))
@@ -265,10 +283,10 @@ class CalibrationRecord:
         return json.dumps(self.to_dict(), ensure_ascii=False, sort_keys=True)
 
     @classmethod
-    def from_json(cls, payload: str) -> "CalibrationRecord":
+    def from_json(cls, payload: str) -> CalibrationRecord:
         return cls.from_dict(json.loads(payload))
 
-    def to_channel_metadata(self) -> Dict[str, Any]:
+    def to_channel_metadata(self) -> dict[str, Any]:
         return {
             "sensor_id": self.sensor_id,
             "channel": self.channel,
@@ -279,6 +297,8 @@ class CalibrationRecord:
             "calibration_date": self.date_utc,
             "calibration_method": self.method,
             "calibration_uncertainty": self.uncertainty,
+            "linearity_assessable": self.linearity_assessable,
+            "calibration_polarity": self.polarity,
             "calibration_status": self.validity_status,
             "calibration_coefficients": self.calibration_coefficients,
             "conversion_formula": CONVERSION_FORMULA,
@@ -292,7 +312,7 @@ def fit_linear_calibration(**kwargs: Any) -> CalibrationRecord:
     return CalibrationRecord.fit_linear(**kwargs)
 
 
-def _normalize_points(points: Sequence[CalibrationPoint | Mapping[str, Any]]) -> List[CalibrationPoint]:
+def _normalize_points(points: Sequence[CalibrationPoint | Mapping[str, Any]]) -> list[CalibrationPoint]:
     if len(points) < 2:
         raise CalibrationError("Calibration requires at least two reference points")
     normalized = []
@@ -301,11 +321,18 @@ def _normalize_points(points: Sequence[CalibrationPoint | Mapping[str, Any]]) ->
             point = item
         else:
             point = CalibrationPoint.from_mapping(item)
+        if point.standard_uncertainty is not None:
+            if not math.isfinite(point.standard_uncertainty) or point.standard_uncertainty < 0:
+                raise CalibrationError(
+                    "Calibration point standard uncertainty must be finite and non-negative"
+                )
         normalized.append(point)
     return normalized
 
 
-def _validate_fit_inputs(reference_values: np.ndarray, measured_volts: np.ndarray, min_r_squared: float) -> None:
+def _validate_fit_inputs(
+    reference_values: np.ndarray, measured_volts: np.ndarray, min_r_squared: float
+) -> None:
     if reference_values.size != measured_volts.size:
         raise CalibrationError("Reference and measured arrays must have the same length")
     if reference_values.size < 2:

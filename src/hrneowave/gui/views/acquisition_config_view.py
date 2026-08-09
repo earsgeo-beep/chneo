@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Vue de configuration et de pilotage de l'acquisition."""
 
+import json
 import logging
+import math
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -194,7 +196,7 @@ class AcquisitionConfigView(QWidget):
         actions.addStretch()
         layout.addLayout(actions)
 
-        self.channels_table = QTableWidget(8, 7)
+        self.channels_table = QTableWidget(8, 8)
         self.channels_table.setHorizontalHeaderLabels(
             [
                 "Canal",
@@ -204,6 +206,7 @@ class AcquisitionConfigView(QWidget):
                 "Plage",
                 "Sensibilite",
                 "Unites",
+                "Position x (m)",
             ]
         )
         self.channels_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -227,6 +230,12 @@ class AcquisitionConfigView(QWidget):
         self.duration_spin.setRange(0.1, 3600.0)
         self.duration_spin.setValue(60.0)
         self.duration_spin.setSuffix(" s")
+        self.water_depth_spin = QDoubleSpinBox()
+        self.water_depth_spin.setRange(0.0, 50.0)
+        self.water_depth_spin.setDecimals(4)
+        self.water_depth_spin.setSingleStep(0.01)
+        self.water_depth_spin.setSpecialValueText("Non renseignée")
+        self.water_depth_spin.setSuffix(" m")
         self.continuous_check = QCheckBox("Acquisition continue")
         self.buffer_size_spin = QSpinBox()
         self.buffer_size_spin.setRange(1000, 100000)
@@ -234,6 +243,7 @@ class AcquisitionConfigView(QWidget):
         self.buffer_size_spin.setSuffix(" echantillons")
         params_layout.addRow("Frequence:", self.sampling_rate_spin)
         params_layout.addRow("Duree:", self.duration_spin)
+        params_layout.addRow("Profondeur d'eau:", self.water_depth_spin)
         params_layout.addRow("", self.continuous_check)
         params_layout.addRow("Taille buffer:", self.buffer_size_spin)
         layout.addWidget(params_group)
@@ -369,6 +379,7 @@ class AcquisitionConfigView(QWidget):
 
             self.channels_table.setItem(row, 5, QTableWidgetItem("1.0"))
             self.channels_table.setItem(row, 6, QTableWidgetItem("V"))
+            self.channels_table.setItem(row, 7, QTableWidgetItem(""))
 
     def initialize_controller(self) -> None:
         try:
@@ -391,6 +402,14 @@ class AcquisitionConfigView(QWidget):
         if project_name:
             self.project_name_edit.setText(str(project_name))
             self.log_message(f"Projet actif: {project_name}")
+        water_depth = self.project_metadata.get("water_depth_m")
+        if water_depth is None:
+            water_depth = self.project_metadata.get("water_depth")
+        try:
+            water_depth_value = float(water_depth)
+        except (TypeError, ValueError):
+            water_depth_value = 0.0
+        self.water_depth_spin.setValue(max(0.0, water_depth_value))
 
     def scan_boards(self) -> None:
         if not self.controller:
@@ -529,6 +548,11 @@ class AcquisitionConfigView(QWidget):
             self.channels_table.setItem(row, 3, QTableWidgetItem(config.label))
             self.channels_table.setItem(row, 5, QTableWidgetItem(str(config.sensor_sensitivity)))
             self.channels_table.setItem(row, 6, QTableWidgetItem(config.physical_units))
+            self.channels_table.setItem(
+                row,
+                7,
+                QTableWidgetItem("" if config.probe_position_m is None else f"{config.probe_position_m:.8g}"),
+            )
             if enabled:
                 enabled.setChecked(config.enabled)
             if sensor_combo:
@@ -544,11 +568,12 @@ class AcquisitionConfigView(QWidget):
             self.channels_table.setItem(row, 3, QTableWidgetItem(f"Canal {row}"))
             self.channels_table.setItem(row, 5, QTableWidgetItem("1.0"))
             self.channels_table.setItem(row, 6, QTableWidgetItem("V"))
+            self.channels_table.setItem(row, 7, QTableWidgetItem(""))
         self.log_message("Configuration des canaux effacee")
 
-    def apply_channels_configuration(self) -> None:
+    def apply_channels_configuration(self) -> bool:
         if not self.controller:
-            return
+            return False
 
         for row in range(self.channels_table.rowCount()):
             enabled = self.channels_table.cellWidget(row, 1)
@@ -565,10 +590,30 @@ class AcquisitionConfigView(QWidget):
                 if self.channels_table.item(row, 3)
                 else f"Canal {row}"
             )
-            sensitivity = (
-                float(self.channels_table.item(row, 5).text()) if self.channels_table.item(row, 5) else 1.0
-            )
+            try:
+                sensitivity = (
+                    float(self.channels_table.item(row, 5).text())
+                    if self.channels_table.item(row, 5)
+                    else 1.0
+                )
+            except ValueError:
+                self.log_message(f"Sensibilité invalide sur le canal {row + 1}")
+                return False
+            if not math.isfinite(sensitivity) or sensitivity == 0:
+                self.log_message(f"La sensibilité du canal {row + 1} doit être finie et non nulle")
+                return False
             units = self.channels_table.item(row, 6).text() if self.channels_table.item(row, 6) else "V"
+            position_text = (
+                self.channels_table.item(row, 7).text().strip() if self.channels_table.item(row, 7) else ""
+            )
+            try:
+                probe_position_m = float(position_text) if position_text else None
+            except ValueError:
+                self.log_message(f"Position de sonde invalide sur le canal {row + 1}")
+                return False
+            if probe_position_m is not None and not math.isfinite(probe_position_m):
+                self.log_message(f"Position de sonde invalide sur le canal {row + 1}")
+                return False
 
             range_volts = 10.0
             if "±1V" in range_text:
@@ -578,19 +623,33 @@ class AcquisitionConfigView(QWidget):
             elif "±5V" in range_text:
                 range_volts = 5.0
 
-            self.controller.configure_maritime_channel(
-                row, sensor_type, label, range_volts, sensitivity, units
+            configured = self.controller.configure_maritime_channel(
+                row,
+                sensor_type,
+                label,
+                range_volts,
+                sensitivity,
+                units,
+                probe_position_m if sensor_type == "wave_height" else None,
             )
+            if not configured:
+                self.log_message(f"Configuration refusée sur le canal {row + 1}")
+                return False
             calibration_record = self.calibration_records.get(row)
             if calibration_record is not None:
-                self.controller.apply_calibration_record(calibration_record)
+                if not self.controller.apply_calibration_record(calibration_record):
+                    self.log_message(f"Calibration refusée sur le canal {row + 1}")
+                    return False
+        return True
 
     def start_acquisition(self) -> None:
         if not self.controller:
             self.log_message("Pas de controleur disponible")
             return
 
-        self.apply_channels_configuration()
+        if not self.apply_channels_configuration():
+            self.log_message("Acquisition annulée: corrigez la configuration des canaux")
+            return
         active_channels = self._get_active_channels()
         if not active_channels:
             self.log_message("Aucun canal actif")
@@ -604,6 +663,7 @@ class AcquisitionConfigView(QWidget):
             duration_seconds=duration,
             channels=active_channels,
             recording_directory=str(self._get_default_data_directory()),
+            water_depth_m=(self.water_depth_spin.value() if self.water_depth_spin.value() > 0 else None),
         )
         if not success:
             self.log_message("Erreur de demarrage d'acquisition")
@@ -706,10 +766,250 @@ class AcquisitionConfigView(QWidget):
         self._export_data("hdf5", "Fichiers HDF5 (*.h5 *.hdf5)", "h5")
 
     def load_configuration(self) -> None:
-        self.log_message("Chargement de configuration non implemente")
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Charger une configuration d'acquisition",
+            str(self._get_default_configuration_directory()),
+            "Configuration CHNeoWave (*.json)",
+        )
+        if not file_path:
+            return
+        try:
+            payload = json.loads(Path(file_path).read_text(encoding="utf-8"))
+            self.apply_configuration_snapshot(payload)
+            self.log_message(f"Configuration chargée: {file_path}")
+        except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
+            self.log_message(f"Configuration refusée: {exc}")
 
     def save_configuration(self) -> None:
-        self.log_message("Sauvegarde de configuration non implementee")
+        default_path = self._get_default_configuration_directory() / "acquisition_config.json"
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Sauvegarder la configuration d'acquisition",
+            str(default_path),
+            "Configuration CHNeoWave (*.json)",
+        )
+        if not file_path:
+            return
+        path = Path(file_path)
+        if path.suffix.lower() != ".json":
+            path = path.with_suffix(".json")
+        try:
+            path.write_text(
+                json.dumps(
+                    self.configuration_snapshot(),
+                    indent=2,
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            self.log_message(f"Configuration sauvegardée: {path}")
+        except (OSError, TypeError, ValueError) as exc:
+            self.log_message(f"Sauvegarde impossible: {exc}")
+
+    def configuration_snapshot(self) -> dict[str, Any]:
+        """Return the complete reproducible acquisition configuration."""
+
+        channels = []
+        for row in range(self.channels_table.rowCount()):
+            enabled = self.channels_table.cellWidget(row, 1)
+            sensor_combo = self.channels_table.cellWidget(row, 2)
+            range_combo = self.channels_table.cellWidget(row, 4)
+            sensor_type = sensor_combo.currentText() if sensor_combo else "generic"
+            sensitivity_text = (
+                self.channels_table.item(row, 5).text() if self.channels_table.item(row, 5) else "1.0"
+            )
+            sensitivity = float(sensitivity_text)
+            if not math.isfinite(sensitivity) or sensitivity == 0:
+                raise ValueError(f"Sensibilité invalide sur le canal {row}")
+            physical_unit = (
+                self.channels_table.item(row, 6).text().strip() if self.channels_table.item(row, 6) else ""
+            )
+            if not physical_unit:
+                raise ValueError(f"Unité physique absente sur le canal {row}")
+            position_text = (
+                self.channels_table.item(row, 7).text().strip() if self.channels_table.item(row, 7) else ""
+            )
+            position = float(position_text) if position_text else None
+            if position is not None and not math.isfinite(position):
+                raise ValueError(f"Position de sonde invalide sur le canal {row}")
+            if position is not None and sensor_type != "wave_height":
+                raise ValueError(f"La position x du canal {row} est réservée aux sondes de houle")
+            channels.append(
+                {
+                    "channel": row,
+                    "enabled": bool(enabled and enabled.isChecked()),
+                    "sensor_type": sensor_type,
+                    "label": (
+                        self.channels_table.item(row, 3).text()
+                        if self.channels_table.item(row, 3)
+                        else f"Canal {row}"
+                    ),
+                    "range": range_combo.currentText() if range_combo else "±10V",
+                    "sensitivity_v_per_unit": sensitivity,
+                    "physical_unit": physical_unit,
+                    "probe_position_m": position,
+                    "calibration_record": (
+                        self.calibration_records[row].to_dict() if row in self.calibration_records else None
+                    ),
+                }
+            )
+        return {
+            "schema_version": "1.0",
+            "project_name": self.project_name_edit.text().strip(),
+            "scientific_context": {
+                "water_depth_m": (
+                    self.water_depth_spin.value() if self.water_depth_spin.value() > 0 else None
+                ),
+            },
+            "acquisition": {
+                "sample_rate_hz": self.sampling_rate_spin.value(),
+                "duration_seconds": self.duration_spin.value(),
+                "continuous": self.continuous_check.isChecked(),
+                "buffer_samples": self.buffer_size_spin.value(),
+            },
+            "channels": channels,
+        }
+
+    def apply_configuration_snapshot(self, payload: dict[str, Any]) -> None:
+        """Validate and apply a saved acquisition configuration."""
+
+        if not isinstance(payload, dict) or payload.get("schema_version") != "1.0":
+            raise ValueError("Version de configuration non supportée")
+        acquisition = payload.get("acquisition", {})
+        scientific_context = payload.get("scientific_context", {})
+        channels = payload.get("channels")
+        if (
+            not isinstance(acquisition, dict)
+            or not isinstance(scientific_context, dict)
+            or not isinstance(channels, list)
+        ):
+            raise ValueError("Structure de configuration incomplète")
+        if len(channels) != self.channels_table.rowCount():
+            raise ValueError("La configuration doit décrire exactement huit canaux MCC")
+
+        sample_rate = float(acquisition["sample_rate_hz"])
+        duration = float(acquisition["duration_seconds"])
+        buffer_value = float(acquisition.get("buffer_samples", 10000))
+        if not math.isfinite(buffer_value) or not buffer_value.is_integer():
+            raise ValueError("Taille de buffer invalide")
+        buffer_samples = int(buffer_value)
+        continuous = acquisition.get("continuous", False)
+        if not isinstance(continuous, bool):
+            raise ValueError("Le mode continu doit être un booléen")
+        water_depth = scientific_context.get("water_depth_m")
+        water_depth_value = float(water_depth) if water_depth is not None else 0.0
+        if (
+            not math.isfinite(sample_rate)
+            or not self.sampling_rate_spin.minimum() <= sample_rate <= self.sampling_rate_spin.maximum()
+        ):
+            raise ValueError("Fréquence d'échantillonnage hors limites MCC")
+        if (
+            not math.isfinite(duration)
+            or not self.duration_spin.minimum() <= duration <= self.duration_spin.maximum()
+        ):
+            raise ValueError("Durée d'acquisition hors limites")
+        if not self.buffer_size_spin.minimum() <= buffer_samples <= self.buffer_size_spin.maximum():
+            raise ValueError("Taille de buffer hors limites")
+        if water_depth is not None and (
+            not math.isfinite(water_depth_value)
+            or not 0 < water_depth_value <= self.water_depth_spin.maximum()
+        ):
+            raise ValueError("Profondeur d'eau invalide")
+
+        seen_channels: set[int] = set()
+        normalized_channels: list[dict[str, Any]] = []
+        for item in channels:
+            if not isinstance(item, dict):
+                raise ValueError("Entrée canal invalide")
+            channel = int(item["channel"])
+            if channel in seen_channels or channel < 0 or channel >= self.channels_table.rowCount():
+                raise ValueError(f"Numéro de canal invalide ou dupliqué: {channel}")
+            seen_channels.add(channel)
+
+            enabled = self.channels_table.cellWidget(channel, 1)
+            sensor_combo = self.channels_table.cellWidget(channel, 2)
+            range_combo = self.channels_table.cellWidget(channel, 4)
+            sensor_type = str(item.get("sensor_type", "generic"))
+            range_text = str(item.get("range", "±10V"))
+            if not sensor_combo or sensor_combo.findText(sensor_type) < 0:
+                raise ValueError(f"Type de capteur inconnu sur le canal {channel}")
+            if not range_combo or range_combo.findText(range_text) < 0:
+                raise ValueError(f"Plage de tension inconnue sur le canal {channel}")
+            enabled_value = item.get("enabled", False)
+            if not isinstance(enabled_value, bool):
+                raise ValueError(f"État actif invalide sur le canal {channel}")
+            sensitivity = float(item.get("sensitivity_v_per_unit", 1.0))
+            if not math.isfinite(sensitivity) or sensitivity == 0:
+                raise ValueError(f"Sensibilité invalide sur le canal {channel}")
+            physical_unit = str(item.get("physical_unit", "")).strip()
+            if not physical_unit:
+                raise ValueError(f"Unité physique absente sur le canal {channel}")
+            position = item.get("probe_position_m")
+            position_value = float(position) if position is not None else None
+            if position_value is not None and not math.isfinite(position_value):
+                raise ValueError(f"Position de sonde invalide sur le canal {channel}")
+            if position_value is not None and sensor_type != "wave_height":
+                raise ValueError(f"La position x du canal {channel} est réservée aux sondes de houle")
+            calibration_payload = item.get("calibration_record")
+            record = CalibrationRecord.from_dict(calibration_payload) if calibration_payload else None
+            if record is not None and record.channel != channel:
+                raise ValueError(f"Calibration du canal {record.channel} rangée sous le canal {channel}")
+            normalized_channels.append(
+                {
+                    "channel": channel,
+                    "enabled": enabled_value,
+                    "sensor_type": sensor_type,
+                    "label": str(item.get("label", f"Canal {channel}")),
+                    "range": range_text,
+                    "sensitivity": sensitivity,
+                    "physical_unit": physical_unit,
+                    "position": position_value,
+                    "calibration_record": record,
+                }
+            )
+
+        # The widget is modified only after the whole payload has passed validation.
+        self.project_name_edit.setText(str(payload.get("project_name") or "Acquisition_Maritime"))
+        self.sampling_rate_spin.setValue(sample_rate)
+        self.duration_spin.setValue(duration)
+        self.continuous_check.setChecked(continuous)
+        self.buffer_size_spin.setValue(buffer_samples)
+        self.water_depth_spin.setValue(water_depth_value)
+        self.calibration_records.clear()
+        for item in normalized_channels:
+            channel = item["channel"]
+            enabled = self.channels_table.cellWidget(channel, 1)
+            sensor_combo = self.channels_table.cellWidget(channel, 2)
+            range_combo = self.channels_table.cellWidget(channel, 4)
+            if enabled:
+                enabled.setChecked(item["enabled"])
+            if sensor_combo:
+                sensor_combo.setCurrentText(item["sensor_type"])
+            if range_combo:
+                range_combo.setCurrentText(item["range"])
+            self.channels_table.setItem(
+                channel,
+                3,
+                QTableWidgetItem(item["label"]),
+            )
+            self.channels_table.setItem(
+                channel,
+                5,
+                QTableWidgetItem(f"{item['sensitivity']:.10g}"),
+            )
+            self.channels_table.setItem(
+                channel,
+                6,
+                QTableWidgetItem(item["physical_unit"]),
+            )
+            self.channels_table.setItem(
+                channel,
+                7,
+                QTableWidgetItem("" if item["position"] is None else f"{item['position']:.10g}"),
+            )
+            if item["calibration_record"] is not None:
+                self.calibration_records[channel] = item["calibration_record"]
 
     def reset_configuration(self) -> None:
         self.clear_channels()
@@ -717,6 +1017,8 @@ class AcquisitionConfigView(QWidget):
         self.sampling_rate_spin.setValue(1000.0)
         self.duration_spin.setValue(60.0)
         self.continuous_check.setChecked(False)
+        self.buffer_size_spin.setValue(10000)
+        self.water_depth_spin.setValue(0.0)
         self.log_message("Configuration reinitialisee")
 
     def clear_log(self) -> None:
@@ -780,6 +1082,11 @@ class AcquisitionConfigView(QWidget):
         data_dir = self.project_dir / "data" if self.project_dir else Path.cwd() / "data"
         data_dir.mkdir(parents=True, exist_ok=True)
         return data_dir
+
+    def _get_default_configuration_directory(self) -> Path:
+        config_dir = self.project_dir / "config" if self.project_dir else Path.cwd() / "config"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        return config_dir
 
     def _export_data(self, format_type: str, file_filter: str, suffix: str) -> None:
         if not self.controller or not self.controller.current_session:

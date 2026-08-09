@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import copy
 import os
 
 import pytest
@@ -95,3 +96,43 @@ def test_hardware_panel_uses_one_connected_state(qt_app):
     assert view.board_name_label.text() == "USB-1608FS"
     assert view.driver_status_label.text() == "Universal Library chargée"
     assert view.operation_mode_label.text() == "Acquisition matérielle"
+
+
+def test_acquisition_configuration_round_trip_preserves_scientific_geometry(qt_app):
+    view = AcquisitionConfigView()
+    try:
+        view.project_name_edit.setText("Essai houle multidirectionnel")
+        view.water_depth_spin.setValue(0.8)
+        view.sampling_rate_spin.setValue(200.0)
+        view.duration_spin.setValue(120.0)
+
+        for row, position in enumerate((0.0, 0.4, 0.8)):
+            view.channels_table.cellWidget(row, 1).setChecked(True)
+            view.channels_table.cellWidget(row, 2).setCurrentText("wave_height")
+            view.channels_table.setItem(row, 5, QTableWidgetItem("0.02"))
+            view.channels_table.setItem(row, 6, QTableWidgetItem("m"))
+            view.channels_table.setItem(row, 7, QTableWidgetItem(str(position)))
+
+        snapshot = view.configuration_snapshot()
+        view.project_name_edit.setText("Modifié")
+        view.water_depth_spin.setValue(1.2)
+        view.channels_table.setItem(1, 7, QTableWidgetItem("9.0"))
+
+        view.apply_configuration_snapshot(snapshot)
+
+        assert view.project_name_edit.text() == "Essai houle multidirectionnel"
+        assert view.water_depth_spin.value() == pytest.approx(0.8)
+        assert view.channels_table.item(1, 7).text() == "0.4"
+        assert view.channels_table.item(2, 5).text() == "0.02"
+
+        invalid = copy.deepcopy(snapshot)
+        invalid["project_name"] = "Ne doit pas être appliqué"
+        invalid["scientific_context"]["water_depth_m"] = 1.5
+        invalid["channels"][-1]["sensitivity_v_per_unit"] = 0.0
+        with pytest.raises(ValueError, match="Sensibilité invalide"):
+            view.apply_configuration_snapshot(invalid)
+        assert view.project_name_edit.text() == "Essai houle multidirectionnel"
+        assert view.water_depth_spin.value() == pytest.approx(0.8)
+    finally:
+        if view.controller is not None:
+            view.controller.close()

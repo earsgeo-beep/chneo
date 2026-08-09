@@ -537,12 +537,17 @@ class CalibrationView(QWidget):
         unit = record.physical_unit
         self.sensitivity_metric.set_value(f"{record.sensitivity_v_per_unit:.8g} V/{unit}")
         self.intercept_metric.set_value(f"{record.intercept_volts:.8g} V")
-        self.r_squared_metric.set_value(f"{record.r_squared:.7f}")
+        self.r_squared_metric.set_value(
+            f"{record.r_squared:.7f}" if record.linearity_assessable else "Non évaluable (2 points)"
+        )
         self.residual_metric.set_value(f"{record.residual_rms:.6g} {unit}")
         self.formula_label.setText(
             f"V = {record.sensitivity_v_per_unit:.6g} × référence {record.intercept_volts:+.6g}"
         )
-        self._set_status("CALIBRATION VALIDÉE", "success")
+        self._set_status(
+            "CALIBRATION VALIDÉE" if record.linearity_assessable else "FONCTION DE TRANSFERT VALIDÉE",
+            "success",
+        )
         self._draw_record(record)
 
     def _invalidate_active_fit(self) -> None:

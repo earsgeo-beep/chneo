@@ -35,6 +35,7 @@ class ContinuousHDF5RecorderTests(unittest.TestCase):
                 range_type=MCCRanges.BIP10VOLTS,
                 physical_units="m",
                 sensor_sensitivity=2.0,
+                probe_position_m=0.0,
             ),
             MaritimeChannelConfig(
                 channel=3,
@@ -52,7 +53,11 @@ class ContinuousHDF5RecorderTests(unittest.TestCase):
             start_time=datetime.now(),
             sampling_rate=200.0,
             channels=channels,
-            metadata={"selected_channels": [0, 3], "hardware_available": True},
+            metadata={
+                "selected_channels": [0, 3],
+                "hardware_available": True,
+                "water_depth_m": 0.8,
+            },
         )
 
         raw_first = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
@@ -62,9 +67,7 @@ class ContinuousHDF5RecorderTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "session.h5"
-            recorder = ContinuousHDF5Recorder(
-                flush_interval_seconds=0.001, chunk_samples=4
-            )
+            recorder = ContinuousHDF5Recorder(flush_interval_seconds=0.001, chunk_samples=4)
             recorder.start(path, session)
             recorder.append(raw_first, processed_first)
             recorder.append(raw_second, processed_second)
@@ -79,6 +82,7 @@ class ContinuousHDF5RecorderTests(unittest.TestCase):
                 self.assertEqual(handle.attrs["recording_status"], "complete")
                 self.assertEqual(handle.attrs["n_samples"], 5)
                 self.assertEqual(handle["metadata/session"].attrs["sample_rate"], 200.0)
+                self.assertEqual(handle["metadata/session"].attrs["water_depth_m"], 0.8)
                 np.testing.assert_allclose(
                     handle["raw_voltage/channel_03"][:],
                     np.concatenate((raw_first[:, 1], raw_second[:, 1])),
@@ -94,6 +98,18 @@ class ContinuousHDF5RecorderTests(unittest.TestCase):
                 self.assertEqual(
                     handle["metadata/channels/channel_03"].attrs["label"],
                     "Pression B",
+                )
+                self.assertEqual(
+                    handle["metadata/channels/channel_03"].attrs["calibration_status"],
+                    "unverified",
+                )
+                self.assertIn(
+                    "conversion_formula",
+                    handle["metadata/channels/channel_03"].attrs,
+                )
+                self.assertEqual(
+                    handle["metadata/channels/channel_00"].attrs["probe_position_m"],
+                    0.0,
                 )
 
             inspection = inspect_recording(path)

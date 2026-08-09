@@ -52,7 +52,7 @@ class WaveAnalysisConfig:
 class WaveAnalyzer:
     """Calcule statistiques, spectre, moments et vagues individuelles."""
 
-    METHOD_VERSION = "1.0"
+    METHOD_VERSION = "1.1"
 
     def __init__(self, config: WaveAnalysisConfig | None = None):
         self.config = config or WaveAnalysisConfig()
@@ -147,13 +147,14 @@ class WaveAnalyzer:
             raise WaveAnalysisError("Aucune frequence exploitable pour l'analyse croisee")
 
         peak_index = int(
-            valid_indices[
-                np.argmin(np.abs(frequencies[valid_indices] - reference_peak_frequency))
-            ]
+            valid_indices[np.argmin(np.abs(frequencies[valid_indices] - reference_peak_frequency))]
         )
         max_index = int(valid_indices[np.argmax(coherence[valid_indices])])
         peak_frequency = float(frequencies[peak_index])
         phase_at_peak = float(phase_degrees[peak_index])
+        time_lag = (
+            -math.radians(phase_at_peak) / (2 * math.pi * peak_frequency) if peak_frequency > 0 else 0.0
+        )
 
         return {
             "frequencies": frequencies.tolist(),
@@ -162,11 +163,11 @@ class WaveAnalyzer:
             "reference_peak_frequency": float(reference_peak_frequency),
             "coherence_at_reference_peak": float(coherence[peak_index]),
             "phase_at_reference_peak_degrees": phase_at_peak,
-            "time_lag_at_reference_peak_seconds": (
-                math.radians(phase_at_peak) / (2 * math.pi * peak_frequency)
-                if peak_frequency > 0
-                else 0.0
+            "phase_convention": (
+                "arg(conj(X_reference) * X_compared); positive phase means the compared signal leads"
             ),
+            "time_lag_convention": "positive lag means the compared signal occurs later",
+            "time_lag_at_reference_peak_seconds": time_lag,
             "maximum_coherence": float(coherence[max_index]),
             "frequency_at_maximum_coherence": float(frequencies[max_index]),
             "segment_count": segment_count,
@@ -225,11 +226,12 @@ class WaveAnalyzer:
         tm01 = m0 / m1 if m1 > 0 else 0.0
         tm02 = math.sqrt(m0 / m2) if m2 > 0 else 0.0
         energy_period = m_1 / m0 if m0 > 0 else 0.0
-        bandwidth = (
-            math.sqrt(max(0.0, 1.0 - (m2 * m2) / (m0 * m4)))
-            if m0 > 0 and m4 > 0
-            else 0.0
-        )
+        bandwidth = math.sqrt(max(0.0, 1.0 - (m2 * m2) / (m0 * m4))) if m0 > 0 and m4 > 0 else 0.0
+        equivalent_dof = max(2, 2 * segment_count)
+        confidence_factors = [
+            float(equivalent_dof / stats.chi2.ppf(0.975, equivalent_dof)),
+            float(equivalent_dof / stats.chi2.ppf(0.025, equivalent_dof)),
+        ]
 
         return {
             "method": "Welch",
@@ -246,6 +248,12 @@ class WaveAnalyzer:
             "segment_length": nperseg,
             "overlap_samples": noverlap,
             "segment_count": segment_count,
+            "equivalent_degrees_of_freedom_approx": equivalent_dof,
+            "psd_confidence_interval_95_factors_approx": confidence_factors,
+            "confidence_interval_note": (
+                "Multiply PSD by these lower/upper factors; approximation uses 2K "
+                "degrees of freedom and does not correct overlap correlation"
+            ),
             "spectral_moments": moments,
             "peak_frequency": peak_frequency,
             "peak_period": 1.0 / peak_frequency if peak_frequency > 0 else 0.0,
@@ -273,9 +281,7 @@ class WaveAnalyzer:
 
         heights: list[float] = []
         periods: list[float] = []
-        for start_crossing, end_crossing in zip(
-            crossings[:-1], crossings[1:], strict=False
-        ):
+        for start_crossing, end_crossing in zip(crossings[:-1], crossings[1:], strict=False):
             start = max(0, int(math.ceil(start_crossing)))
             stop = min(len(values), int(math.floor(end_crossing)) + 1)
             if stop - start < 2:
@@ -346,19 +352,41 @@ class WaveAnalyzer:
         block_variances = np.array(
             [np.var(block) for block in np.array_split(processed, block_count) if len(block)]
         )
-        positive_variances = block_variances[block_variances > 0]
-        stationarity_ratio = (
-            float(np.max(positive_variances) / np.min(positive_variances))
-            if len(positive_variances) > 1
-            else 1.0
-        )
+        maximum_block_variance = float(np.max(block_variances))
+        if maximum_block_variance > 0 and len(block_variances) > 1:
+            variance_floor = max(
+                np.finfo(np.float64).tiny,
+                maximum_block_variance * 1e-12,
+            )
+            stationarity_ratio = float(
+                maximum_block_variance / max(float(np.min(block_variances)), variance_floor)
+            )
+        else:
+            stationarity_ratio = 1.0
         if stationarity_ratio > 4.0:
             warnings.append("Variance fortement non stationnaire entre les blocs")
 
-        time_axis = np.arange(len(original), dtype=np.float64) / sample_rate
-        trend_slope = (
-            float(np.polyfit(time_axis, original, 1)[0]) if len(original) > 1 else 0.0
+        flat_tolerance = max(1e-12, float(np.ptp(original)) * 1e-12)
+        longest_flat_run = self._longest_flat_run(original, flat_tolerance)
+        flat_run_fraction = longest_flat_run / len(original)
+        if not bool(np.ptp(original) == 0) and flat_run_fraction >= 0.05:
+            warnings.append("Portion plate prolongee detectee: verifier capteur, cable ou saturation")
+
+        peak_frequency = float(spectral["peak_frequency"])
+        samples_per_peak_period = sample_rate / peak_frequency if peak_frequency > 0 else 0.0
+        record_cycles_at_peak = len(original) * peak_frequency / sample_rate
+        peak_resolution_ratio = (
+            float(spectral["frequency_resolution"]) / peak_frequency if peak_frequency > 0 else 0.0
         )
+        if peak_frequency > 0 and samples_per_peak_period < 10.0:
+            warnings.append("Moins de dix echantillons par periode de pic: resolution temporelle faible")
+        if peak_frequency > 0 and record_cycles_at_peak < 10.0:
+            warnings.append(
+                "Moins de dix periodes de pic enregistrees: duree insuffisante pour une PSD stable"
+            )
+
+        time_axis = np.arange(len(original), dtype=np.float64) / sample_rate
+        trend_slope = float(np.polyfit(time_axis, original, 1)[0]) if len(original) > 1 else 0.0
         return {
             "valid": not warnings,
             "warnings": warnings,
@@ -369,8 +397,27 @@ class WaveAnalyzer:
             "variance_spectral": variance_spectral,
             "spectral_to_time_variance_ratio": variance_ratio,
             "block_variance_ratio": stationarity_ratio,
+            "longest_flat_run_samples": longest_flat_run,
+            "longest_flat_run_fraction": flat_run_fraction,
+            "samples_per_peak_period": samples_per_peak_period,
+            "record_cycles_at_peak": record_cycles_at_peak,
+            "peak_frequency_resolution_ratio": peak_resolution_ratio,
             "linear_trend_per_second": trend_slope,
         }
+
+    @staticmethod
+    def _longest_flat_run(values: np.ndarray, tolerance: float) -> int:
+        """Return the longest run of numerically unchanged consecutive samples."""
+
+        if len(values) == 0:
+            return 0
+        unchanged = np.abs(np.diff(values)) <= tolerance
+        longest = 1
+        current = 1
+        for is_unchanged in unchanged:
+            current = current + 1 if is_unchanged else 1
+            longest = max(longest, current)
+        return int(longest)
 
     @staticmethod
     def _basic_statistics(
@@ -392,9 +439,7 @@ class WaveAnalyzer:
             "peak_to_peak": float(np.ptp(values)),
             "rms": float(np.sqrt(np.mean(values**2))),
             "skewness": (
-                float(stats.skew(values, bias=False))
-                if len(values) > 2 and standard_deviation > 0
-                else 0.0
+                float(stats.skew(values, bias=False)) if len(values) > 2 and standard_deviation > 0 else 0.0
             ),
             "kurtosis": (
                 float(stats.kurtosis(values, fisher=True, bias=False))
@@ -414,11 +459,7 @@ class WaveAnalyzer:
 
     def _frequency_mask(self, frequencies: np.ndarray, sample_rate: float) -> np.ndarray:
         upper = self.config.max_frequency or sample_rate / 2
-        return (
-            (frequencies > 0)
-            & (frequencies >= self.config.min_frequency)
-            & (frequencies <= upper)
-        )
+        return (frequencies > 0) & (frequencies >= self.config.min_frequency) & (frequencies <= upper)
 
     @staticmethod
     def _spectral_moment(
@@ -458,12 +499,9 @@ class WaveAnalyzer:
             raise WaveAnalysisError("Chaque canal doit etre une serie unidimensionnelle")
         if len(series) < self.config.minimum_samples:
             raise WaveAnalysisError(
-                f"Signal trop court: {len(series)} echantillons, "
-                f"minimum {self.config.minimum_samples}"
+                f"Signal trop court: {len(series)} echantillons, minimum {self.config.minimum_samples}"
             )
         if not np.all(np.isfinite(series)):
             invalid_count = int(np.count_nonzero(~np.isfinite(series)))
-            raise WaveAnalysisError(
-                f"Signal contenant {invalid_count} valeur(s) NaN ou infinie(s)"
-            )
+            raise WaveAnalysisError(f"Signal contenant {invalid_count} valeur(s) NaN ou infinie(s)")
         return series

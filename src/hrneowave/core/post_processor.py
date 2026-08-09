@@ -11,8 +11,13 @@ from typing import Any
 import numpy as np
 from scipy import signal
 
-from .session_schema import SAMPLE_RATE_KEYS, SCHEMA_VERSION, extract_sample_rate
+from .session_schema import CLOCK_DOMAIN, SAMPLE_RATE_KEYS, SCHEMA_VERSION, extract_sample_rate
 from .wave_analysis import WaveAnalysisConfig, WaveAnalysisError, WaveAnalyzer
+from .wave_separation import (
+    MultiProbeWaveSeparator,
+    WaveSeparationConfig,
+    WaveSeparationError,
+)
 
 QObject = None
 Signal = None
@@ -95,9 +100,7 @@ class PostProcessor(QObject):
             detrend=bool(analysis.get("detrend", True)),
             min_frequency=float(analysis.get("min_frequency", 0.0)),
             max_frequency=(
-                float(analysis["max_frequency"])
-                if analysis.get("max_frequency") is not None
-                else None
+                float(analysis["max_frequency"]) if analysis.get("max_frequency") is not None else None
             ),
             minimum_samples=int(analysis.get("minimum_samples", 32)),
         )
@@ -153,18 +156,17 @@ class PostProcessor(QObject):
         if frame.empty:
             raise ValueError("Le fichier CSV est vide")
 
-        exact_time = next(
-            (column for column in frame.columns if column.strip().lower() == "time"),
+        normalized_columns = {column.strip().lower(): column for column in frame.columns}
+        time_column = next(
+            (
+                normalized_columns[alias]
+                for alias in ("time", "t", "time_s", "timestamp_s")
+                if alias in normalized_columns
+            ),
             None,
         )
-        time_columns = [exact_time] if exact_time else [
-            column for column in frame.columns if column.lower().endswith("_time")
-        ]
-        data_columns = [
-            column
-            for column in frame.columns
-            if column.startswith(("channel_", "probe_"))
-        ]
+        time_columns = [time_column] if time_column else []
+        data_columns = [column for column in frame.columns if column.startswith(("channel_", "probe_"))]
         metadata: dict[str, Any] = {}
         sample_rate_column = next(
             (key for key in SAMPLE_RATE_KEYS if key in frame.columns),
@@ -189,25 +191,51 @@ class PostProcessor(QObject):
             if not np.isclose(inferred_rate, self.sample_rate, rtol=1e-3, atol=1e-9):
                 raise ValueError("L'axe temporel ne correspond pas a sample_rate_hz")
 
-        channels = {
-            column: frame[column].to_numpy(dtype=np.float64)
-            for column in data_columns
-        }
+        channels = {column: frame[column].to_numpy(dtype=np.float64) for column in data_columns}
+        time_values = (
+            frame[time_columns[0]].to_numpy(dtype=np.float64)
+            if time_columns
+            else np.arange(len(frame), dtype=np.float64) / self.sample_rate
+        )
+        self._validate_channel_arrays(channels, time_values, "CSV")
+        sample_count = int(len(time_values))
+        metadata.update(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "dt_seconds": 1.0 / self.sample_rate,
+                "n_samples": sample_count,
+                "duration_s": sample_count / self.sample_rate,
+                "time_start": float(time_values[0]),
+                "time_end": float(time_values[-1]),
+                "clock_domain": CLOCK_DOMAIN,
+            }
+        )
         channel_metadata: list[dict[str, Any]] = []
         sidecar_path = Path(f"{file_path}.metadata.json")
         if sidecar_path.is_file():
             with sidecar_path.open("r", encoding="utf-8") as handle:
                 sidecar = json.load(handle)
             channel_metadata = list(sidecar.get("channel_metadata", []))
+            sidecar_metadata = {
+                key: self._normalize_metadata_value(value)
+                for key, value in sidecar.get("metadata", {}).items()
+            }
+            sidecar_rate = extract_sample_rate(sidecar_metadata)
+            if sidecar_rate is not None and not np.isclose(
+                sidecar_rate,
+                self.sample_rate,
+                rtol=1e-9,
+                atol=1e-12,
+            ):
+                raise ValueError("La frequence d'echantillonnage du sidecar CSV est incoherente")
+            for key, value in sidecar_metadata.items():
+                if key not in metadata:
+                    metadata[key] = value
 
         return {
             "source_format": "csv",
             "metadata": metadata,
-            "time": (
-                frame[time_columns[0]].to_numpy(dtype=np.float64)
-                if time_columns
-                else np.arange(len(frame), dtype=np.float64) / self.sample_rate
-            ),
+            "time": time_values,
             "channels": channels,
             "channel_keys": list(channels),
             "channel_metadata": channel_metadata,
@@ -217,31 +245,42 @@ class PostProcessor(QObject):
         with file_path.open("r", encoding="utf-8") as handle:
             payload = json.load(handle)
         channels_payload = payload.get("channels", {})
-        channels = {
-            key: np.asarray(values, dtype=np.float64)
-            for key, values in channels_payload.items()
-        }
+        channels = {key: np.asarray(values, dtype=np.float64) for key, values in channels_payload.items()}
         raw_channels = {
             key: np.asarray(values, dtype=np.float64)
             for key, values in payload.get("raw_channels", {}).items()
         }
+        time_values = np.asarray(payload.get("time", []), dtype=np.float64)
         metadata = {
-            key: self._normalize_metadata_value(value)
-            for key, value in payload.get("metadata", {}).items()
+            key: self._normalize_metadata_value(value) for key, value in payload.get("metadata", {}).items()
         }
         session = payload.get("session", {})
         sample_rate = extract_sample_rate(metadata, session)
-        if sample_rate is None and "time" in payload:
-            sample_rate = self._infer_sample_rate(np.asarray(payload["time"], dtype=float))
+        if sample_rate is None and time_values.size:
+            sample_rate = self._infer_sample_rate(time_values)
         if sample_rate is None or float(sample_rate) <= 0:
             raise ValueError("Frequence d'echantillonnage JSON absente ou invalide")
         self.sample_rate = float(sample_rate)
+        if time_values.size:
+            self._validate_time_axis(
+                time_values,
+                self.sample_rate,
+                self._validate_channel_arrays(channels, None, "JSON"),
+                "JSON",
+            )
+        else:
+            sample_count = self._validate_channel_arrays(channels, None, "JSON")
+            time_values = np.arange(sample_count, dtype=np.float64) / self.sample_rate
+        if raw_channels:
+            if set(raw_channels) != set(channels):
+                raise ValueError("Les listes de canaux bruts et physiques JSON sont differentes")
+            self._validate_channel_arrays(raw_channels, time_values, "JSON brut")
 
         return {
             "source_format": "json",
             "metadata": metadata,
             "session": session,
-            "time": np.asarray(payload.get("time", []), dtype=np.float64),
+            "time": time_values,
             "channels": channels,
             "raw_channels": raw_channels,
             "channel_keys": list(channels),
@@ -257,12 +296,12 @@ class PostProcessor(QObject):
         metadata: dict[str, Any] = {}
         session: dict[str, Any] = {}
         channel_metadata: dict[str, dict[str, Any]] = {}
+        integrity_warnings: list[str] = []
+        sampled_time: np.ndarray | None = None
+        sampled_time_indices: np.ndarray | None = None
         with h5py.File(file_path, "r") as handle:
             metadata.update(
-                {
-                    key: self._normalize_metadata_value(value)
-                    for key, value in handle.attrs.items()
-                }
+                {key: self._normalize_metadata_value(value) for key, value in handle.attrs.items()}
             )
             status = metadata.get("recording_status")
             if status is not None and str(status) != "complete":
@@ -281,29 +320,21 @@ class PostProcessor(QObject):
             if "metadata/channels" in handle:
                 for key, group in handle["metadata/channels"].items():
                     channel_metadata[key] = {
-                        name: self._normalize_metadata_value(value)
-                        for name, value in group.attrs.items()
+                        name: self._normalize_metadata_value(value) for name, value in group.attrs.items()
                     }
+                    channel_metadata[key].setdefault("key", key)
 
             acquisition_group = handle.get("acquisition_data")
             if acquisition_group is not None:
                 channel_keys = sorted(
-                    key
-                    for key in acquisition_group.keys()
-                    if key.startswith(("channel_", "probe_"))
+                    key for key in acquisition_group.keys() if key.startswith(("channel_", "probe_"))
                 )
             else:
-                channel_keys = sorted(
-                    key for key in handle.keys() if key.startswith(("channel_", "probe_"))
-                )
+                channel_keys = sorted(key for key in handle.keys() if key.startswith(("channel_", "probe_")))
 
             channel_lengths = []
             for key in channel_keys:
-                dataset = (
-                    acquisition_group[key]
-                    if acquisition_group is not None
-                    else handle[key]
-                )
+                dataset = acquisition_group[key] if acquisition_group is not None else handle[key]
                 if dataset.ndim != 1:
                     raise ValueError(f"Le canal {key} n'est pas un vecteur")
                 channel_lengths.append(int(dataset.shape[0]))
@@ -317,10 +348,44 @@ class PostProcessor(QObject):
             ):
                 raise ValueError("Le compteur n_samples ne correspond pas aux donnees")
 
+            if acquisition_group is not None and "time" in acquisition_group:
+                time_dataset = acquisition_group["time"]
+                if time_dataset.ndim != 1:
+                    raise ValueError("L'axe temporel HDF5 n'est pas un vecteur")
+                if channel_lengths and int(time_dataset.shape[0]) != channel_lengths[0]:
+                    raise ValueError("L'axe temporel HDF5 n'a pas la longueur des canaux")
+                if int(time_dataset.shape[0]) >= 2:
+                    sampled_time_indices = np.unique(
+                        np.linspace(
+                            0,
+                            int(time_dataset.shape[0]) - 1,
+                            min(int(time_dataset.shape[0]), 4096),
+                            dtype=int,
+                        )
+                    )
+                    sampled_time = np.asarray(
+                        time_dataset[sampled_time_indices],
+                        dtype=np.float64,
+                    )
+            else:
+                integrity_warnings.append("Axe temporel HDF5 absent: temps reconstruit depuis sample_rate_hz")
+
         sample_rate = extract_sample_rate(metadata, session)
         if sample_rate is None or float(sample_rate) <= 0:
             raise ValueError("Frequence d'echantillonnage HDF5 absente ou invalide")
         self.sample_rate = float(sample_rate)
+        if sampled_time is not None and sampled_time_indices is not None:
+            if not np.all(np.isfinite(sampled_time)) or np.any(np.diff(sampled_time) <= 0):
+                raise ValueError("L'axe temporel HDF5 echantillonne est invalide")
+            sampled_intervals = np.diff(sampled_time) / np.diff(sampled_time_indices)
+            expected_interval = 1.0 / self.sample_rate
+            if not np.allclose(
+                sampled_intervals,
+                expected_interval,
+                rtol=1e-3,
+                atol=1e-9,
+            ):
+                raise ValueError("L'axe temporel HDF5 ne correspond pas a sample_rate_hz")
         return {
             "source_format": "hdf5",
             "source_path": str(file_path),
@@ -329,6 +394,7 @@ class PostProcessor(QObject):
             "channels": {},
             "channel_keys": channel_keys,
             "channel_metadata": [channel_metadata[key] for key in sorted(channel_metadata)],
+            "integrity_warnings": integrity_warnings,
         }
 
     @staticmethod
@@ -343,6 +409,42 @@ class PostProcessor(QObject):
         if not np.allclose(intervals, median_interval, rtol=1e-3, atol=1e-9):
             raise ValueError("L'echantillonnage n'est pas regulier")
         return 1.0 / median_interval
+
+    @classmethod
+    def _validate_time_axis(
+        cls,
+        time_values: np.ndarray,
+        sample_rate: float,
+        expected_samples: int,
+        source: str,
+    ) -> None:
+        values = np.asarray(time_values, dtype=np.float64)
+        if len(values) != expected_samples:
+            raise ValueError(
+                f"L'axe temporel {source} contient {len(values)} echantillons, {expected_samples} attendus"
+            )
+        inferred_rate = cls._infer_sample_rate(values)
+        if not np.isclose(inferred_rate, sample_rate, rtol=1e-3, atol=1e-9):
+            raise ValueError(f"L'axe temporel {source} ne correspond pas a sample_rate_hz")
+
+    @staticmethod
+    def _validate_channel_arrays(
+        channels: dict[str, np.ndarray],
+        time_values: np.ndarray | None,
+        source: str,
+    ) -> int:
+        if not channels:
+            return 0
+        lengths = {key: len(np.asarray(values)) for key, values in channels.items()}
+        if len(set(lengths.values())) != 1:
+            details = ", ".join(f"{key}={length}" for key, length in lengths.items())
+            raise ValueError(f"Longueurs de canaux {source} incoherentes: {details}")
+        sample_count = next(iter(lengths.values()))
+        if sample_count == 0:
+            raise ValueError(f"Les canaux {source} sont vides")
+        if time_values is not None and len(time_values) != sample_count:
+            raise ValueError(f"L'axe temporel {source} ne contient pas le meme nombre d'echantillons")
+        return sample_count
 
     def _load_channel_values(self, channel: str) -> np.ndarray:
         if self.current_data is None:
@@ -363,11 +465,7 @@ class PostProcessor(QObject):
         metadata: Any,
     ) -> dict[str, dict[str, Any]]:
         if isinstance(metadata, dict):
-            return {
-                str(key): value
-                for key, value in metadata.items()
-                if isinstance(value, dict)
-            }
+            return {str(key): value for key, value in metadata.items() if isinstance(value, dict)}
         if not isinstance(metadata, list):
             return {}
 
@@ -381,6 +479,143 @@ class PostProcessor(QObject):
             if key in channel_keys:
                 mapped[str(key)] = item
         return mapped
+
+    def _compute_incident_reflected_analysis(
+        self,
+        channel_keys: list[str],
+        channel_metadata_map: dict[str, dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Run optional multi-probe separation when geometry is explicit."""
+
+        wave_types = {
+            "wave_height",
+            "wave_probe",
+            "wave_elevation",
+            "elevation",
+            "houle",
+        }
+        wave_channels = [
+            channel
+            for channel in channel_keys
+            if str(channel_metadata_map.get(channel, {}).get("sensor_type", "")).lower() in wave_types
+        ]
+        if len(wave_channels) < 3:
+            return {
+                "status": "not_configured",
+                "reason": "Au moins trois canaux de type elevation de houle sont requis",
+            }
+
+        position_keys = (
+            "probe_position_m",
+            "position_m",
+            "longitudinal_position_m",
+            "x_m",
+        )
+        positions: list[float] = []
+        missing_positions: list[str] = []
+        for channel in wave_channels:
+            channel_info = channel_metadata_map.get(channel, {})
+            position = next(
+                (channel_info[key] for key in position_keys if channel_info.get(key) is not None),
+                None,
+            )
+            try:
+                positions.append(float(position))
+            except (TypeError, ValueError):
+                missing_positions.append(channel)
+        if missing_positions:
+            return {
+                "status": "not_configured",
+                "reason": "Position longitudinale absente pour certaines sondes",
+                "missing_probe_positions": missing_positions,
+            }
+
+        uncalibrated_channels = [
+            channel
+            for channel in wave_channels
+            if str(
+                channel_metadata_map.get(channel, {}).get(
+                    "calibration_status",
+                    "unverified",
+                )
+            )
+            != "valid"
+        ]
+        if uncalibrated_channels:
+            return {
+                "status": "blocked",
+                "reason": "Calibration valide requise sur toutes les sondes de houle",
+                "uncalibrated_channels": uncalibrated_channels,
+            }
+
+        physical_units = {
+            str(
+                channel_metadata_map.get(channel, {}).get("physical_unit")
+                or channel_metadata_map.get(channel, {}).get("physical_units")
+                or ""
+            ).strip()
+            for channel in wave_channels
+        }
+        if len(physical_units) != 1 or not next(iter(physical_units), ""):
+            return {
+                "status": "blocked",
+                "reason": "Toutes les sondes doivent partager une unite physique explicite",
+                "detected_units": sorted(physical_units),
+            }
+        physical_unit = next(iter(physical_units))
+
+        source_metadata = self.current_data.get("metadata", {}) if self.current_data else {}
+        session_metadata = self.current_data.get("session", {}) if self.current_data else {}
+        water_depth = next(
+            (
+                container[key]
+                for container in (source_metadata, session_metadata)
+                for key in ("water_depth_m", "water_depth")
+                if container.get(key) is not None
+            ),
+            None,
+        )
+        try:
+            water_depth_m = float(water_depth)
+        except (TypeError, ValueError):
+            return {
+                "status": "not_configured",
+                "reason": "Profondeur d'eau water_depth_m absente",
+            }
+
+        analysis_config = self._wave_config()
+        segment_length = min(
+            analysis_config.segment_length,
+            len(self._load_channel_values(wave_channels[0])),
+        )
+        minimum_frequency = max(
+            analysis_config.min_frequency,
+            self.sample_rate / segment_length,
+        )
+        maximum_frequency = analysis_config.max_frequency or self.sample_rate / 2
+        try:
+            separator = MultiProbeWaveSeparator(
+                WaveSeparationConfig(
+                    probe_positions_m=tuple(positions),
+                    water_depth_m=water_depth_m,
+                    min_frequency_hz=minimum_frequency,
+                    max_frequency_hz=maximum_frequency,
+                    segment_length=analysis_config.segment_length,
+                    overlap_ratio=analysis_config.overlap_ratio,
+                    window=analysis_config.window,
+                )
+            )
+            values = np.vstack([self._load_channel_values(channel) for channel in wave_channels])
+            result = separator.analyze(values, self.sample_rate)
+            result["channel_keys"] = wave_channels
+            result["physical_unit"] = physical_unit
+            return result
+        except (ValueError, WaveAnalysisError, WaveSeparationError) as exc:
+            return {
+                "status": "failed",
+                "reason": str(exc),
+                "channel_keys": wave_channels,
+            }
 
     def _zero_upcrossings(self, values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         series = np.asarray(values, dtype=np.float64)
@@ -459,8 +694,7 @@ class PostProcessor(QObject):
         try:
             analyzer = WaveAnalyzer(self._wave_config())
             channel_keys = list(
-                self.current_data.get("channel_keys")
-                or self.current_data.get("channels", {}).keys()
+                self.current_data.get("channel_keys") or self.current_data.get("channels", {}).keys()
             )
             if not channel_keys:
                 raise WaveAnalysisError("Aucun canal exploitable")
@@ -475,9 +709,11 @@ class PostProcessor(QObject):
                 "basic_stats": {},
                 "spectral_analysis": {},
                 "wave_parameters": {},
+                "zero_crossing_metrics": {},
                 "goda_metrics": {},
                 "quality": {},
                 "cross_spectral_analysis": {},
+                "incident_reflected_analysis": {},
                 "analysis_configuration": analyzer.configuration(),
                 "sample_rate": self.sample_rate,
                 "reference_channel": reference_channel,
@@ -488,9 +724,7 @@ class PostProcessor(QObject):
 
             for channel in channel_keys:
                 values = (
-                    reference_values
-                    if channel == reference_channel
-                    else self._load_channel_values(channel)
+                    reference_values if channel == reference_channel else self._load_channel_values(channel)
                 )
                 channel_info = channel_metadata_map.get(channel, {})
                 unit = str(
@@ -512,9 +746,7 @@ class PostProcessor(QObject):
                 channel_results["wave_parameters"]["interpretation"] = (
                     "wave_elevation" if interpretation_valid else "generic_amplitude"
                 )
-                channel_results["quality"][
-                    "wave_height_interpretation_valid"
-                ] = interpretation_valid
+                channel_results["quality"]["wave_height_interpretation_valid"] = interpretation_valid
                 if not interpretation_valid:
                     warning = (
                         "Type de capteur absent: verifier que le signal represente une elevation"
@@ -528,24 +760,32 @@ class PostProcessor(QObject):
                 results["spectral_analysis"][channel] = channel_results["spectral"]
                 results["wave_parameters"][channel] = channel_results["wave_parameters"]
                 results["quality"][channel] = channel_results["quality"]
-                results["goda_metrics"][channel] = self._compatibility_wave_metrics(
-                    channel_results["wave_parameters"]
-                )
+                zero_crossing_metrics = self._compatibility_wave_metrics(channel_results["wave_parameters"])
+                results["zero_crossing_metrics"][channel] = zero_crossing_metrics
+                results["goda_metrics"][channel] = deepcopy(zero_crossing_metrics)
 
                 if channel != reference_channel:
                     pair_key = f"{reference_channel}__{channel}"
-                    results["cross_spectral_analysis"][pair_key] = (
-                        analyzer.analyze_cross_spectrum(
-                            reference_values,
-                            values,
-                            self.sample_rate,
-                            results["spectral_analysis"][reference_channel]["peak_frequency"],
-                        )
+                    results["cross_spectral_analysis"][pair_key] = analyzer.analyze_cross_spectrum(
+                        reference_values,
+                        values,
+                        self.sample_rate,
+                        results["spectral_analysis"][reference_channel]["peak_frequency"],
                     )
 
+            results["incident_reflected_analysis"] = self._compute_incident_reflected_analysis(
+                channel_keys,
+                channel_metadata_map,
+            )
             spectra = list(results["spectral_analysis"].values())
             sample_count = int(len(reference_values))
-            processing_warnings: list[str] = []
+            processing_warnings: list[str] = list(self.current_data.get("integrity_warnings", []))
+            separation_status = results["incident_reflected_analysis"].get("status")
+            if separation_status in {"blocked", "failed"}:
+                processing_warnings.append(
+                    f"INCIDENT_REFLECTED_ANALYSIS_{separation_status.upper()}: "
+                    f"{results['incident_reflected_analysis'].get('reason', '')}"
+                )
             for channel in channel_keys:
                 calibration_status = str(
                     channel_metadata_map.get(channel, {}).get(
@@ -554,12 +794,7 @@ class PostProcessor(QObject):
                     )
                 )
                 if calibration_status != "valid":
-                    processing_warnings.append(
-                        f"CALIBRATION_NOT_PERFORMED: {channel} ({calibration_status})"
-                    )
-            single_segment = bool(spectra) and all(
-                int(spectrum.get("segment_count", 1)) == 1 for spectrum in spectra
-            )
+                    processing_warnings.append(f"CALIBRATION_NOT_PERFORMED: {channel} ({calibration_status})")
             results["metadata"] = {
                 "schema_version": SCHEMA_VERSION,
                 "sample_rate_hz": float(self.sample_rate),
@@ -567,9 +802,7 @@ class PostProcessor(QObject):
                 "n_samples": sample_count,
                 "duration_s": sample_count / float(self.sample_rate),
                 "processing_method": "post_processor.run_analysis",
-                "psd_method": (
-                    "one_sided_periodogram" if single_segment else "welch"
-                ),
+                "psd_method": "welch",
                 "window": str(self.config["analysis"].get("window", "hann")),
                 "overlap_applied": bool(
                     any(int(spectrum.get("segment_count", 1)) > 1 for spectrum in spectra)
@@ -577,6 +810,12 @@ class PostProcessor(QObject):
                 ),
                 "detrend": bool(self.config["analysis"].get("detrend", True)),
                 "warnings": processing_warnings,
+                "result_semantics": {
+                    "zero_crossing_metrics": "individual waves by zero-upcrossing",
+                    "goda_metrics": (
+                        "deprecated compatibility alias; not incident/reflected Goda separation"
+                    ),
+                },
             }
 
             self.current_analysis = results
@@ -661,6 +900,25 @@ class PostProcessor(QObject):
                         "value": spectrum.get(metric),
                     }
                 )
+        separation = self.current_analysis.get("incident_reflected_analysis", {})
+        for metric in (
+            "status",
+            "incident_Hm0",
+            "reflected_Hm0",
+            "energy_reflection_coefficient",
+            "frequency_resolution",
+            "segment_count",
+            "probe_count",
+        ):
+            if metric in separation:
+                rows.append(
+                    {
+                        "channel": "multi_probe",
+                        "category": "incident_reflected_analysis",
+                        "metric": metric,
+                        "value": separation[metric],
+                    }
+                )
         pd.DataFrame(rows).to_csv(output_path, index=False)
 
     def _export_json(self, output_path: str) -> None:
@@ -710,6 +968,23 @@ class PostProcessor(QObject):
                     else:
                         pair_group.attrs[metric] = self._hdf5_attribute(value)
 
+            separation_group = handle.create_group("incident_reflected_analysis")
+            separation = self.current_analysis.get("incident_reflected_analysis", {})
+            separation_arrays = {
+                "frequencies",
+                "valid_frequency_mask",
+                "incident_psd",
+                "reflected_psd",
+                "reflection_coefficient_by_frequency",
+                "condition_number_by_frequency",
+                "normalized_residual_by_frequency",
+            }
+            for metric, value in separation.items():
+                if metric in separation_arrays:
+                    separation_group.create_dataset(metric, data=value)
+                else:
+                    separation_group.attrs[metric] = self._hdf5_attribute(value)
+
     def _hdf5_attribute(self, value: Any) -> Any:
         if isinstance(value, (str, int, float, bool, np.integer, np.floating)):
             return value
@@ -743,5 +1018,15 @@ class PostProcessor(QObject):
                     "n_waves": values.get("n_waves", 0),
                 }
                 for channel, values in self.current_analysis["wave_parameters"].items()
+            },
+            "incident_reflected_summary": {
+                key: self.current_analysis.get("incident_reflected_analysis", {}).get(key)
+                for key in (
+                    "status",
+                    "incident_Hm0",
+                    "reflected_Hm0",
+                    "energy_reflection_coefficient",
+                    "probe_count",
+                )
             },
         }

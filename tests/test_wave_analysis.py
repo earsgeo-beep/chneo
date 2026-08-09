@@ -26,9 +26,7 @@ class WaveAnalyzerTests(unittest.TestCase):
         self.amplitude = 0.4
         self.time = np.arange(int(self.sample_rate * 200.0)) / self.sample_rate
         self.signal = self.amplitude * np.sin(2 * np.pi * self.frequency * self.time)
-        self.analyzer = WaveAnalyzer(
-            WaveAnalysisConfig(segment_length=2048, overlap_ratio=0.5)
-        )
+        self.analyzer = WaveAnalyzer(WaveAnalysisConfig(segment_length=2048, overlap_ratio=0.5))
 
     def test_regular_wave_parameters_match_analytic_signal(self):
         result = self.analyzer.analyze_channel(self.signal, self.sample_rate, "m")
@@ -54,12 +52,8 @@ class WaveAnalyzerTests(unittest.TestCase):
         self.assertAlmostEqual(ratio, 1.0, delta=0.08)
 
     def test_cross_spectrum_recovers_coherence_and_phase(self):
-        compared = self.amplitude * np.sin(
-            2 * np.pi * self.frequency * self.time + np.pi / 4
-        )
-        reference = self.analyzer.analyze_channel(
-            self.signal, self.sample_rate, "m"
-        )
+        compared = self.amplitude * np.sin(2 * np.pi * self.frequency * self.time + np.pi / 4)
+        reference = self.analyzer.analyze_channel(self.signal, self.sample_rate, "m")
         cross = self.analyzer.analyze_cross_spectrum(
             self.signal,
             compared,
@@ -67,9 +61,34 @@ class WaveAnalyzerTests(unittest.TestCase):
             reference["spectral"]["peak_frequency"],
         )
         self.assertGreater(cross["coherence_at_reference_peak"], 0.99)
+        self.assertAlmostEqual(cross["phase_at_reference_peak_degrees"], 45.0, delta=1.0)
+        expected_lag = -1.0 / (8.0 * self.frequency)
         self.assertAlmostEqual(
-            cross["phase_at_reference_peak_degrees"], 45.0, delta=1.0
+            cross["time_lag_at_reference_peak_seconds"],
+            expected_lag,
+            delta=0.02,
         )
+        self.assertIn("positive lag", cross["time_lag_convention"])
+
+    def test_welch_reports_reproducible_approximate_confidence_factors(self):
+        spectrum = self.analyzer.analyze_channel(self.signal, self.sample_rate, "m")["spectral"]
+
+        self.assertEqual(
+            spectrum["equivalent_degrees_of_freedom_approx"],
+            2 * spectrum["segment_count"],
+        )
+        lower, upper = spectrum["psd_confidence_interval_95_factors_approx"]
+        self.assertLess(lower, 1.0)
+        self.assertGreater(upper, 1.0)
+
+    def test_quality_detects_a_prolonged_flat_portion(self):
+        damaged = self.signal.copy()
+        damaged[3000:4000] = 0.123
+
+        quality = self.analyzer.analyze_channel(damaged, self.sample_rate, "m")["quality"]
+
+        self.assertGreaterEqual(quality["longest_flat_run_fraction"], 0.09)
+        self.assertTrue(any("Portion plate prolongee" in warning for warning in quality["warnings"]))
 
     def test_rejects_non_finite_measurements(self):
         invalid = self.signal.copy()
@@ -78,9 +97,7 @@ class WaveAnalyzerTests(unittest.TestCase):
             self.analyzer.analyze_channel(invalid, self.sample_rate)
 
     def test_constant_signal_does_not_create_a_false_peak(self):
-        result = self.analyzer.analyze_channel(
-            np.ones(4096), self.sample_rate, "m"
-        )
+        result = self.analyzer.analyze_channel(np.ones(4096), self.sample_rate, "m")
         self.assertEqual(result["spectral"]["peak_frequency"], 0.0)
         self.assertEqual(result["spectral"]["Hm0"], 0.0)
         self.assertEqual(result["wave_parameters"]["n_waves"], 0)
@@ -88,6 +105,22 @@ class WaveAnalyzerTests(unittest.TestCase):
 
 
 class PostProcessorSpectralTests(unittest.TestCase):
+    def test_json_rejects_unsynchronised_channel_lengths(self):
+        payload = {
+            "metadata": {"sample_rate_hz": 10.0},
+            "time": [0.0, 0.1, 0.2, 0.3],
+            "channels": {
+                "channel_00": [0.0, 1.0, 0.0, -1.0],
+                "channel_01": [0.0, 1.0, 0.0],
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "unsynchronised.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+
+            processor = PostProcessor()
+            self.assertFalse(processor.load_data_file(str(path)))
+
     def test_csv_time_axis_can_define_sample_rate_and_run_full_analysis(self):
         import pandas as pd
 
@@ -98,9 +131,7 @@ class PostProcessorSpectralTests(unittest.TestCase):
             {
                 "time": time,
                 "channel_00": 0.25 * np.sin(2 * np.pi * frequency * time),
-                "channel_01": 0.25 * np.sin(
-                    2 * np.pi * frequency * time + np.pi / 6
-                ),
+                "channel_01": 0.25 * np.sin(2 * np.pi * frequency * time + np.pi / 6),
             }
         )
 

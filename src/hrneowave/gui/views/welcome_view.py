@@ -3,6 +3,7 @@
 from PySide6.QtCore import QDate, Qt, Signal
 from PySide6.QtWidgets import (
     QDateEdit,
+    QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QFrame,
@@ -73,6 +74,12 @@ class WelcomeView(QWidget):
         self.laboratory.setPlaceholderText("Laboratoire / organisme")
         self.project_date = QDateEdit(QDate.currentDate())
         self.project_date.setCalendarPopup(True)
+        self.water_depth = QDoubleSpinBox()
+        self.water_depth.setRange(0.0, 50.0)
+        self.water_depth.setDecimals(4)
+        self.water_depth.setSingleStep(0.01)
+        self.water_depth.setSpecialValueText("Non renseignée")
+        self.water_depth.setSuffix(" m")
         self.description = QTextEdit()
         self.description.setPlaceholderText(
             "Objectif, modèle physique, conditions d'essai et remarques utiles."
@@ -83,6 +90,7 @@ class WelcomeView(QWidget):
         fields.addRow("Responsable *", self.project_manager)
         fields.addRow("Laboratoire *", self.laboratory)
         fields.addRow("Date d'essai", self.project_date)
+        fields.addRow("Profondeur d'eau", self.water_depth)
         fields.addRow("Contexte", self.description)
         form_layout.addLayout(fields)
 
@@ -177,6 +185,7 @@ class WelcomeView(QWidget):
             "date": self.project_date.date().toString(Qt.DateFormat.ISODate),
             "description": self.description.toPlainText().strip(),
             "created_at": QDate.currentDate().toString(Qt.DateFormat.ISODate),
+            "water_depth_m": (self.water_depth.value() if self.water_depth.value() > 0 else None),
         }
         self.projectCreationRequested.emit(self.project_metadata)
 
@@ -191,6 +200,7 @@ class WelcomeView(QWidget):
         self.laboratory.clear()
         self.description.clear()
         self.project_date.setDate(QDate.currentDate())
+        self.water_depth.setValue(0.0)
         self.create_button.setEnabled(False)
 
     def get_project_metadata(self) -> dict:

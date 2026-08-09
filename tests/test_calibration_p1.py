@@ -55,6 +55,41 @@ class CalibrationP1Tests(unittest.TestCase):
                 points=[CalibrationPoint(reference_value=0.0, measured_voltage=0.2)],
             )
 
+    def test_negative_sensor_polarity_is_preserved_and_applied(self):
+        record = CalibrationRecord.fit_linear(
+            sensor_id="INV-001",
+            channel=0,
+            sensor_type="inclination",
+            physical_unit="deg",
+            points=[
+                CalibrationPoint(reference_value=0.0, measured_voltage=1.0),
+                CalibrationPoint(reference_value=1.0, measured_voltage=0.0),
+                CalibrationPoint(reference_value=2.0, measured_voltage=-1.0),
+            ],
+        )
+
+        self.assertEqual(record.polarity, "negative")
+        self.assertAlmostEqual(record.sensitivity_v_per_unit, -1.0)
+        self.assertTrue(np.allclose(record.apply(np.array([1.0, 0.0, -1.0])), [0.0, 1.0, 2.0]))
+
+    def test_two_point_transfer_does_not_claim_linearity_assessment(self):
+        record = CalibrationRecord.fit_linear(
+            sensor_id="TWO-POINT",
+            channel=0,
+            sensor_type="force",
+            physical_unit="g",
+            points=[
+                CalibrationPoint(reference_value=0.0, measured_voltage=0.016),
+                CalibrationPoint(reference_value=100.0, measured_voltage=2.016),
+            ],
+        )
+
+        self.assertFalse(record.linearity_assessable)
+        self.assertEqual(
+            record.validity_reason,
+            "two_point_transfer_function_no_linearity_assessment",
+        )
+
     def test_calibration_rejects_non_monotonic_reference_values(self):
         with self.assertRaises(CalibrationError):
             CalibrationRecord.fit_linear(

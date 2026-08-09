@@ -14,7 +14,7 @@ from typing import NamedTuple
 
 import numpy as np
 from scipy.linalg import svd
-from scipy.optimize import fsolve
+from scipy.optimize import brentq
 
 
 @dataclass
@@ -26,15 +26,31 @@ class ProbeGeometry:
     frequency_range: tuple[float, float]  # Plage de fréquences [Hz]
 
     def __post_init__(self):
-        self.positions = np.asarray(self.positions)
+        self.positions = np.asarray(self.positions, dtype=np.float64)
+        if self.positions.ndim != 1 or len(self.positions) < 2:
+            raise ValueError("Au moins deux positions de sonde sont requises")
+        if not np.all(np.isfinite(self.positions)):
+            raise ValueError("Les positions de sonde doivent etre finies")
+        if len(np.unique(self.positions)) != len(self.positions):
+            raise ValueError("Les positions de sonde doivent etre distinctes")
+        if not np.isfinite(self.water_depth) or self.water_depth <= 0:
+            raise ValueError("La profondeur d'eau doit etre strictement positive")
+        frequency_min, frequency_max = map(float, self.frequency_range)
+        if (
+            not np.isfinite(frequency_min)
+            or not np.isfinite(frequency_max)
+            or frequency_min <= 0
+            or frequency_max <= frequency_min
+        ):
+            raise ValueError("La plage de frequences doit verifier 0 < fmin < fmax")
+        self.water_depth = float(self.water_depth)
+        self.frequency_range = (frequency_min, frequency_max)
         self.n_probes = len(self.positions)
         self.geometry_hash = self._compute_hash()
 
     def _compute_hash(self) -> str:
         """Calcule un hash unique pour cette géométrie"""
-        data = np.concatenate(
-            [self.positions.flatten(), [self.water_depth], list(self.frequency_range)]
-        )
+        data = np.concatenate([self.positions.flatten(), [self.water_depth], list(self.frequency_range)])
         return hashlib.md5(data.tobytes()).hexdigest()[:16]
 
 
@@ -49,6 +65,8 @@ class WaveComponents(NamedTuple):
     frequency: float
     wavelength: float
     wave_number: float
+    condition_number: float
+    normalized_residual: float
 
 
 class OptimizedGodaAnalyzer:
@@ -71,13 +89,20 @@ class OptimizedGodaAnalyzer:
             enable_cache: Active le cache des matrices
         """
         self.geometry = geometry
+        if cache_size <= 0:
+            raise ValueError("cache_size doit etre strictement positif")
+        if not np.isfinite(svd_threshold) or not 0 < svd_threshold < 1:
+            raise ValueError("svd_threshold doit etre compris strictement entre 0 et 1")
         self.cache_size = cache_size
         self.svd_threshold = svd_threshold
         self.enable_cache = enable_cache
         self.g = 9.81  # Accélération gravitationnelle [m/s²]
 
         # Cache pour les matrices de géométrie
-        self._matrix_cache: OrderedDict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = OrderedDict()
+        self._matrix_cache: OrderedDict[
+            str,
+            tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+        ] = OrderedDict()
         self._dispersion_cache: dict[float, float] = {}
 
         # Pré-calcul des matrices pour les fréquences communes
@@ -88,8 +113,12 @@ class OptimizedGodaAnalyzer:
         if not self.enable_cache:
             return
 
-        # Fréquences typiques pour l'analyse de houle (0.05 à 2 Hz)
-        common_freqs = np.logspace(np.log10(0.05), np.log10(2.0), 50)
+        frequency_min, frequency_max = self.geometry.frequency_range
+        common_freqs = np.logspace(
+            np.log10(frequency_min),
+            np.log10(frequency_max),
+            50,
+        )
 
         for freq in common_freqs:
             try:
@@ -105,9 +134,7 @@ class OptimizedGodaAnalyzer:
             if len(self._dispersion_cache) >= 256:
                 oldest_key = next(iter(self._dispersion_cache))
                 self._dispersion_cache.pop(oldest_key)
-            self._dispersion_cache[cache_key] = self._solve_dispersion_relation(
-                cache_key
-            )
+            self._dispersion_cache[cache_key] = self._solve_dispersion_relation(cache_key)
         return self._dispersion_cache[cache_key]
 
     def _solve_dispersion_relation(self, omega: float) -> float:
@@ -121,45 +148,39 @@ class OptimizedGodaAnalyzer:
             Nombre d'onde k [rad/m]
         """
 
-        def dispersion_eq(k):
-            return omega**2 - self.g * k * np.tanh(k * self.geometry.water_depth)
+        if not np.isfinite(omega) or omega <= 0:
+            raise ValueError("La pulsation doit etre strictement positive et finie")
 
-        # Estimation initiale basée sur l'approximation eau profonde/peu profonde
-        if omega * np.sqrt(self.geometry.water_depth / self.g) > 2:
-            # Eau profonde: k ≈ ω²/g
-            k_guess = omega**2 / self.g
-        else:
-            # Eau peu profonde: k ≈ ω/√(gh)
-            k_guess = omega / np.sqrt(self.g * self.geometry.water_depth)
+        def dispersion_residual(k: float) -> float:
+            return self.g * k * np.tanh(k * self.geometry.water_depth) - omega**2
 
-        try:
-            k_solution = fsolve(dispersion_eq, k_guess, full_output=True)
-            k = k_solution[0][0]
+        deep_water_estimate = omega**2 / self.g
+        shallow_water_estimate = omega / np.sqrt(self.g * self.geometry.water_depth)
+        upper = max(deep_water_estimate, shallow_water_estimate, 1e-12)
+        while dispersion_residual(upper) <= 0:
+            upper *= 2.0
+            if not np.isfinite(upper):
+                raise ValueError("Impossible d'encadrer la racine de dispersion")
 
-            # Vérification de la convergence
-            if k_solution[2] != 1 or k <= 0:
-                warnings.warn(
-                    f"Convergence douteuse pour ω={omega:.3f} rad/s",
-                    stacklevel=2,
-                )
-                return max(k_guess, 1e-10)
-
-            return max(k, 1e-10)  # Éviter k=0
-
-        except Exception as e:
-            warnings.warn(
-                f"Erreur résolution dispersion pour ω={omega:.3f}: {e}",
-                stacklevel=2,
+        wave_number = float(
+            brentq(
+                dispersion_residual,
+                0.0,
+                upper,
+                xtol=1e-13,
+                rtol=1e-13,
+                maxiter=100,
             )
-            return max(k_guess, 1e-10)
+        )
+        if wave_number <= 0 or not np.isfinite(wave_number):
+            raise ValueError("La relation de dispersion n'a pas produit de racine physique")
+        return wave_number
 
     def _get_matrix_cache_key(self, frequency: float) -> str:
         """Génère une clé de cache pour une fréquence donnée"""
         return f"{self.geometry.geometry_hash}_{frequency:.6f}"
 
-    def _get_geometry_matrix(
-        self, frequency: float
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def _get_geometry_matrix(self, frequency: float) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Construit ou récupère la matrice de géométrie pour une fréquence
 
@@ -192,8 +213,8 @@ class OptimizedGodaAnalyzer:
         # Décomposition SVD pour stabilité numérique
         U, s, Vt = svd(A, full_matrices=False)
 
-        # Filtrage des valeurs singulières trop petites
-        valid_indices = s > self.svd_threshold
+        # Filtrage relatif: le seuil suit l'echelle de la matrice.
+        valid_indices = s > float(np.max(s)) * self.svd_threshold
         U_filtered = U[:, valid_indices]
         s_filtered = s[valid_indices]
         Vt_filtered = Vt[valid_indices, :]
@@ -238,9 +259,7 @@ class OptimizedGodaAnalyzer:
 
         return solution
 
-    def analyze_frequency(
-        self, measurements: np.ndarray, frequency: float
-    ) -> WaveComponents:
+    def analyze_frequency(self, measurements: np.ndarray, frequency: float) -> WaveComponents:
         """
         Analyse une fréquence spécifique avec la méthode Goda optimisée
 
@@ -253,6 +272,12 @@ class OptimizedGodaAnalyzer:
         """
         measurements = np.asarray(measurements, dtype=complex)
 
+        frequency_min, frequency_max = self.geometry.frequency_range
+        if not np.isfinite(frequency) or not frequency_min <= frequency <= frequency_max:
+            raise ValueError(f"Frequence {frequency} Hz hors plage [{frequency_min}, {frequency_max}] Hz")
+        if measurements.ndim != 1 or not np.all(np.isfinite(measurements)):
+            raise ValueError("Les amplitudes complexes des sondes sont invalides")
+
         if len(measurements) != self.geometry.n_probes:
             raise ValueError(
                 f"Nombre de mesures ({len(measurements)}) != nombre de sondes ({self.geometry.n_probes})"
@@ -260,9 +285,15 @@ class OptimizedGodaAnalyzer:
 
         # Récupération de la matrice de géométrie
         A, U, s, Vt = self._get_geometry_matrix(frequency)
+        if len(s) < 2:
+            raise ValueError("Geometrie de sondes singuliere a cette frequence: separation impossible")
 
         # Résolution du système linéaire
         solution = self._solve_wave_components_svd(measurements, U, s, Vt)
+        condition_number = float(np.max(s) / np.min(s))
+        residual_norm = float(np.linalg.norm(A @ solution - measurements))
+        measurement_norm = float(np.linalg.norm(measurements))
+        normalized_residual = residual_norm / measurement_norm if measurement_norm > 0 else 0.0
 
         # Extraction des composantes
         A_incident = solution[0]
@@ -296,11 +327,11 @@ class OptimizedGodaAnalyzer:
             frequency=frequency,
             wavelength=wavelength,
             wave_number=k,
+            condition_number=condition_number,
+            normalized_residual=normalized_residual,
         )
 
-    def analyze_spectrum(
-        self, frequency_spectrum: dict[float, np.ndarray]
-    ) -> dict[float, WaveComponents]:
+    def analyze_spectrum(self, frequency_spectrum: dict[float, np.ndarray]) -> dict[float, WaveComponents]:
         """
         Analyse un spectre complet de fréquences
 
@@ -362,9 +393,7 @@ if __name__ == "__main__":
     probe_positions = [0.5, 0.8, 1.1, 1.4, 1.7, 2.0, 2.3, 2.6]  # 8 sondes
     water_depth = 0.5  # 50 cm
 
-    geometry = ProbeGeometry(
-        positions=probe_positions, water_depth=water_depth, frequency_range=(0.1, 1.5)
-    )
+    geometry = ProbeGeometry(positions=probe_positions, water_depth=water_depth, frequency_range=(0.1, 1.5))
 
     analyzer = OptimizedGodaAnalyzer(geometry)
 
@@ -374,9 +403,7 @@ if __name__ == "__main__":
 
     # Génération de données test
     np.random.seed(42)
-    test_measurements = np.random.randn(len(probe_positions)) + 1j * np.random.randn(
-        len(probe_positions)
-    )
+    test_measurements = np.random.randn(len(probe_positions)) + 1j * np.random.randn(len(probe_positions))
 
     # Benchmark
     start_time = time.time()

@@ -45,6 +45,7 @@ class AcquisitionControllerTests(unittest.TestCase):
                 range_volts=10.0,
                 sensor_sensitivity=2.0,
                 physical_units="m",
+                probe_position_m=0.4,
             )
         )
 
@@ -61,6 +62,33 @@ class AcquisitionControllerTests(unittest.TestCase):
             )
         )
 
+    def test_rejects_non_finite_scientific_parameters(self):
+        self.assertFalse(
+            self.controller.configure_maritime_channel(
+                1,
+                "wave_height",
+                "Sonde invalide",
+                sensor_sensitivity=float("nan"),
+                probe_position_m=0.8,
+            )
+        )
+        self.assertFalse(
+            self.controller.start_acquisition_session(
+                "bad_rate",
+                sampling_rate=float("nan"),
+                duration_seconds=0.1,
+                channels=[0],
+            )
+        )
+        self.assertFalse(
+            self.controller.start_acquisition_session(
+                "bad_duration",
+                sampling_rate=100.0,
+                duration_seconds=float("inf"),
+                channels=[0],
+            )
+        )
+
     def test_hardware_scan_can_be_deferred_until_operator_request(self):
         calls = []
         controller = AcquisitionController(
@@ -74,6 +102,36 @@ class AcquisitionControllerTests(unittest.TestCase):
             self.assertEqual(calls, ["scan"])
         finally:
             controller.close()
+
+    def test_scientific_geometry_is_stored_in_session_contract(self):
+        self.assertEqual(
+            self.controller.get_channel_configuration(0)["probe_position_m"],
+            0.4,
+        )
+        self.assertTrue(
+            self.controller.start_acquisition_session(
+                "geometry",
+                sampling_rate=100,
+                duration_seconds=0.1,
+                channels=[0],
+                water_depth_m=0.8,
+            )
+        )
+        self.controller.acquisition_thread.join(timeout=2)
+
+        self.assertEqual(self.controller.current_session.metadata["water_depth_m"], 0.8)
+        self.assertEqual(self.controller.current_session.channels[0].probe_position_m, 0.4)
+
+    def test_rejects_non_physical_water_depth(self):
+        self.assertFalse(
+            self.controller.start_acquisition_session(
+                "bad_depth",
+                sampling_rate=100,
+                duration_seconds=0.1,
+                channels=[0],
+                water_depth_m=0.0,
+            )
+        )
 
     def test_simulation_respects_configured_rate(self):
         started = time.monotonic()
@@ -137,9 +195,7 @@ class AcquisitionControllerTests(unittest.TestCase):
 
     def test_continuous_recorder_receives_every_acquired_sample(self):
         recorder = FakeRecorder()
-        controller = AcquisitionController(
-            board_scanner=lambda: [], recorder_factory=lambda: recorder
-        )
+        controller = AcquisitionController(board_scanner=lambda: [], recorder_factory=lambda: recorder)
         try:
             self.assertTrue(
                 controller.configure_maritime_channel(

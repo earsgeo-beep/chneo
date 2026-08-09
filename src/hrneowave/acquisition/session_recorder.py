@@ -15,6 +15,7 @@ from typing import Any
 import numpy as np
 
 from hrneowave import __version__
+from hrneowave.core.session_schema import build_channel_metadata
 
 
 class RecordingError(RuntimeError):
@@ -56,9 +57,7 @@ class ContinuousHDF5Recorder:
         try:
             import h5py
         except ImportError as exc:
-            raise RecordingError(
-                "h5py est requis pour securiser l'acquisition sur disque"
-            ) from exc
+            raise RecordingError("h5py est requis pour securiser l'acquisition sur disque") from exc
 
         path = Path(file_path).expanduser().resolve()
         if path.suffix.lower() not in {".h5", ".hdf5"}:
@@ -96,6 +95,7 @@ class ContinuousHDF5Recorder:
             calibration = metadata.create_group("calibration")
             processed_group = handle.create_group("acquisition_data")
             raw_group = handle.create_group("raw_voltage")
+            channel_contracts = {item["key"]: item for item in build_channel_metadata(session.channels)}
 
             processed_group.create_dataset(
                 "time",
@@ -138,6 +138,9 @@ class ContinuousHDF5Recorder:
                 channel_group.attrs["voltage_unit"] = channel.units
                 channel_group.attrs["input_range"] = channel.range_type.name
                 channel_group.attrs["sensor_sensitivity"] = float(channel.sensor_sensitivity)
+                for name, value in channel_contracts[key].items():
+                    if value is not None:
+                        channel_group.attrs[name] = self._attribute_value(value)
 
                 calibration_group = calibration.create_group(key)
                 calibration_group.attrs["offset"] = float(channel.calibration_offset)
@@ -170,9 +173,7 @@ class ContinuousHDF5Recorder:
         if raw.shape != processed.shape:
             raise RecordingError("Les blocs brut et physique n'ont pas la meme forme")
         if raw.shape[1] != expected_channels:
-            raise RecordingError(
-                f"Bloc de {raw.shape[1]} canaux recu, {expected_channels} attendus"
-            )
+            raise RecordingError(f"Bloc de {raw.shape[1]} canaux recu, {expected_channels} attendus")
         if raw.shape[0] == 0:
             return
 
@@ -225,19 +226,12 @@ class ContinuousHDF5Recorder:
         try:
             expected_samples = session.metadata.get("expected_samples")
             counters_are_clean = not any(
-                int(statistics.get(key, 0))
-                for key in ("errors", "buffer_overruns", "recording_errors")
+                int(statistics.get(key, 0)) for key in ("errors", "buffer_overruns", "recording_errors")
             )
-            sample_count_is_valid = (
-                expected_samples is None or int(expected_samples) == self.sample_count
-            )
-            recording_status = (
-                "complete" if counters_are_clean and sample_count_is_valid else "error"
-            )
+            sample_count_is_valid = expected_samples is None or int(expected_samples) == self.sample_count
+            recording_status = "complete" if counters_are_clean and sample_count_is_valid else "error"
             session_group = self._file["metadata/session"]
-            session_group.attrs["end_time"] = (
-                session.end_time.isoformat() if session.end_time else ""
-            )
+            session_group.attrs["end_time"] = session.end_time.isoformat() if session.end_time else ""
             session_group.attrs["total_samples"] = int(self.sample_count)
             self._file.attrs["n_samples"] = int(self.sample_count)
             self._file.attrs["recording_status"] = recording_status
@@ -247,13 +241,9 @@ class ContinuousHDF5Recorder:
                 self._file.attrs["recording_error"] = (
                     f"Nombre d'echantillons incomplet: {self.sample_count}/{expected_samples}"
                 )
-            self._file.attrs["completed_at"] = (
-                session.end_time.isoformat() if session.end_time else ""
-            )
+            self._file.attrs["completed_at"] = session.end_time.isoformat() if session.end_time else ""
             self._file.attrs["errors"] = int(statistics.get("errors", 0))
-            self._file.attrs["buffer_overruns"] = int(
-                statistics.get("buffer_overruns", 0)
-            )
+            self._file.attrs["buffer_overruns"] = int(statistics.get("buffer_overruns", 0))
             self.flush()
         finally:
             self._close_handle()
@@ -318,9 +308,7 @@ def inspect_recording(file_path: str | Path) -> dict[str, Any]:
                 sample_rate = 0.0
                 lengths: dict[str, int] = {}
             else:
-                channel_keys = sorted(
-                    key for key in processed_group.keys() if key.startswith("channel_")
-                )
+                channel_keys = sorted(key for key in processed_group.keys() if key.startswith("channel_"))
                 raw_keys = sorted(key for key in raw_group.keys() if key.startswith("channel_"))
                 sample_rate = float(session_group.attrs.get("sample_rate", 0.0))
                 lengths = {key: int(processed_group[key].shape[0]) for key in channel_keys}
@@ -353,18 +341,12 @@ def inspect_recording(file_path: str | Path) -> dict[str, Any]:
                 "file": str(path),
                 "recording_status": status,
                 "format_version": str(handle.attrs.get("format_version", "unknown")),
-                "session_id": str(
-                    session_group.attrs.get("session_id", "") if session_group else ""
-                ),
-                "project_name": str(
-                    session_group.attrs.get("project_name", "") if session_group else ""
-                ),
+                "session_id": str(session_group.attrs.get("session_id", "") if session_group else ""),
+                "project_name": str(session_group.attrs.get("project_name", "") if session_group else ""),
                 "sample_rate": sample_rate,
                 "n_channels": len(channel_keys),
                 "n_samples": declared_samples,
-                "duration_seconds": (
-                    declared_samples / sample_rate if sample_rate > 0 else None
-                ),
+                "duration_seconds": (declared_samples / sample_rate if sample_rate > 0 else None),
                 "errors": errors,
                 "buffer_overruns": overruns,
                 "channel_lengths": lengths,

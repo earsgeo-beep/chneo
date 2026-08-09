@@ -280,6 +280,7 @@ class MainWindow(QMainWindow):
                 description=description,
                 author=manager,
                 tags=[laboratory] if laboratory else [],
+                water_depth=float(metadata.get("water_depth_m") or 0.0),
             )
             if not self.project_manager.load_project(project_id):
                 raise RuntimeError("Le projet cree n'a pas pu etre recharge.")

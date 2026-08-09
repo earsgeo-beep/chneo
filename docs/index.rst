@@ -19,6 +19,7 @@ Le depot ne doit plus etre lu comme un prototype web ni comme une release autono
    technical_guide
    mcc_first_test
    data_analysis
+   scientific_processing_v2
    interface_design
 
 .. toctree::

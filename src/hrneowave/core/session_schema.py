@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import json
 import math
-from typing import Any, Dict, Iterable, Mapping, Optional
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 from hrneowave.core.calibration import CONVERSION_FORMULA, HARDWARE_VALIDATION_PENDING
 
@@ -45,7 +46,7 @@ CSV_METADATA_COLUMNS = {
 }
 
 
-def _calibration_record_to_dict(value: Any) -> Optional[Dict[str, Any]]:
+def _calibration_record_to_dict(value: Any) -> dict[str, Any] | None:
     if value is None:
         return None
     if hasattr(value, "to_dict"):
@@ -55,7 +56,7 @@ def _calibration_record_to_dict(value: Any) -> Optional[Dict[str, Any]]:
     return None
 
 
-def coerce_float(value: Any) -> Optional[float]:
+def coerce_float(value: Any) -> float | None:
     """Return a finite float if possible, otherwise None."""
     if value is None:
         return None
@@ -83,7 +84,7 @@ def coerce_float(value: Any) -> Optional[float]:
     return numeric
 
 
-def extract_sample_rate(*containers: Optional[Mapping[str, Any]]) -> Optional[float]:
+def extract_sample_rate(*containers: Mapping[str, Any] | None) -> float | None:
     """Extract a positive sample rate from known metadata keys."""
     for container in containers:
         if not container:
@@ -95,7 +96,7 @@ def extract_sample_rate(*containers: Optional[Mapping[str, Any]]) -> Optional[fl
     return None
 
 
-def require_sample_rate(*containers: Optional[Mapping[str, Any]]) -> float:
+def require_sample_rate(*containers: Mapping[str, Any] | None) -> float:
     """Extract a positive sample rate or fail loudly."""
     sample_rate = extract_sample_rate(*containers)
     if sample_rate is None:
@@ -103,7 +104,7 @@ def require_sample_rate(*containers: Optional[Mapping[str, Any]]) -> float:
     return sample_rate
 
 
-def build_channel_metadata(channels: Iterable[Any]) -> list[Dict[str, Any]]:
+def build_channel_metadata(channels: Iterable[Any]) -> list[dict[str, Any]]:
     """Normalize channel configuration objects into serializable metadata."""
     channel_metadata = []
     for index, channel in enumerate(channels):
@@ -129,7 +130,9 @@ def build_channel_metadata(channels: Iterable[Any]) -> list[Dict[str, Any]]:
             or getattr(channel, "calibration_id", None)
             or f"unverified_channel_{channel_number:02d}"
         )
-        calibration_date = (calibration_record or {}).get("date_utc") or getattr(channel, "calibration_date", None)
+        calibration_date = (calibration_record or {}).get("date_utc") or getattr(
+            channel, "calibration_date", None
+        )
         calibration_method = (
             (calibration_record or {}).get("method")
             or getattr(channel, "calibration_method", None)
@@ -145,32 +148,35 @@ def build_channel_metadata(channels: Iterable[Any]) -> list[Dict[str, Any]]:
             "scale": float(getattr(channel, "calibration_scale", 1.0)),
             "sensitivity_v_per_unit": float(getattr(channel, "sensor_sensitivity", 1.0)),
         }
-        channel_metadata.append({
-            "channel": channel_number,
-            "key": f"channel_{channel_number:02d}",
-            "label": getattr(channel, "label", f"Channel {channel_number}"),
-            "sensor_id": getattr(channel, "sensor_id", None) or f"sensor_channel_{channel_number:02d}",
-            "sensor_type": getattr(channel, "sensor_type", "unknown"),
-            "voltage_units": getattr(channel, "units", "V"),
-            "physical_units": getattr(channel, "physical_units", ""),
-            "range": range_name,
-            "sensor_sensitivity": float(getattr(channel, "sensor_sensitivity", 1.0)),
-            "calibration_offset": float(getattr(channel, "calibration_offset", 0.0)),
-            "calibration_scale": float(getattr(channel, "calibration_scale", 1.0)),
-            "calibration_id": calibration_id,
-            "calibration_date": calibration_date,
-            "calibration_method": calibration_method,
-            "calibration_uncertainty": calibration_uncertainty,
-            "calibration_status": calibration_status,
-            "calibration_coefficients": coefficients,
-            "conversion_formula": CONVERSION_FORMULA,
-            "calibration_record": calibration_record,
-            "hardware_validation_status": (calibration_record or {}).get(
-                "hardware_validation_status",
-                HARDWARE_VALIDATION_PENDING,
-            ),
-            "enabled": bool(getattr(channel, "enabled", True)),
-        })
+        channel_metadata.append(
+            {
+                "channel": channel_number,
+                "key": f"channel_{channel_number:02d}",
+                "label": getattr(channel, "label", f"Channel {channel_number}"),
+                "sensor_id": getattr(channel, "sensor_id", None) or f"sensor_channel_{channel_number:02d}",
+                "sensor_type": getattr(channel, "sensor_type", "unknown"),
+                "probe_position_m": getattr(channel, "probe_position_m", None),
+                "voltage_units": getattr(channel, "units", "V"),
+                "physical_units": getattr(channel, "physical_units", ""),
+                "range": range_name,
+                "sensor_sensitivity": float(getattr(channel, "sensor_sensitivity", 1.0)),
+                "calibration_offset": float(getattr(channel, "calibration_offset", 0.0)),
+                "calibration_scale": float(getattr(channel, "calibration_scale", 1.0)),
+                "calibration_id": calibration_id,
+                "calibration_date": calibration_date,
+                "calibration_method": calibration_method,
+                "calibration_uncertainty": calibration_uncertainty,
+                "calibration_status": calibration_status,
+                "calibration_coefficients": coefficients,
+                "conversion_formula": CONVERSION_FORMULA,
+                "calibration_record": calibration_record,
+                "hardware_validation_status": (calibration_record or {}).get(
+                    "hardware_validation_status",
+                    HARDWARE_VALIDATION_PENDING,
+                ),
+                "enabled": bool(getattr(channel, "enabled", True)),
+            }
+        )
     return channel_metadata
 
 
@@ -178,10 +184,10 @@ def build_session_metadata(
     session: Any,
     *,
     hardware_available: bool,
-    sample_count: Optional[int] = None,
-) -> Dict[str, Any]:
+    sample_count: int | None = None,
+) -> dict[str, Any]:
     """Build session metadata shared by all export formats."""
-    sample_rate = float(getattr(session, "sampling_rate"))
+    sample_rate = float(session.sampling_rate)
     n_samples = int(sample_count if sample_count is not None else getattr(session, "total_samples", 0))
     dt_seconds = 1.0 / sample_rate
     metadata = {
@@ -197,10 +203,8 @@ def build_session_metadata(
         "clock_domain": CLOCK_DOMAIN,
         "project_name": getattr(session, "project_name", ""),
         "session_id": getattr(session, "session_id", ""),
-        "start_time": getattr(session, "start_time").isoformat(),
-        "end_time": getattr(session, "end_time").isoformat()
-        if getattr(session, "end_time", None)
-        else None,
+        "start_time": session.start_time.isoformat(),
+        "end_time": session.end_time.isoformat() if getattr(session, "end_time", None) else None,
         "total_samples": int(getattr(session, "total_samples", 0)),
         "channels_count": len(getattr(session, "channels", [])),
         "hardware_available": bool(hardware_available),
@@ -209,15 +213,19 @@ def build_session_metadata(
         else "hardware_available_unvalidated",
     }
     if getattr(session, "metadata", None):
-        metadata.update(session.metadata)
+        for key, value in session.metadata.items():
+            # Canonical timing and integrity fields above cannot be overridden
+            # by optional project/session context.
+            if key not in metadata:
+                metadata[key] = value
     return metadata
 
 
 def build_csv_metadata_row(
     sample_rate: float,
     data_kind: str = DATA_KIND_PHYSICAL,
-    sample_count: Optional[int] = None,
-) -> Dict[str, Any]:
+    sample_count: int | None = None,
+) -> dict[str, Any]:
     """Metadata columns repeated per CSV row for self-describing tabular export."""
     n_samples = int(sample_count or 0)
     dt_seconds = 1.0 / float(sample_rate)

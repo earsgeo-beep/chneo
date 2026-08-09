@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from PySide6.QtCore import Signal
@@ -217,6 +218,13 @@ class AnalysisResultsArea(QFrame):
         self.spectrum_figure = Figure(figsize=(7, 4), tight_layout=True)
         self.spectrum_canvas = FigureCanvas(self.spectrum_figure)
         self.tab_widget.addTab(self.spectrum_canvas, "Spectres")
+
+        self.separation_figure = Figure(figsize=(7, 4), tight_layout=True)
+        self.separation_canvas = FigureCanvas(self.separation_figure)
+        self.tab_widget.addTab(
+            self.separation_canvas,
+            "Incidente / réfléchie",
+        )
 
         self.report_text = QTextEdit()
         self.report_text.setReadOnly(True)
@@ -464,6 +472,8 @@ class AnalysisView(QWidget):
         self.results_area.wave_table.setRowCount(0)
         self.results_area.spectrum_figure.clear()
         self.results_area.spectrum_canvas.draw_idle()
+        self.results_area.separation_figure.clear()
+        self.results_area.separation_canvas.draw_idle()
         self.results_area.report_text.clear()
         self.results_area.update_analysis_status("Pret", 0)
 
@@ -552,12 +562,11 @@ class AnalysisView(QWidget):
                 self.results_area.wave_table.setItem(row, col, QTableWidgetItem(str(value)))
 
         self._update_spectrum_plot()
+        self._update_separation_plot()
 
         self.results_area.report_text.setPlainText(self._build_report_text())
 
     def _update_spectrum_plot(self) -> None:
-        import numpy as np
-
         spectral = (self.current_analysis_result or {}).get("spectral_analysis", {})
         figure = self.results_area.spectrum_figure
         figure.clear()
@@ -587,6 +596,70 @@ class AnalysisView(QWidget):
             axis.legend(loc="best", frameon=False, fontsize=8)
         self.results_area.spectrum_canvas.draw_idle()
 
+    def _update_separation_plot(self) -> None:
+        separation = (self.current_analysis_result or {}).get(
+            "incident_reflected_analysis",
+            {},
+        )
+        figure = self.results_area.separation_figure
+        figure.clear()
+        axis = figure.add_subplot(111)
+        figure.set_facecolor("#FFFFFF")
+        axis.set_facecolor("#FFFFFF")
+        if separation.get("status") == "complete":
+            frequencies = np.asarray(separation.get("frequencies", []), dtype=float)
+            incident = np.asarray(separation.get("incident_psd", []), dtype=float)
+            reflected = np.asarray(separation.get("reflected_psd", []), dtype=float)
+            valid = np.asarray(
+                separation.get("valid_frequency_mask", []),
+                dtype=bool,
+            )
+            if len(valid) == len(frequencies):
+                axis.semilogy(
+                    frequencies[valid],
+                    incident[valid],
+                    color="#1A7188",
+                    linewidth=1.5,
+                    label="Incidente",
+                )
+                axis.semilogy(
+                    frequencies[valid],
+                    reflected[valid],
+                    color="#C47B18",
+                    linewidth=1.5,
+                    label="Réfléchie",
+                )
+                axis.legend(frameon=False, loc="best")
+            axis.set_title(
+                "Coefficient de réflexion énergétique "
+                f"Kr = {separation.get('energy_reflection_coefficient', 0):.4f}",
+                color="#203843",
+            )
+        else:
+            axis.text(
+                0.5,
+                0.5,
+                separation.get(
+                    "reason",
+                    "Configurez au moins trois sondes, leurs positions et la profondeur d'eau.",
+                ),
+                ha="center",
+                va="center",
+                wrap=True,
+                color="#667C88",
+                transform=axis.transAxes,
+            )
+        axis.set_xlabel("Fréquence (Hz)", color="#405965")
+        physical_unit = separation.get("physical_unit", "unité")
+        axis.set_ylabel(f"Densité spectrale ({physical_unit}²/Hz)", color="#405965")
+        axis.tick_params(colors="#667C88", labelsize=9)
+        axis.grid(True, which="both", color="#DCE5EA", linewidth=0.7, alpha=0.8)
+        axis.spines["top"].set_visible(False)
+        axis.spines["right"].set_visible(False)
+        axis.spines["bottom"].set_color("#B7C6CD")
+        axis.spines["left"].set_color("#B7C6CD")
+        self.results_area.separation_canvas.draw_idle()
+
     def _build_report_text(self) -> str:
         results = self.current_analysis_result or {}
         basic_stats = results.get("basic_stats", {})
@@ -594,6 +667,7 @@ class AnalysisView(QWidget):
         waves = results.get("wave_parameters", {})
         quality = results.get("quality", {})
         cross_spectral = results.get("cross_spectral_analysis", {})
+        separation = results.get("incident_reflected_analysis", {})
 
         lines = ["Rapport d'analyse CHNeoWave"]
         if self.current_data_file:
@@ -630,5 +704,20 @@ class AnalysisView(QWidget):
                     f"  {pair}: coherence={metrics.get('coherence_at_reference_peak', 0):.4f}, "
                     f"phase={metrics.get('phase_at_reference_peak_degrees', 0):.2f} deg"
                 )
+
+        if separation.get("status") == "complete":
+            separation_unit = separation.get("physical_unit", "unité")
+            lines.extend(
+                [
+                    "",
+                    "Separation multi-sondes incidente/reflechie",
+                    f"  sondes: {separation.get('probe_count', 0)}",
+                    f"  profondeur: {separation.get('configuration', {}).get('water_depth_m', 0):.6g} m",
+                    f"  Hm0 incident: {separation.get('incident_Hm0', 0):.6f} {separation_unit}",
+                    f"  Hm0 reflechi: {separation.get('reflected_Hm0', 0):.6f} {separation_unit}",
+                    "  coefficient de reflexion energetique Kr: "
+                    f"{separation.get('energy_reflection_coefficient', 0):.6f}",
+                ]
+            )
 
         return "\n".join(lines).strip()
