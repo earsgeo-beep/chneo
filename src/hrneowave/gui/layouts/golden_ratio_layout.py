@@ -91,7 +91,11 @@ class GoldenRatioLayout(QLayout):
     
     def sizeHint(self) -> QSize:
         """Calcule la taille recommandée"""
-        if not self._items:
+        valid_items = [
+            item for item in self._items
+            if item is not None and (not hasattr(item, "widget") or item.widget() is not None)
+        ]
+        if not valid_items:
             return QSize(0, 0)
         
         total_width = 0
@@ -99,21 +103,29 @@ class GoldenRatioLayout(QLayout):
         
         if self._orientation == Qt.Horizontal:
             max_height = 0
-            for item in self._items:
-                size = item.sizeHint()
-                total_width += size.width()
-                max_height = max(max_height, size.height())
+            for item in valid_items:
+                try:
+                    size = item.sizeHint()
+                    if size.isValid():
+                        total_width += size.width()
+                        max_height = max(max_height, size.height())
+                except Exception:
+                    continue
             
-            total_width += self._spacing * (len(self._items) - 1)
+            total_width += self._spacing * max(0, len(valid_items) - 1)
             total_height = max_height
         else:
             max_width = 0
-            for item in self._items:
-                size = item.sizeHint()
-                total_height += size.height()
-                max_width = max(max_width, size.width())
+            for item in valid_items:
+                try:
+                    size = item.sizeHint()
+                    if size.isValid():
+                        total_height += size.height()
+                        max_width = max(max_width, size.width())
+                except Exception:
+                    continue
             
-            total_height += self._spacing * (len(self._items) - 1)
+            total_height += self._spacing * max(0, len(valid_items) - 1)
             total_width = max_width
         
         # Ajouter les marges
@@ -121,11 +133,15 @@ class GoldenRatioLayout(QLayout):
         total_width += margins.left() + margins.right()
         total_height += margins.top() + margins.bottom()
         
-        return QSize(total_width, total_height)
+        return QSize(max(0, total_width), max(0, total_height))
     
     def minimumSize(self) -> QSize:
         """Calcule la taille minimale"""
-        if not self._items:
+        valid_items = [
+            item for item in self._items
+            if item is not None and (not hasattr(item, "widget") or item.widget() is not None)
+        ]
+        if not valid_items:
             return QSize(0, 0)
         
         total_width = 0
@@ -133,21 +149,29 @@ class GoldenRatioLayout(QLayout):
         
         if self._orientation == Qt.Horizontal:
             max_height = 0
-            for item in self._items:
-                size = item.minimumSize()
-                total_width += size.width()
-                max_height = max(max_height, size.height())
+            for item in valid_items:
+                try:
+                    size = item.minimumSize()
+                    if size.isValid():
+                        total_width += size.width()
+                        max_height = max(max_height, size.height())
+                except Exception:
+                    continue
             
-            total_width += self._spacing * (len(self._items) - 1)
+            total_width += self._spacing * max(0, len(valid_items) - 1)
             total_height = max_height
         else:
             max_width = 0
-            for item in self._items:
-                size = item.minimumSize()
-                total_height += size.height()
-                max_width = max(max_width, size.width())
+            for item in valid_items:
+                try:
+                    size = item.minimumSize()
+                    if size.isValid():
+                        total_height += size.height()
+                        max_width = max(max_width, size.width())
+                except Exception:
+                    continue
             
-            total_height += self._spacing * (len(self._items) - 1)
+            total_height += self._spacing * max(0, len(valid_items) - 1)
             total_width = max_width
         
         # Ajouter les marges
@@ -155,7 +179,7 @@ class GoldenRatioLayout(QLayout):
         total_width += margins.left() + margins.right()
         total_height += margins.top() + margins.bottom()
         
-        return QSize(total_width, total_height)
+        return QSize(max(0, total_width), max(0, total_height))
     
     def setGeometry(self, rect: QRect):
         """Positionne les éléments selon les proportions dorées"""
