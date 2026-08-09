@@ -5,12 +5,14 @@ import logging
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QPushButton,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -31,6 +33,8 @@ logger = logging.getLogger(__name__)
 
 class ApplicationHeader(QFrame):
     """Stable page context bar; navigation remains solely in the sidebar."""
+
+    sidebar_toggle_requested = Signal()
 
     PAGE_CONTEXT = {
         "welcome": (
@@ -74,6 +78,13 @@ class ApplicationHeader(QFrame):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(24, 10, 24, 10)
         layout.setSpacing(14)
+
+        self.sidebar_toggle_button = QPushButton("←")
+        self.sidebar_toggle_button.setObjectName("sidebarToggleButton")
+        self.sidebar_toggle_button.setFixedSize(36, 36)
+        self.sidebar_toggle_button.setToolTip("Replier la navigation (F9)")
+        self.sidebar_toggle_button.clicked.connect(self.sidebar_toggle_requested.emit)
+        layout.addWidget(self.sidebar_toggle_button, 0, Qt.AlignmentFlag.AlignVCenter)
 
         title_stack = QVBoxLayout()
         title_stack.setSpacing(1)
@@ -127,6 +138,9 @@ class MainWindow(QMainWindow):
         self._install_contextual_help()
 
         self.sidebar.navigation_requested.connect(self._on_navigation_requested)
+        self.application_header.sidebar_toggle_requested.connect(self._toggle_sidebar)
+        self.sidebar_shortcut = QShortcut(QKeySequence("F9"), self)
+        self.sidebar_shortcut.activated.connect(self._toggle_sidebar)
 
         self.show()
         self.raise_()
@@ -143,7 +157,6 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(0)
 
         self.sidebar = MainSidebar()
-        self.sidebar.setFixedWidth(248)
         main_layout.addWidget(self.sidebar)
 
         content_widget = QWidget()
@@ -204,6 +217,7 @@ class MainWindow(QMainWindow):
         install_help_on_widget(self.sidebar, "navigation-sidebar")
 
     def _wire_runtime_flow(self) -> None:
+        calibration_view = self.view_manager.get_view_widget("calibration")
         acquisition_view = self.view_manager.get_view_widget("acquisition")
         analysis_view = self.view_manager.get_view_widget("analysis")
         dashboard_view = self.view_manager.get_view_widget("dashboard")
@@ -212,6 +226,14 @@ class MainWindow(QMainWindow):
             acquisition_view.data_exported.connect(self._on_data_exported)
         if acquisition_view and hasattr(acquisition_view, "calibration_completed"):
             acquisition_view.calibration_completed.connect(self._on_calibration_completed)
+        if acquisition_view and hasattr(acquisition_view, "calibration_requested"):
+            acquisition_view.calibration_requested.connect(
+                lambda: self._on_navigation_requested("calibration")
+            )
+        if acquisition_view and hasattr(acquisition_view, "hardware_state_changed"):
+            acquisition_view.hardware_state_changed.connect(self.sidebar.update_connection_status)
+        if calibration_view and hasattr(calibration_view, "calibration_completed"):
+            calibration_view.calibration_completed.connect(self._on_calibration_completed)
         if analysis_view and hasattr(analysis_view, "analysis_completed"):
             analysis_view.analysis_completed.connect(self._on_analysis_completed)
         if dashboard_view and hasattr(dashboard_view, "navigation_requested"):
@@ -236,6 +258,14 @@ class MainWindow(QMainWindow):
 
     def _update_header_for_view(self, view_name: str) -> None:
         self.application_header.set_view(view_name)
+
+    def _toggle_sidebar(self) -> None:
+        collapsed = not self.sidebar.is_collapsed
+        self.sidebar.collapse_sidebar(collapsed)
+        self.application_header.sidebar_toggle_button.setText("☰" if collapsed else "←")
+        self.application_header.sidebar_toggle_button.setToolTip(
+            "Ouvrir la navigation (F9)" if collapsed else "Replier la navigation (F9)"
+        )
 
     def _handle_project_creation(self, project_metadata=None) -> None:
         metadata = dict(project_metadata or {})
@@ -296,7 +326,27 @@ class MainWindow(QMainWindow):
     @Slot(dict)
     def _on_calibration_completed(self, payload: dict) -> None:
         channels = payload.get("channels", {})
-        show_info("Calibration", f"Calibration terminee sur {len(channels)} canaux")
+        record_payload = payload.get("record")
+        acquisition_view = self.view_manager.get_view_widget("acquisition")
+        registered = False
+        if (
+            record_payload
+            and acquisition_view
+            and hasattr(
+                acquisition_view,
+                "register_calibration_record",
+            )
+        ):
+            registered = acquisition_view.register_calibration_record(record_payload)
+
+        channel_number = int(payload.get("channel", 0)) + 1
+        if registered:
+            show_success(
+                "Calibration",
+                f"Canal {channel_number} validé et transmis à l'acquisition.",
+            )
+        else:
+            show_info("Calibration", f"Calibration reçue sur {len(channels)} canal(aux)")
 
     @Slot(StatusLevel)
     def _on_system_status_updated(self, status_level) -> None:

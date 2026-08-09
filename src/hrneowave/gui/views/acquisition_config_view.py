@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QFrame,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -32,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from ...acquisition.acquisition_controller import AcquisitionController, create_default_maritime_config
+from ...core.calibration import CalibrationRecord
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +43,9 @@ class AcquisitionConfigView(QWidget):
 
     data_exported = Signal(str)
     calibration_completed = Signal(dict)
+    calibration_requested = Signal()
     data_block_received = Signal(object, object)
+    hardware_state_changed = Signal(bool, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -49,6 +53,8 @@ class AcquisitionConfigView(QWidget):
         self.update_timer = QTimer(self)
         self.project_metadata: dict[str, Any] = {}
         self.project_dir: Path | None = None
+        self._hardware_state = "not_scanned"
+        self.calibration_records: dict[int, CalibrationRecord] = {}
 
         self._build_ui()
         self._setup_connections()
@@ -103,43 +109,72 @@ class AcquisitionConfigView(QWidget):
         self.load_config_btn = QPushButton("Charger config")
         self.save_config_btn = QPushButton("Sauver config")
         self.reset_config_btn = QPushButton("Reset")
-        self.test_connection_btn = QPushButton("Test connexion")
         for button in (
             self.load_config_btn,
             self.save_config_btn,
             self.reset_config_btn,
-            self.test_connection_btn,
         ):
             button.setProperty("kind", "secondary")
         buttons_layout.addWidget(self.load_config_btn)
         buttons_layout.addWidget(self.save_config_btn)
         buttons_layout.addWidget(self.reset_config_btn)
         buttons_layout.addStretch()
-        buttons_layout.addWidget(self.test_connection_btn)
         layout.addLayout(buttons_layout)
         return widget
 
     def _create_hardware_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(12)
 
-        detection_group = QGroupBox("Detection du materiel")
-        detection_layout = QFormLayout(detection_group)
+        summary = QFrame()
+        summary.setObjectName("quietSurface")
+        summary_layout = QHBoxLayout(summary)
+        summary_layout.setContentsMargins(14, 10, 14, 10)
+        summary_text = QVBoxLayout()
+        summary_text.setSpacing(1)
+        summary_title = QLabel("Panneau matériel MCC")
+        summary_title.setObjectName("sectionTitle")
+        self.hardware_summary_label = QLabel(
+            "Lancez un scan USB pour vérifier ensemble la carte et la Universal Library."
+        )
+        self.hardware_summary_label.setObjectName("mutedText")
+        self.hardware_summary_label.setWordWrap(True)
+        summary_text.addWidget(summary_title)
+        summary_text.addWidget(self.hardware_summary_label)
+        summary_layout.addLayout(summary_text, 1)
+
+        detection_group = QGroupBox("Détection et sélection")
+        detection_layout = QGridLayout(detection_group)
         self.board_combo = QComboBox()
-        self.scan_boards_btn = QPushButton("Scanner les cartes")
-        self.scan_boards_btn.setProperty("kind", "secondary")
-        detection_layout.addRow("Carte selectionnee:", self.board_combo)
-        detection_layout.addRow("", self.scan_boards_btn)
+        self.scan_boards_btn = QPushButton("Scanner l'USB")
+        self.scan_boards_btn.setProperty("kind", "primaryLarge")
+        self.test_connection_btn = QPushButton("Valider le fonctionnement")
+        self.test_connection_btn.setProperty("kind", "secondary")
+        detection_layout.addWidget(QLabel("Carte sélectionnée"), 0, 0)
+        detection_layout.addWidget(self.board_combo, 0, 1, 1, 2)
+        detection_layout.addWidget(self.scan_boards_btn, 1, 1)
+        detection_layout.addWidget(self.test_connection_btn, 1, 2)
+        detection_layout.setColumnStretch(1, 1)
+        detection_layout.setColumnStretch(2, 1)
 
-        info_group = QGroupBox("Informations carte")
+        info_group = QGroupBox("État technique cohérent")
         info_layout = QFormLayout(info_group)
-        self.board_name_label = QLabel("Non detectee")
-        self.dll_path_label = QLabel("Non trouve")
-        self.version_label = QLabel("Inconnue")
-        info_layout.addRow("Nom:", self.board_name_label)
-        info_layout.addRow("DLL:", self.dll_path_label)
-        info_layout.addRow("Version:", self.version_label)
+        self.board_name_label = QLabel("Non scannée")
+        self.backend_label = QLabel("MCC Universal Library locale (mcculw)")
+        self.discovery_mode_label = QLabel("USB directe · configuration InstaCal ignorée")
+        self.driver_status_label = QLabel("Non vérifié")
+        self.operation_mode_label = QLabel("En attente du scan")
+        self.last_hardware_check_label = QLabel("Aucun contrôle effectué")
+        info_layout.addRow("Périphérique", self.board_name_label)
+        info_layout.addRow("Backend", self.backend_label)
+        info_layout.addRow("Détection", self.discovery_mode_label)
+        info_layout.addRow("Pilote MCC", self.driver_status_label)
+        info_layout.addRow("Mode logiciel", self.operation_mode_label)
+        info_layout.addRow("Dernier contrôle", self.last_hardware_check_label)
 
+        layout.addWidget(summary)
         layout.addWidget(detection_group)
         layout.addWidget(info_group)
         layout.addStretch()
@@ -297,7 +332,7 @@ class AcquisitionConfigView(QWidget):
         self.start_acquisition_btn.clicked.connect(self.start_acquisition)
         self.stop_acquisition_btn.clicked.connect(self.stop_acquisition)
         self.test_acquisition_btn.clicked.connect(self.test_acquisition)
-        self.calibrate_btn.clicked.connect(self.calibrate_system)
+        self.calibrate_btn.clicked.connect(self.open_calibration_workspace)
         self.export_csv_btn.clicked.connect(self.export_csv)
         self.export_json_btn.clicked.connect(self.export_json)
         self.export_hdf5_btn.clicked.connect(self.export_hdf5)
@@ -344,7 +379,7 @@ class AcquisitionConfigView(QWidget):
             self.log_message("Controleur prêt - cliquez sur Scanner les cartes")
             self.board_combo.clear()
             self.board_combo.addItem("Scan matériel non lancé")
-            self.board_name_label.setText("En attente du scan")
+            self._hardware_state = "not_scanned"
             self.update_hardware_status()
         except Exception as exc:
             self.log_message(f"Erreur d'initialisation: {exc}")
@@ -361,7 +396,8 @@ class AcquisitionConfigView(QWidget):
         if not self.controller:
             return
         self.scan_boards_btn.setEnabled(False)
-        self.hardware_status_label.setText("DÉTECTION USB...")
+        self._hardware_state = "scanning"
+        self.update_hardware_status()
         self.log_message("Scan USB direct MCC DAQ (sans InstaCal)...")
         try:
             connected = self.controller.refresh_hardware()
@@ -371,40 +407,105 @@ class AcquisitionConfigView(QWidget):
                 for board in boards:
                     self.board_combo.addItem(f"Carte {board}")
                 board_name = getattr(self.controller.daq, "board_name", "USB-1608FS")
-                self.board_name_label.setText(str(board_name))
+                self._hardware_state = "connected"
+                self.last_hardware_check_label.setText(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
                 self.log_message(f"Carte MCC connectée directement: {board_name}")
             else:
                 self.board_combo.addItem("Aucune USB-1608FS détectée")
-                self.board_name_label.setText("Mode simulation")
+                self._hardware_state = "not_found"
                 self.log_message("Aucune USB-1608FS détectée - simulation disponible")
         except Exception as exc:
             logger.exception("Scan MCC impossible")
             self.board_combo.clear()
             self.board_combo.addItem("Erreur de détection")
-            self.board_name_label.setText("Consultez chneowave_debug.log")
+            self._hardware_state = "error"
             self.log_message(f"Erreur de détection MCC: {exc}")
         finally:
             self.scan_boards_btn.setEnabled(True)
             self.update_hardware_status()
 
     def update_hardware_status(self) -> None:
-        if self.controller and self.controller.is_hardware_available():
-            self.hardware_status_label.setText("MATÉRIEL OPÉRATIONNEL")
-            self.hardware_status_label.setProperty("state", "success")
-        else:
-            self.hardware_status_label.setText("MODE SIMULATION")
-            self.hardware_status_label.setProperty("state", "warning")
+        connected = bool(self.controller and self.controller.is_hardware_available())
+        board_name = (
+            str(getattr(self.controller.daq, "board_name", "USB-1608FS"))
+            if connected and self.controller
+            else ""
+        )
+
+        state_content = {
+            "not_scanned": (
+                "SCAN REQUIS",
+                "neutral",
+                "Non scannée",
+                "Non vérifié",
+                "En attente du scan",
+                "Lancez un scan USB pour vérifier ensemble la carte et la Universal Library.",
+            ),
+            "scanning": (
+                "DÉTECTION USB…",
+                "neutral",
+                "Recherche en cours",
+                "Vérification en cours",
+                "Détection matérielle",
+                "Inventaire MCC USB en cours, sans lecture de la configuration InstaCal.",
+            ),
+            "not_found": (
+                "CARTE NON DÉTECTÉE",
+                "warning",
+                "USB-1608FS absente",
+                "Non confirmé · vérifier Universal Library",
+                "Simulation disponible",
+                "Aucune carte compatible n'a été trouvée. Le logiciel reste utilisable en simulation.",
+            ),
+            "error": (
+                "ERREUR MATÉRIELLE",
+                "danger",
+                "Détection interrompue",
+                "Erreur · consulter le journal",
+                "Simulation disponible",
+                "Le contrôle matériel a échoué. Consultez le journal avant une acquisition réelle.",
+            ),
+            "connected": (
+                "MATÉRIEL OPÉRATIONNEL",
+                "success",
+                board_name or "USB-1608FS",
+                "Universal Library chargée",
+                "Acquisition matérielle",
+                "Carte et pilote validés par une seule séquence de détection USB directe.",
+            ),
+        }
+        effective_state = "connected" if connected else self._hardware_state
+        badge, style_state, device, driver, mode, summary = state_content.get(
+            effective_state,
+            state_content["not_scanned"],
+        )
+        self.hardware_status_label.setText(badge)
+        self.hardware_status_label.setProperty("state", style_state)
+        self.board_name_label.setText(device)
+        self.driver_status_label.setText(driver)
+        self.operation_mode_label.setText(mode)
+        self.hardware_summary_label.setText(summary)
         self.hardware_status_label.style().unpolish(self.hardware_status_label)
         self.hardware_status_label.style().polish(self.hardware_status_label)
+        self.hardware_state_changed.emit(connected, badge)
 
     def test_connection(self) -> None:
         if not self.controller:
             self.log_message("Pas de controleur disponible")
             return
         if self.controller.is_hardware_available():
-            self.log_message("Connexion materielle OK")
+            try:
+                status = self.controller.daq.get_acquisition_status()
+                self.last_hardware_check_label.setText(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+                self.log_message(
+                    f"Validation matérielle OK · {status.get('board_name', 'USB-1608FS')} · scan arrêté"
+                )
+            except Exception as exc:
+                self._hardware_state = "error"
+                self.update_hardware_status()
+                self.log_message(f"Validation matérielle échouée: {exc}")
         else:
-            self.log_message("Materiel non detecte - simulation active")
+            self.log_message("Validation impossible: lancez d'abord un scan USB réussi")
 
     def load_maritime_preset(self) -> None:
         if not self.controller:
@@ -480,6 +581,9 @@ class AcquisitionConfigView(QWidget):
             self.controller.configure_maritime_channel(
                 row, sensor_type, label, range_volts, sensitivity, units
             )
+            calibration_record = self.calibration_records.get(row)
+            if calibration_record is not None:
+                self.controller.apply_calibration_record(calibration_record)
 
     def start_acquisition(self) -> None:
         if not self.controller:
@@ -531,18 +635,40 @@ class AcquisitionConfigView(QWidget):
         self.duration_spin.setValue(original_duration)
         self.continuous_check.setChecked(original_continuous)
 
-    def calibrate_system(self) -> None:
-        if not self.controller:
-            self.log_message("Pas de controleur disponible")
-            return
+    def open_calibration_workspace(self) -> None:
+        self.log_message("Ouverture du poste de calibration canal par canal")
+        self.calibration_requested.emit()
 
+    def register_calibration_record(self, payload: dict[str, Any] | CalibrationRecord) -> bool:
         try:
-            results = self.controller.calibrate_system()
-            channels = results.get("channels", {})
-            self.log_message(f"Calibration terminee: {len(channels)} canaux")
-            self.calibration_completed.emit(results)
-        except Exception as exc:
-            self.log_message(f"Erreur calibration: {exc}")
+            record = (
+                payload if isinstance(payload, CalibrationRecord) else CalibrationRecord.from_dict(payload)
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            self.log_message(f"Calibration rejetée: enregistrement invalide ({exc})")
+            return False
+
+        self.calibration_records[record.channel] = record
+        if 0 <= record.channel < self.channels_table.rowCount():
+            self.channels_table.setItem(
+                record.channel,
+                5,
+                QTableWidgetItem(f"{record.sensitivity_v_per_unit:.10g}"),
+            )
+            self.channels_table.setItem(
+                record.channel,
+                6,
+                QTableWidgetItem(record.physical_unit),
+            )
+
+        applied = bool(
+            self.controller
+            and record.channel in self.controller.channels_config
+            and self.controller.apply_calibration_record(record)
+        )
+        action = "appliquée" if applied else "mémorisée pour la configuration"
+        self.log_message(f"Calibration canal {record.channel + 1} {action} · R²={record.r_squared:.7f}")
+        return True
 
     def update_display(self) -> None:
         if not self.controller:

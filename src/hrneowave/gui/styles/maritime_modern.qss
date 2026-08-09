@@ -80,19 +80,42 @@ QPushButton#navButton[active="true"] {
     font-weight: 600;
 }
 
+QPushButton#navButton[collapsed="true"] {
+    padding: 0;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+}
+
 QFrame#sidebar_footer {
     background-color: #091A23;
     border: none;
     border-top: 1px solid #183846;
 }
 
-QLabel#sidebarStatusDot { color: #53C6A0; }
+QLabel#sidebarStatusDot { color: #C47B18; }
+QLabel#sidebarStatusDot[connected="true"] { color: #53C6A0; }
 QLabel#sidebarStatus { color: #B9C9D1; font-size: 11px; }
 
 QFrame#applicationHeader {
     background-color: #FFFFFF;
     border: none;
     border-bottom: 1px solid #DCE5EA;
+}
+
+QPushButton#sidebarToggleButton {
+    background-color: #F3F7F8;
+    color: #304A56;
+    border: 1px solid #D3DEE3;
+    border-radius: 6px;
+    padding: 0;
+    font-size: 16px;
+}
+
+QPushButton#sidebarToggleButton:hover {
+    background-color: #E4EFF2;
+    color: #145E72;
+    border-color: #88ADB9;
 }
 
 QLabel#pageEyebrow {
@@ -186,12 +209,17 @@ QFrame#metricCard,
 QFrame#workflowCard,
 QFrame#analysis_tools_panel,
 QFrame#analysis_results_area,
+QFrame#surface,
 QFrame#report_config_panel,
 QFrame#report_preview_area,
 QFrame#operationalHeader {
     background-color: #FFFFFF;
     border: 1px solid #DCE5EA;
     border-radius: 8px;
+}
+
+QWidget#calibrationWorkspace {
+    background-color: #F3F6F8;
 }
 
 QFrame#metricCard {

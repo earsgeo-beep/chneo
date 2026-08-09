@@ -47,8 +47,8 @@ class AnalysisToolsPanel(QFrame):
 
     def _build_ui(self) -> None:
         self.setObjectName("analysis_tools_panel")
-        self.setMinimumWidth(290)
-        self.setMaximumWidth(360)
+        self.setMinimumWidth(250)
+        self.setMaximumWidth(330)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 16, 18, 16)
@@ -242,6 +242,7 @@ class AnalysisView(QWidget):
         self.current_project_metadata: dict[str, object] = {}
         self.current_data_file: str | None = None
         self.current_analysis_result: dict[str, object] | None = None
+        self._tools_panel_expanded = True
 
         self._build_ui()
         self._setup_connections()
@@ -249,16 +250,39 @@ class AnalysisView(QWidget):
     def _build_ui(self) -> None:
         self.setObjectName("analysis_view")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(0)
+        layout.setContentsMargins(20, 16, 20, 18)
+        layout.setSpacing(10)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
+        workspace_bar = QFrame()
+        workspace_bar.setObjectName("surface")
+        workspace_bar_layout = QHBoxLayout(workspace_bar)
+        workspace_bar_layout.setContentsMargins(14, 8, 14, 8)
+        context = QVBoxLayout()
+        context.setSpacing(1)
+        context_title = QLabel("Espace scientifique")
+        context_title.setObjectName("sectionTitle")
+        context_text = QLabel(
+            "Masquez les paramètres après lancement pour consacrer toute la largeur aux résultats."
+        )
+        context_text.setObjectName("mutedText")
+        context.addWidget(context_title)
+        context.addWidget(context_text)
+        self.tools_toggle_button = QPushButton("Masquer les paramètres")
+        self.tools_toggle_button.setProperty("kind", "secondary")
+        workspace_bar_layout.addLayout(context, 1)
+        workspace_bar_layout.addWidget(self.tools_toggle_button)
+        layout.addWidget(workspace_bar)
+
+        self.workspace_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.workspace_splitter.setChildrenCollapsible(False)
         self.tools_panel = AnalysisToolsPanel()
         self.results_area = AnalysisResultsArea()
-        splitter.addWidget(self.tools_panel)
-        splitter.addWidget(self.results_area)
-        splitter.setSizes([310, 900])
-        layout.addWidget(splitter)
+        self.workspace_splitter.addWidget(self.tools_panel)
+        self.workspace_splitter.addWidget(self.results_area)
+        self.workspace_splitter.setStretchFactor(0, 0)
+        self.workspace_splitter.setStretchFactor(1, 1)
+        self.workspace_splitter.setSizes([280, 960])
+        layout.addWidget(self.workspace_splitter, 1)
 
     def _setup_connections(self) -> None:
         self.tools_panel.analysis_requested.connect(self.on_analysis_requested)
@@ -267,6 +291,16 @@ class AnalysisView(QWidget):
         self.tools_panel.load_button.clicked.connect(self._load_selected_or_dialog)
         self.tools_panel.refresh_button.clicked.connect(self.refresh_project_files)
         self.tools_panel.data_list.itemDoubleClicked.connect(self._load_item_from_list)
+        self.tools_toggle_button.clicked.connect(self._toggle_tools_panel)
+
+    def _toggle_tools_panel(self) -> None:
+        self._tools_panel_expanded = not self._tools_panel_expanded
+        self.tools_panel.setVisible(self._tools_panel_expanded)
+        self.tools_toggle_button.setText(
+            "Masquer les paramètres" if self._tools_panel_expanded else "Afficher les paramètres"
+        )
+        if self._tools_panel_expanded:
+            self.workspace_splitter.setSizes([280, 960])
 
     def set_project_context(self, project_metadata: dict, project_dir: str) -> None:
         self.current_project_metadata = project_metadata or {}
