@@ -337,10 +337,15 @@ class AcquisitionConfigView(QWidget):
 
     def initialize_controller(self) -> None:
         try:
-            self.controller = AcquisitionController(self.data_received_callback)
-            self.log_message("Controleur d'acquisition initialise")
+            self.controller = AcquisitionController(
+                self.data_received_callback,
+                auto_initialize=False,
+            )
+            self.log_message("Controleur prêt - cliquez sur Scanner les cartes")
+            self.board_combo.clear()
+            self.board_combo.addItem("Scan matériel non lancé")
+            self.board_name_label.setText("En attente du scan")
             self.update_hardware_status()
-            self.scan_boards()
         except Exception as exc:
             self.log_message(f"Erreur d'initialisation: {exc}")
 
@@ -355,17 +360,32 @@ class AcquisitionConfigView(QWidget):
     def scan_boards(self) -> None:
         if not self.controller:
             return
-        self.log_message("Scan des cartes MCC DAQ...")
-        boards = self.controller.get_available_boards()
-        self.board_combo.clear()
-        if boards:
-            for board in boards:
-                self.board_combo.addItem(f"Carte {board}")
-            self.board_name_label.setText("MCC USB-1608FS")
-        else:
-            self.board_combo.addItem("Aucune carte detectee")
-            self.board_name_label.setText("Mode simulation")
-        self.update_hardware_status()
+        self.scan_boards_btn.setEnabled(False)
+        self.hardware_status_label.setText("DÉTECTION USB...")
+        self.log_message("Scan USB direct MCC DAQ (sans InstaCal)...")
+        try:
+            connected = self.controller.refresh_hardware()
+            boards = self.controller.get_available_boards()
+            self.board_combo.clear()
+            if connected and boards:
+                for board in boards:
+                    self.board_combo.addItem(f"Carte {board}")
+                board_name = getattr(self.controller.daq, "board_name", "USB-1608FS")
+                self.board_name_label.setText(str(board_name))
+                self.log_message(f"Carte MCC connectée directement: {board_name}")
+            else:
+                self.board_combo.addItem("Aucune USB-1608FS détectée")
+                self.board_name_label.setText("Mode simulation")
+                self.log_message("Aucune USB-1608FS détectée - simulation disponible")
+        except Exception as exc:
+            logger.exception("Scan MCC impossible")
+            self.board_combo.clear()
+            self.board_combo.addItem("Erreur de détection")
+            self.board_name_label.setText("Consultez chneowave_debug.log")
+            self.log_message(f"Erreur de détection MCC: {exc}")
+        finally:
+            self.scan_boards_btn.setEnabled(True)
+            self.update_hardware_status()
 
     def update_hardware_status(self) -> None:
         if self.controller and self.controller.is_hardware_available():

@@ -22,6 +22,21 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+def _enable_direct_discovery(api: Any) -> None:
+    """Active le mode sans InstaCal exactement une fois par instance UL.
+
+    MCC impose que ``ignore_instacal`` soit le premier appel Universal Library.
+    Le marqueur est pose sur le module ``ul`` lui-meme afin qu'un nouveau scan
+    dans le meme processus ne rappelle pas cette fonction trop tard.
+    """
+
+    marker = "_chneowave_direct_discovery_enabled"
+    if getattr(api.ul, marker, False):
+        return
+    api.ul.ignore_instacal()
+    setattr(api.ul, marker, True)
+
+
 class MCCBackendError(RuntimeError):
     """Erreur d'acquisition MCC avec un message exploitable par l'interface."""
 
@@ -155,9 +170,8 @@ class MCCDAQ_USB1608FS:
     def detect_boards(cls, api: Any | None = None, max_boards: int = 10) -> list[int]:
         """Detecte les cartes MCC connectees en USB.
 
-        Tente d'abord la detection directe via ``get_daq_device_inventory``
-        (ne necessite pas InstaCal). Si aucune carte n'est trouvee, retombe
-        sur l'ancienne methode InstaCal ``get_board_name``.
+        La detection utilise exclusivement l'inventaire USB de l'Universal
+        Library. InstaCal et son fichier ``cb.cfg`` ne sont jamais consultes.
         """
 
         try:
@@ -166,16 +180,19 @@ class MCCDAQ_USB1608FS:
             return []
 
         boards: list[int] = []
-
-        # --- Methode 1 : detection USB directe (ignore InstaCal) ---
         try:
-            active_api.ul.ignore_instacal()
+            _enable_direct_discovery(active_api)
             devices = active_api.ul.get_daq_device_inventory(
                 active_api.InterfaceType.ANY
             )
-            for board_num, dev in enumerate(devices):
-                if board_num >= max_boards:
+            for dev in devices:
+                product_name = str(getattr(dev, "product_name", "")).strip()
+                if product_name.upper() != "USB-1608FS":
+                    logger.info("Peripherique MCC ignore: %s", product_name or "inconnu")
+                    continue
+                if len(boards) >= max_boards:
                     break
+                board_num = len(boards)
                 try:
                     active_api.ul.create_daq_device(board_num, dev)
                     boards.append(board_num)
@@ -186,29 +203,25 @@ class MCCDAQ_USB1608FS:
                         board_num,
                     )
                 except Exception as exc:
-                    logger.debug("create_daq_device(%s) echoue: %s", board_num, exc)
+                    # Un second scan peut retrouver une carte deja enregistree
+                    # dans cette instance UL. Dans ce cas, on la reutilise.
+                    try:
+                        existing_name = active_api.ul.get_board_name(board_num)
+                    except Exception:
+                        existing_name = ""
+                    if str(existing_name).strip().upper() == "USB-1608FS":
+                        boards.append(board_num)
+                    else:
+                        logger.debug("create_daq_device(%s) echoue: %s", board_num, exc)
         except Exception as exc:
-            logger.debug("Detection USB directe impossible: %s", exc)
-
-        if boards:
-            return boards
-
-        # --- Methode 2 : fallback InstaCal (anciennes installations) ---
-        for board_num in range(max_boards):
-            try:
-                name = active_api.ul.get_board_name(board_num)
-                if name:
-                    boards.append(board_num)
-            except Exception:
-                continue
+            logger.error("Detection USB directe impossible: %s", exc)
         return boards
 
     def initialize(self, board_num: int = 0) -> bool:
         """Ouvre logiquement une carte MCC.
 
-        Si la carte a ete creee par ``detect_boards`` (detection USB directe),
-        ``get_board_name`` fonctionnera deja. Sinon, on tente d'enregistrer
-        le peripherique USB automatiquement.
+        La carte doit avoir ete creee par ``detect_boards``. Cette separation
+        garantit que ``ignore_instacal`` reste le premier appel UL du processus.
         """
 
         try:
@@ -219,28 +232,21 @@ class MCCDAQ_USB1608FS:
                 pass
 
             if not board_name:
-                # Tenter la detection USB directe pour ce board_num
-                try:
-                    self.api.ul.ignore_instacal()
-                    devices = self.api.ul.get_daq_device_inventory(
-                        self.api.InterfaceType.ANY
-                    )
-                    if board_num < len(devices):
-                        self.api.ul.create_daq_device(board_num, devices[board_num])
-                        board_name = self.api.ul.get_board_name(board_num)
-                except Exception as inner_exc:
-                    logger.debug("Detection USB dans initialize() echouee: %s", inner_exc)
-
-            if not board_name:
-                raise MCCBackendError(f"Aucune carte MCC configuree au numero {board_num}")
+                raise MCCBackendError(
+                    f"Aucune carte MCC creee au numero {board_num}; lancer d'abord le scan USB"
+                )
 
             self.board_num = board_num
             self.board_name = str(board_name)
             self.is_initialized = True
 
-            # Stopper tout scan residuel sur la carte
+            # Nettoyer un scan reste actif après un arrêt brutal de
+            # l'application, sinon l'UL peut retourner l'erreur 29.
             try:
-                self.api.ul.stop_background(self.board_num, self.api.FunctionType.AIFUNCTION)
+                self.api.ul.stop_background(
+                    self.board_num,
+                    self.api.FunctionType.AIFUNCTION,
+                )
             except Exception:
                 pass
 
@@ -358,8 +364,13 @@ class MCCDAQ_USB1608FS:
         buffer_count = int(buffer_size) * n_scan_channels
 
         try:
+            # Deuxième protection contre un scan résiduel avant l'allocation
+            # et le démarrage d'une nouvelle acquisition.
             try:
-                self.api.ul.stop_background(self.board_num, self.api.FunctionType.AIFUNCTION)
+                self.api.ul.stop_background(
+                    self.board_num,
+                    self.api.FunctionType.AIFUNCTION,
+                )
             except Exception:
                 pass
 

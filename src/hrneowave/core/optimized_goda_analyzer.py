@@ -6,15 +6,15 @@ utilisant SVD, cache intelligent et stabilité numérique améliorée.
 Gains de performance attendus: +1000% avec cache géométrie fixe
 """
 
-import numpy as np
-from scipy.linalg import lstsq, svd
-from scipy.optimize import fsolve
-from typing import Dict, List, Tuple, Optional, NamedTuple
 import hashlib
-from functools import lru_cache
-from collections import OrderedDict
 import warnings
+from collections import OrderedDict
 from dataclasses import dataclass
+from typing import NamedTuple
+
+import numpy as np
+from scipy.linalg import svd
+from scipy.optimize import fsolve
 
 
 @dataclass
@@ -23,7 +23,7 @@ class ProbeGeometry:
 
     positions: np.ndarray  # Positions des sondes [m]
     water_depth: float  # Profondeur d'eau [m]
-    frequency_range: Tuple[float, float]  # Plage de fréquences [Hz]
+    frequency_range: tuple[float, float]  # Plage de fréquences [Hz]
 
     def __post_init__(self):
         self.positions = np.asarray(self.positions)
@@ -77,8 +77,8 @@ class OptimizedGodaAnalyzer:
         self.g = 9.81  # Accélération gravitationnelle [m/s²]
 
         # Cache pour les matrices de géométrie
-        self._matrix_cache: OrderedDict[str, Tuple[np.ndarray, np.ndarray, np.ndarray]] = OrderedDict()
-        self._dispersion_cache: Dict[float, float] = {}
+        self._matrix_cache: OrderedDict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = OrderedDict()
+        self._dispersion_cache: dict[float, float] = {}
 
         # Pré-calcul des matrices pour les fréquences communes
         self._precompute_common_matrices()
@@ -98,10 +98,17 @@ class OptimizedGodaAnalyzer:
                 # Ignorer les erreurs pour les fréquences problématiques
                 continue
 
-    @lru_cache(maxsize=256)
     def _solve_dispersion_cached(self, omega: float) -> float:
         """Résolution cachée de la relation de dispersion"""
-        return self._solve_dispersion_relation(omega)
+        cache_key = float(omega)
+        if cache_key not in self._dispersion_cache:
+            if len(self._dispersion_cache) >= 256:
+                oldest_key = next(iter(self._dispersion_cache))
+                self._dispersion_cache.pop(oldest_key)
+            self._dispersion_cache[cache_key] = self._solve_dispersion_relation(
+                cache_key
+            )
+        return self._dispersion_cache[cache_key]
 
     def _solve_dispersion_relation(self, omega: float) -> float:
         """
@@ -131,13 +138,19 @@ class OptimizedGodaAnalyzer:
 
             # Vérification de la convergence
             if k_solution[2] != 1 or k <= 0:
-                warnings.warn(f"Convergence douteuse pour ω={omega:.3f} rad/s")
+                warnings.warn(
+                    f"Convergence douteuse pour ω={omega:.3f} rad/s",
+                    stacklevel=2,
+                )
                 return max(k_guess, 1e-10)
 
             return max(k, 1e-10)  # Éviter k=0
 
         except Exception as e:
-            warnings.warn(f"Erreur résolution dispersion pour ω={omega:.3f}: {e}")
+            warnings.warn(
+                f"Erreur résolution dispersion pour ω={omega:.3f}: {e}",
+                stacklevel=2,
+            )
             return max(k_guess, 1e-10)
 
     def _get_matrix_cache_key(self, frequency: float) -> str:
@@ -146,7 +159,7 @@ class OptimizedGodaAnalyzer:
 
     def _get_geometry_matrix(
         self, frequency: float
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Construit ou récupère la matrice de géométrie pour une fréquence
 
@@ -186,7 +199,10 @@ class OptimizedGodaAnalyzer:
         Vt_filtered = Vt[valid_indices, :]
 
         if len(s_filtered) < 2:
-            warnings.warn(f"Matrice mal conditionnée pour f={frequency:.3f} Hz")
+            warnings.warn(
+                f"Matrice mal conditionnée pour f={frequency:.3f} Hz",
+                stacklevel=2,
+            )
 
         result = (A, U_filtered, s_filtered, Vt_filtered)
 
@@ -211,9 +227,11 @@ class OptimizedGodaAnalyzer:
         Returns:
             Solution [Ai, Ar] (amplitudes incidente et réfléchie)
         """
-        # Pseudo-inverse via SVD: A⁺ = V @ diag(1/s) @ Uᵀ
+        # Pseudo-inverse complexe via SVD: A+ = V @ diag(1/s) @ U^H.
+        # ``scipy.linalg.svd`` retourne V^H, pas V^T. Les conjugaisons sont
+        # indispensables pour separer correctement les composantes de phase.
         s_inv = 1.0 / s
-        A_pinv = Vt.T @ np.diag(s_inv) @ U.T
+        A_pinv = Vt.conj().T @ np.diag(s_inv) @ U.conj().T
 
         # Solution des moindres carrés
         solution = A_pinv @ measurements
@@ -281,8 +299,8 @@ class OptimizedGodaAnalyzer:
         )
 
     def analyze_spectrum(
-        self, frequency_spectrum: Dict[float, np.ndarray]
-    ) -> Dict[float, WaveComponents]:
+        self, frequency_spectrum: dict[float, np.ndarray]
+    ) -> dict[float, WaveComponents]:
         """
         Analyse un spectre complet de fréquences
 
@@ -298,12 +316,15 @@ class OptimizedGodaAnalyzer:
             try:
                 results[freq] = self.analyze_frequency(measurements, freq)
             except Exception as e:
-                warnings.warn(f"Erreur analyse fréquence {freq:.3f} Hz: {e}")
+                warnings.warn(
+                    f"Erreur analyse fréquence {freq:.3f} Hz: {e}",
+                    stacklevel=2,
+                )
                 continue
 
         return results
 
-    def get_cache_stats(self) -> Dict[str, int]:
+    def get_cache_stats(self) -> dict[str, int]:
         """Retourne les statistiques du cache"""
         return {
             "matrix_cache_size": len(self._matrix_cache),
@@ -316,14 +337,13 @@ class OptimizedGodaAnalyzer:
         """Vide tous les caches"""
         self._matrix_cache.clear()
         self._dispersion_cache.clear()
-        self._solve_dispersion_cached.cache_clear()
 
 
 # Fonction utilitaire pour migration depuis l'ancien code
 def create_analyzer_from_positions(
-    positions: List[float],
+    positions: list[float],
     water_depth: float,
-    freq_range: Tuple[float, float] = (0.05, 2.0),
+    freq_range: tuple[float, float] = (0.05, 2.0),
 ) -> OptimizedGodaAnalyzer:
     """Crée un analyseur à partir de positions de sondes simples"""
     geometry = ProbeGeometry(
@@ -366,7 +386,7 @@ if __name__ == "__main__":
 
     print(f"Temps pour {n_tests} analyses: {end_time - start_time:.4f}s")
     print(f"Temps par analyse: {(end_time - start_time) / n_tests * 1000:.2f}ms")
-    print(f"\nRésultat exemple:")
+    print("\nRésultat exemple:")
     print(f"  Amplitude incidente: {result.incident_amplitude:.4f}")
     print(f"  Amplitude réfléchie: {result.reflected_amplitude:.4f}")
     print(f"  Coefficient réflexion: {result.reflection_coefficient:.4f}")

@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Script de lancement principal pour CHNeoWave.
 """
 
 import argparse
-import logging
 import os
 import sys
-
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.join(CURRENT_DIR, "src")
@@ -44,14 +41,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    if args.debug:
-        logging.basicConfig(level=logging.DEBUG)
-        print("Mode debug active")
-
     try:
         from hrneowave.cli import run_gui
 
-        return run_gui()
+        return run_gui(debug=args.debug)
     except Exception as exc:
         print(f"Erreur lors du lancement: {exc}")
         return 1

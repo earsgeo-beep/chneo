@@ -1,5 +1,5 @@
-import math
 import json
+import math
 import tempfile
 import unittest
 from datetime import datetime
@@ -12,9 +12,9 @@ from hrneowave.acquisition.acquisition_controller import (
     AcquisitionSession,
     create_default_maritime_config,
 )
-from hrneowave.core.session_schema import build_channel_metadata
 from hrneowave.core.optimized_goda_analyzer import OptimizedGodaAnalyzer, ProbeGeometry
 from hrneowave.core.post_processor import PostProcessor
+from hrneowave.core.session_schema import build_channel_metadata
 
 
 class ScientificP0Tests(unittest.TestCase):

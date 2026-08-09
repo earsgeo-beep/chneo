@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
 
 import numpy as np
 
@@ -37,7 +38,7 @@ class DaqReadResult:
     backend_name: str
     data_kind: str = DATA_KIND_RAW
     hardware_validation_status: str = PENDING_HARDWARE
-    warnings: List[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.raw_data = np.asarray(self.raw_data, dtype=float)
@@ -67,8 +68,8 @@ class DaqBackend(ABC):
     hardware_validation_status = PENDING_HARDWARE
 
     def __init__(self) -> None:
-        self.channels: List[Any] = []
-        self.sample_rate_hz: Optional[float] = None
+        self.channels: list[Any] = []
+        self.sample_rate_hz: float | None = None
         self.started = False
 
     def configure_channels(self, channels: Sequence[Any]) -> None:
@@ -79,7 +80,7 @@ class DaqBackend(ABC):
         """Start acquisition and return the actual sample rate."""
 
     @abstractmethod
-    def read(self, num_samples: int = 100) -> Optional[DaqReadResult]:
+    def read(self, num_samples: int = 100) -> DaqReadResult | None:
         """Return the next raw-voltage chunk, or None when no data remains."""
 
     def stop(self) -> None:
@@ -88,7 +89,7 @@ class DaqBackend(ABC):
     def close(self) -> None:
         self.stop()
 
-    def metadata(self) -> Dict[str, Any]:
+    def metadata(self) -> dict[str, Any]:
         return {
             "backend_name": self.name,
             "backend_is_hardware": bool(self.is_hardware),
@@ -105,12 +106,12 @@ class SimulatedDaqBackend(DaqBackend):
     realtime = False
     hardware_validation_status = PENDING_HARDWARE
 
-    def __init__(self, seed: Optional[int] = None, realtime: bool = False) -> None:
+    def __init__(self, seed: int | None = None, realtime: bool = False) -> None:
         super().__init__()
         self.rng = np.random.default_rng(seed)
         self.realtime = bool(realtime)
         self._sample_index = 0
-        self._channel_state: Dict[int, Dict[str, float]] = {}
+        self._channel_state: dict[int, dict[str, float]] = {}
         self._chunk_size = 100
 
     def start(self, sample_rate_hz: float, channels: Sequence[Any], chunk_size: int = 100) -> float:
@@ -126,7 +127,7 @@ class SimulatedDaqBackend(DaqBackend):
         self.started = True
         return self.sample_rate_hz
 
-    def read(self, num_samples: int = 100) -> Optional[DaqReadResult]:
+    def read(self, num_samples: int = 100) -> DaqReadResult | None:
         if not self.started or self.sample_rate_hz is None:
             raise RuntimeError("SimulatedDaqBackend is not started")
         sample_count = int(num_samples or self._chunk_size)
@@ -185,7 +186,10 @@ class SimulatedDaqBackend(DaqBackend):
             scale = float(getattr(channel, "calibration_scale", 1.0))
             offset = float(getattr(channel, "calibration_offset", 0.0))
             if sensitivity <= 0 or scale <= 0:
-                raise ValueError(f"Invalid calibration coefficients for channel {getattr(channel, 'channel', index)}")
+                channel_number = getattr(channel, "channel", index)
+                raise ValueError(
+                    f"Invalid calibration coefficients for channel {channel_number}"
+                )
             raw_data[:, index] = (physical_data[:, index] * sensitivity / scale) - offset
         return raw_data
 
@@ -203,11 +207,11 @@ class FileReplayBackend(DaqBackend):
         self.file_path = file_path
         self.prefer_raw = bool(prefer_raw)
         self.loop = bool(loop)
-        self._matrix: Optional[np.ndarray] = None
-        self._time: Optional[np.ndarray] = None
+        self._matrix: np.ndarray | None = None
+        self._time: np.ndarray | None = None
         self._position = 0
-        self._source_channels: List[str] = []
-        self._warnings: List[str] = []
+        self._source_channels: list[str] = []
+        self._warnings: list[str] = []
 
     def start(self, sample_rate_hz: float, channels: Sequence[Any], chunk_size: int = 100) -> float:
         self.configure_channels(channels)
@@ -224,7 +228,7 @@ class FileReplayBackend(DaqBackend):
         self.started = True
         return self.sample_rate_hz
 
-    def read(self, num_samples: int = 100) -> Optional[DaqReadResult]:
+    def read(self, num_samples: int = 100) -> DaqReadResult | None:
         if not self.started or self._matrix is None or self._time is None or self.sample_rate_hz is None:
             raise RuntimeError("FileReplayBackend is not started")
         if self._position >= self._matrix.shape[0]:
@@ -283,7 +287,7 @@ class FileReplayBackend(DaqBackend):
         if self._time.shape[0] != self._matrix.shape[0]:
             raise ValueError("Replay time axis length does not match channels")
 
-    def metadata(self) -> Dict[str, Any]:
+    def metadata(self) -> dict[str, Any]:
         payload = super().metadata()
         payload.update({
             "file_path": self.file_path,
@@ -306,10 +310,16 @@ class MccDaqBackend(DaqBackend):
     realtime = True
     hardware_validation_status = HARDWARE_AVAILABLE_UNVALIDATED
 
-    def __init__(self, board_num: int = 0, dll_path: Optional[str] = None) -> None:
+    def __init__(self, board_num: int = 0, dll_path: str | None = None) -> None:
         super().__init__()
         self.board_num = int(board_num)
-        self.daq = MCCDAQ_USB1608FS(dll_path=dll_path)
+        # ``mcculw`` charge lui-même la Universal Library MCC. L'ancien
+        # argument reste accepté, mais n'est pas transmis comme objet API.
+        if dll_path is not None:
+            logger.warning(
+                "dll_path is ignored; install the MCC Universal Library driver"
+            )
+        self.daq = MCCDAQ_USB1608FS()
 
     def start(self, sample_rate_hz: float, channels: Sequence[Any], chunk_size: int = 100) -> float:
         if sample_rate_hz <= 0:
@@ -320,13 +330,13 @@ class MccDaqBackend(DaqBackend):
 
         for channel in self.channels:
             self.daq.configure_channel(
-                int(getattr(channel, "channel")),
-                getattr(channel, "range_type"),
+                int(channel.channel),
+                channel.range_type,
                 getattr(channel, "label", ""),
                 getattr(channel, "units", "V"),
             )
 
-        channel_numbers = [int(getattr(channel, "channel")) for channel in self.channels]
+        channel_numbers = [int(channel.channel) for channel in self.channels]
         if not self.daq.start_continuous_acquisition(
             low_chan=min(channel_numbers),
             high_chan=max(channel_numbers),
@@ -339,7 +349,7 @@ class MccDaqBackend(DaqBackend):
         self.started = True
         return self.sample_rate_hz
 
-    def read(self, num_samples: int = 100) -> Optional[DaqReadResult]:
+    def read(self, num_samples: int = 100) -> DaqReadResult | None:
         if not self.started or self.sample_rate_hz is None:
             raise RuntimeError("MccDaqBackend is not started")
         raw_data = self.daq.get_data(num_samples=int(num_samples))
@@ -365,7 +375,7 @@ class MccDaqBackend(DaqBackend):
         self.daq.close()
         super().close()
 
-    def metadata(self) -> Dict[str, Any]:
+    def metadata(self) -> dict[str, Any]:
         payload = super().metadata()
         payload["board_num"] = self.board_num
         return payload
@@ -375,10 +385,10 @@ def detect_voltage_saturation(
     raw_data: np.ndarray,
     channels: Sequence[Any],
     threshold: float = 0.999,
-) -> List[str]:
+) -> list[str]:
     """Return warnings for channels close to their configured voltage range."""
     data = np.asarray(raw_data, dtype=float)
-    warnings: List[str] = []
+    warnings: list[str] = []
     if data.ndim != 2:
         raise ValueError("raw_data must use shape [samples, channels]")
 
@@ -392,12 +402,14 @@ def detect_voltage_saturation(
         if max_abs >= limit * threshold:
             channel_number = getattr(channel, "channel", index)
             warnings.append(
-                f"VOLTAGE_SATURATION_RISK: channel={channel_number}, max_abs={max_abs:.6g} V, range=+-{limit:g} V"
+                "VOLTAGE_SATURATION_RISK: "
+                f"channel={channel_number}, max_abs={max_abs:.6g} V, "
+                f"range=+-{limit:g} V"
             )
     return warnings
 
 
-def _channel_voltage_limit(channel: Any) -> Optional[float]:
+def _channel_voltage_limit(channel: Any) -> float | None:
     range_type = getattr(channel, "range_type", None)
     range_name = getattr(range_type, "name", str(range_type))
     limits = {

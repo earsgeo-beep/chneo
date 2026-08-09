@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Contrôleur d'acquisition pour CHNeoWave
 Module d'interface pour l'acquisition de données maritime avec MCC DAQ USB-1608FS
@@ -13,17 +12,27 @@ import logging
 import re
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from queue import Queue
-from typing import Optional, Dict, List, Callable, Any
+from typing import Any
 
 import numpy as np
 
+from hrneowave.core.calibration import CALIBRATION_VALID, CalibrationRecord
+from hrneowave.core.session_schema import (
+    DATA_KIND_PHYSICAL,
+    build_channel_metadata,
+    build_csv_metadata_row,
+    build_session_metadata,
+)
+
+from .daq_backend import DaqBackend
 from .mcc_daq_wrapper import (
-    MCCBackendError,
     MCCDAQ_USB1608FS,
+    MCCBackendError,
     MCCRanges,
     scan_available_boards,
 )
@@ -45,6 +54,10 @@ class MaritimeChannelConfig:
     physical_units: str = "m"  # Unités physiques finales
     sensor_sensitivity: float = 1.0  # V/unité physique
     enabled: bool = True
+    sensor_id: str = ""
+    calibration_id: str = ""
+    calibration_status: str = "unverified"
+    calibration_record: dict[str, Any] | None = None
 
 @dataclass
 class AcquisitionSession:
@@ -52,12 +65,12 @@ class AcquisitionSession:
     session_id: str
     project_name: str
     start_time: datetime
-    end_time: Optional[datetime] = None
+    end_time: datetime | None = None
     sampling_rate: float = 1000.0
     total_samples: int = 0
-    channels: List[MaritimeChannelConfig] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    data_file_path: Optional[str] = None
+    channels: list[MaritimeChannelConfig] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    data_file_path: str | None = None
     
 class AcquisitionController:
     """
@@ -69,10 +82,12 @@ class AcquisitionController:
     
     def __init__(
         self,
-        data_callback: Optional[Callable] = None,
+        data_callback: Callable | None = None,
         daq_factory: Callable[[], MCCDAQ_USB1608FS] = MCCDAQ_USB1608FS,
-        board_scanner: Callable[[], List[int]] = scan_available_boards,
+        board_scanner: Callable[[], list[int]] = scan_available_boards,
         recorder_factory: Callable[[], ContinuousHDF5Recorder] = ContinuousHDF5Recorder,
+        auto_initialize: bool = True,
+        daq_backend: DaqBackend | None = None,
     ):
         """
         Initialise le contrôleur d'acquisition
@@ -85,7 +100,8 @@ class AcquisitionController:
         self._daq_factory = daq_factory
         self._board_scanner = board_scanner
         self._recorder_factory = recorder_factory
-        self._recorder: Optional[ContinuousHDF5Recorder] = None
+        self._daq_backend = daq_backend
+        self._recorder: ContinuousHDF5Recorder | None = None
         self.is_acquiring = False
         self.acquisition_thread = None
         self.data_queue = Queue()
@@ -110,13 +126,31 @@ class AcquisitionController:
         self.buffer_size = 10000
         self._data_lock = threading.RLock()
         self._simulation_sample_index = 0
-        self.last_exported_path: Optional[str] = None
+        self.last_exported_path: str | None = None
         
-        self._initialize_system()
+        if auto_initialize and self._daq_backend is None:
+            self._initialize_system()
         
     def _initialize_system(self):
         """Initialise le système d'acquisition"""
+        return self.refresh_hardware()
+
+    def refresh_hardware(self) -> bool:
+        """Detecte puis initialise explicitement la premiere carte MCC.
+
+        La vue graphique appelle cette methode uniquement a la demande de
+        l'operateur. Ainsi, un probleme dans la bibliotheque native MCC ne peut
+        plus interrompre la construction de la fenetre principale.
+        """
+        if self.is_acquiring:
+            logger.warning("Scan MCC refuse pendant une acquisition")
+            return False
+
         try:
+            if self.daq is not None:
+                self.daq.close()
+                self.daq = None
+
             # Scan des cartes disponibles
             self.available_boards = self._board_scanner()
             logger.info(f"Cartes MCC détectées: {self.available_boards}")
@@ -126,6 +160,7 @@ class AcquisitionController:
                 self.daq = self._daq_factory()
                 if self.daq.initialize(self.available_boards[0]):
                     logger.info("Système d'acquisition initialisé")
+                    return True
                 else:
                     logger.error("Erreur d'initialisation de la carte")
                     self.daq = None
@@ -134,13 +169,19 @@ class AcquisitionController:
                 
         except Exception as e:
             logger.error(f"Erreur d'initialisation du système: {e}")
+            self.available_boards = []
+            self.daq = None
+        return False
             
-    def get_available_boards(self) -> List[int]:
+    def get_available_boards(self) -> list[int]:
         """Retourne la liste des cartes disponibles"""
         return self.available_boards.copy()
         
     def is_hardware_available(self) -> bool:
         """Vérifie si le matériel est disponible"""
+        daq_backend = getattr(self, "_daq_backend", None)
+        if daq_backend is not None:
+            return bool(getattr(daq_backend, "is_hardware", False))
         return self.daq is not None and self.daq.is_initialized
         
     def configure_maritime_channel(self, 
@@ -201,7 +242,7 @@ class AcquisitionController:
         logger.info(f"Canal maritime {channel} configuré: {sensor_type} - {label}")
         return True
         
-    def get_channel_configuration(self, channel: int) -> Optional[Dict[str, Any]]:
+    def get_channel_configuration(self, channel: int) -> dict[str, Any] | None:
         """
         Récupère la configuration d'un canal
         
@@ -226,13 +267,39 @@ class AcquisitionController:
             'calibration_offset': config.calibration_offset,
             'calibration_scale': config.calibration_scale
         }
+
+    def apply_calibration_record(self, record: CalibrationRecord) -> bool:
+        """Applique uniquement un certificat metrologique valide au canal vise."""
+
+        if not isinstance(record, CalibrationRecord):
+            logger.error("Enregistrement de calibration invalide")
+            return False
+        if record.validity_status != CALIBRATION_VALID:
+            logger.error("Calibration refusee: statut %s", record.validity_status)
+            return False
+        config = self.channels_config.get(int(record.channel))
+        if config is None:
+            logger.error("Calibration sans canal configure: %s", record.channel)
+            return False
+
+        config.sensor_id = record.sensor_id
+        config.sensor_type = record.sensor_type or config.sensor_type
+        config.physical_units = record.physical_unit or config.physical_units
+        config.calibration_offset = float(record.offset_volts)
+        config.calibration_scale = float(record.scale)
+        config.sensor_sensitivity = float(record.sensitivity_v_per_unit)
+        config.calibration_id = record.calibration_id
+        config.calibration_status = record.validity_status
+        config.calibration_record = record.to_dict()
+        logger.info("Calibration %s appliquee au canal %s", record.calibration_id, record.channel)
+        return True
         
     def start_acquisition_session(self,
                                 project_name: str,
                                 sampling_rate: float = 1000.0,
-                                duration_seconds: Optional[float] = None,
-                                channels: Optional[List[int]] = None,
-                                recording_directory: Optional[str] = None) -> bool:
+                                duration_seconds: float | None = None,
+                                channels: list[int] | None = None,
+                                recording_directory: str | None = None) -> bool:
         """
         Démarre une session d'acquisition
         
@@ -303,7 +370,17 @@ class AcquisitionController:
         
         # Démarrage de l'acquisition
         try:
-            if self.daq:
+            if self._daq_backend is not None:
+                actual_rate = self._daq_backend.start(
+                    sample_rate_hz=sampling_rate,
+                    channels=selected_configs,
+                    chunk_size=min(self.buffer_size, 1000),
+                )
+                self.current_session.sampling_rate = float(actual_rate)
+                self.current_session.metadata.update(self._daq_backend.metadata())
+                self.current_session.metadata['requested_sampling_rate'] = sampling_rate
+                self.current_session.metadata['actual_sampling_rate'] = float(actual_rate)
+            elif self.daq:
                 # Configuration matérielle
                 self.daq.clear_channels()
                 for channel_config in selected_configs:
@@ -332,8 +409,9 @@ class AcquisitionController:
                 self.current_session.metadata['actual_sampling_rate'] = self.daq.acquisition_config.rate
 
             if duration_seconds is not None:
-                self.current_session.metadata['expected_samples'] = int(
-                    round(duration_seconds * self.current_session.sampling_rate)
+                self.current_session.metadata['expected_samples'] = max(
+                    1,
+                    int(round(duration_seconds * self.current_session.sampling_rate)),
                 )
 
             if recording_directory:
@@ -366,7 +444,7 @@ class AcquisitionController:
             self.current_session = None
             return False
             
-    def _acquisition_loop(self, duration_seconds: Optional[float]):
+    def _acquisition_loop(self, duration_seconds: float | None):
         """Boucle principale d'acquisition"""
         start_time = time.monotonic()
         last_stats_update = start_time
@@ -406,7 +484,18 @@ class AcquisitionController:
                     )
                     
                 # Acquisition des données
-                if self.daq:
+                if self._daq_backend is not None:
+                    result = self._daq_backend.read(num_samples=block_samples)
+                    if result is None:
+                        break
+                    data = result.raw_data
+                    if result.warnings and self.current_session:
+                        self.current_session.metadata.setdefault('warnings', []).extend(
+                            result.warnings
+                        )
+                    self._process_acquired_data(data)
+                    samples_since_last_update += data.shape[0]
+                elif self.daq:
                     # Acquisition matérielle
                     data = self.daq.wait_for_data(num_samples=block_samples, timeout=0.25)
                     if data is not None:
@@ -425,7 +514,9 @@ class AcquisitionController:
                 # Mise à jour des statistiques
                 current_time = time.monotonic()
                 if current_time - last_stats_update >= 1.0:  # Chaque seconde
-                    self.stats['acquisition_rate'] = samples_since_last_update / (current_time - last_stats_update)
+                    self.stats['acquisition_rate'] = samples_since_last_update / (
+                        current_time - last_stats_update
+                    )
                     self.stats['last_update'] = datetime.now()
                     samples_since_last_update = 0
                     last_stats_update = current_time
@@ -496,7 +587,9 @@ class AcquisitionController:
             if i < raw_data.shape[1]:
                 # Application de la calibration et de la sensibilité
                 channel_data = raw_data[:, i]
-                channel_data = (channel_data + channel_config.calibration_offset) * channel_config.calibration_scale
+                channel_data = (
+                    channel_data + channel_config.calibration_offset
+                ) * channel_config.calibration_scale
                 channel_data = channel_data / channel_config.sensor_sensitivity
                 processed_data[:, i] = channel_data
                 
@@ -564,7 +657,9 @@ class AcquisitionController:
         
     def _finalize_acquisition(self):
         """Finalise la session d'acquisition"""
-        if self.daq:
+        if self._daq_backend is not None:
+            self._daq_backend.stop()
+        elif self.daq:
             self.daq.stop_acquisition()
             
         if self.current_session:
@@ -586,7 +681,7 @@ class AcquisitionController:
             
         self.is_acquiring = False
         
-    def get_acquisition_status(self) -> Dict[str, Any]:
+    def get_acquisition_status(self) -> dict[str, Any]:
         """
         Récupère le statut de l'acquisition
         
@@ -622,7 +717,7 @@ class AcquisitionController:
             
         return status
         
-    def get_recent_data(self, num_samples: int = 1000) -> Optional[Dict[str, Any]]:
+    def get_recent_data(self, num_samples: int = 1000) -> dict[str, Any] | None:
         """
         Récupère les données récentes
         
@@ -668,8 +763,16 @@ class AcquisitionController:
         return {
             'data': all_data,
             'timestamps': timestamps,
-            'channels': [ch.label for ch in self.current_session.channels] if self.current_session else [],
-            'units': [ch.physical_units for ch in self.current_session.channels] if self.current_session else [],
+            'channels': (
+                [ch.label for ch in self.current_session.channels]
+                if self.current_session
+                else []
+            ),
+            'units': (
+                [ch.physical_units for ch in self.current_session.channels]
+                if self.current_session
+                else []
+            ),
             'sample_count': all_data.shape[0]
         }
         
@@ -711,12 +814,20 @@ class AcquisitionController:
         if not self.data_buffer:
             return np.empty((0, 0))
 
-        with self._data_lock:
+        lock = getattr(self, "_data_lock", None)
+        if lock is None:
             chunks = [
                 entry['processed_data'].copy()
                 for entry in self.data_buffer
                 if 'processed_data' in entry
             ]
+        else:
+            with lock:
+                chunks = [
+                    entry['processed_data'].copy()
+                    for entry in self.data_buffer
+                    if 'processed_data' in entry
+                ]
         if not chunks:
             return np.empty((0, 0))
 
@@ -744,17 +855,35 @@ class AcquisitionController:
 
         time_vector = self._build_time_vector(data_matrix.shape[0])
         channel_keys = [f"channel_{config.channel:02d}" for config in self.current_session.channels]
+        metadata_row = build_csv_metadata_row(
+            self.current_session.sampling_rate,
+            DATA_KIND_PHYSICAL,
+            data_matrix.shape[0],
+        )
 
         with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
             writer = csv.writer(csvfile)
 
-            headers = ['time', 'sample_rate'] + channel_keys
+            headers = ['time', 'sample_rate'] + list(metadata_row) + channel_keys
             writer.writerow(headers)
 
             for index, row in enumerate(data_matrix):
                 writer.writerow(
-                    [float(time_vector[index]), float(self.current_session.sampling_rate)] + row.tolist()
+                    [float(time_vector[index]), float(self.current_session.sampling_rate)]
+                    + list(metadata_row.values())
+                    + row.tolist()
                 )
+
+        sidecar = {
+            'metadata': build_session_metadata(
+                self.current_session,
+                hardware_available=self.is_hardware_available(),
+                sample_count=data_matrix.shape[0],
+            ),
+            'channel_metadata': build_channel_metadata(self.current_session.channels),
+        }
+        with open(f"{file_path}.metadata.json", 'w', encoding='utf-8') as handle:
+            json.dump(sidecar, handle, indent=2, ensure_ascii=False)
 
         logger.info(f"Données exportées en CSV: {file_path}")
         return True
@@ -773,35 +902,31 @@ class AcquisitionController:
             channel_key = f"channel_{channel.channel:02d}"
             channels_payload[channel_key] = data_matrix[:, index].tolist()
 
+        metadata = build_session_metadata(
+            self.current_session,
+            hardware_available=self.is_hardware_available(),
+            sample_count=data_matrix.shape[0],
+        )
+        metadata['channel_labels'] = [ch.label for ch in self.current_session.channels]
+        metadata['channel_units'] = [ch.physical_units for ch in self.current_session.channels]
+
         export_data = {
-            'metadata': {
-                'sample_rate': self.current_session.sampling_rate,
-                'project_name': self.current_session.project_name,
-                'session_id': self.current_session.session_id,
-                'channel_labels': [ch.label for ch in self.current_session.channels],
-                'channel_units': [ch.physical_units for ch in self.current_session.channels],
-                'hardware_available': self.is_hardware_available()
-            },
+            'metadata': metadata,
             'time': time_vector.tolist(),
             'channels': channels_payload,
             'session': {
                 'session_id': self.current_session.session_id,
                 'project_name': self.current_session.project_name,
                 'start_time': self.current_session.start_time.isoformat(),
-                'end_time': self.current_session.end_time.isoformat() if self.current_session.end_time else None,
+                'end_time': (
+                    self.current_session.end_time.isoformat()
+                    if self.current_session.end_time
+                    else None
+                ),
                 'sampling_rate': self.current_session.sampling_rate,
                 'total_samples': self.current_session.total_samples
             },
-            'channel_metadata': [
-                {
-                    'channel': ch.channel,
-                    'sensor_type': ch.sensor_type,
-                    'label': ch.label,
-                    'physical_units': ch.physical_units,
-                    'sensor_sensitivity': ch.sensor_sensitivity
-                }
-                for ch in self.current_session.channels
-            ],
+            'channel_metadata': build_channel_metadata(self.current_session.channels),
             'statistics': {
                 **self.stats,
                 'last_update': self.stats['last_update'].isoformat()
@@ -818,54 +943,75 @@ class AcquisitionController:
         return True
 
     def _export_hdf5(self, file_path: str) -> bool:
-        """Exporte en HDF5 via ExportManager avec contrat aligné sur le post-traitement."""
-        from hrneowave.core.export_manager import create_export_config, create_export_manager
+        """Exporte un HDF5 auto-descriptif avec metadonnees metrologiques."""
+        try:
+            import h5py
+        except ImportError:
+            logger.error("h5py requis pour l'export HDF5")
+            return False
 
         data_matrix = self._build_export_matrix()
         if data_matrix.size == 0:
             logger.error("Aucune donnée consolidée disponible pour l'export HDF5")
             return False
 
-        export_manager = create_export_manager()
-        session_info = {
-            'session_id': self.current_session.session_id,
-            'project_name': self.current_session.project_name,
-            'sample_rate': self.current_session.sampling_rate,
-            'sampling_rate': self.current_session.sampling_rate,
-            'start_time': self.current_session.start_time.isoformat(),
-            'end_time': self.current_session.end_time.isoformat() if self.current_session.end_time else "",
-            'channels_count': len(self.current_session.channels),
-        }
-        metadata = {
-            'channel_labels': json.dumps([ch.label for ch in self.current_session.channels], ensure_ascii=False),
-            'channel_units': json.dumps([ch.physical_units for ch in self.current_session.channels], ensure_ascii=False),
-            'sensor_types': json.dumps([ch.sensor_type for ch in self.current_session.channels], ensure_ascii=False),
-        }
-        calibration_info = {
-            f"channel_{config.channel:02d}": {
-                'offset': config.calibration_offset,
-                'scale': config.calibration_scale,
-                'sensitivity': config.sensor_sensitivity,
-            }
-            for config in self.current_session.channels
-        }
-
-        config = create_export_config(
-            'hdf5',
-            file_path,
-            session_info=session_info,
-            metadata=metadata,
+        metadata = build_session_metadata(
+            self.current_session,
+            hardware_available=self.is_hardware_available(),
+            sample_count=data_matrix.shape[0],
         )
-        config.calibration_info = calibration_info
+        metadata['recording_status'] = 'complete'
+        metadata['errors'] = int(self.stats.get('errors', 0))
+        metadata['buffer_overruns'] = int(self.stats.get('buffer_overruns', 0))
+        channel_metadata = build_channel_metadata(self.current_session.channels)
 
-        # ExportManager attend [n_channels, n_samples]
-        return export_manager.export_session_data(data_matrix.T, config)
+        with h5py.File(file_path, 'w') as handle:
+            for key, value in metadata.items():
+                if value is None:
+                    continue
+                if isinstance(value, (str, int, float, bool, np.integer, np.floating)):
+                    handle.attrs[key] = value
+                else:
+                    handle.attrs[key] = json.dumps(value, ensure_ascii=False)
+
+            acquisition = handle.create_group('acquisition_data')
+            for index, config in enumerate(self.current_session.channels):
+                acquisition.create_dataset(
+                    f"channel_{config.channel:02d}",
+                    data=data_matrix[:, index],
+                    compression='gzip',
+                )
+
+            metadata_group = handle.create_group('metadata')
+            session_group = metadata_group.create_group('session')
+            for key, value in metadata.items():
+                if value is None:
+                    continue
+                session_group.attrs[key] = (
+                    value
+                    if isinstance(value, (str, int, float, bool, np.integer, np.floating))
+                    else json.dumps(value, ensure_ascii=False)
+                )
+            channels_group = metadata_group.create_group('channels')
+            for item in channel_metadata:
+                channel_group = channels_group.create_group(item['key'])
+                for key, value in item.items():
+                    if value is None:
+                        continue
+                    channel_group.attrs[key] = (
+                        value
+                        if isinstance(value, (str, int, float, bool, np.integer, np.floating))
+                        else json.dumps(value, ensure_ascii=False)
+                    )
+
+        logger.info("Donnees exportees en HDF5: %s", file_path)
+        return True
 
     def _simulation_mode(self) -> bool:
         """Vérifie si on est en mode simulation"""
         return not self.is_hardware_available()
         
-    def calibrate_system(self) -> Dict[str, Any]:
+    def calibrate_system(self) -> dict[str, Any]:
         """
         Lance une calibration du système
         
@@ -878,19 +1024,18 @@ class AcquisitionController:
         results = {
             'timestamp': datetime.now().isoformat(),
             'channels': {},
-            'system_status': 'ok'
+            'system_status': 'not_calibrated',
+            'calibration_status': 'not_performed',
+            'calibration_valid': False,
         }
         
         for channel, config in self.channels_config.items():
-            # Simulation de calibration
             results['channels'][channel] = {
                 'channel': channel,
                 'label': config.label,
                 'sensor_type': config.sensor_type,
-                'calibration_status': 'ok',
-                'offset_correction': np.random.normal(0, 0.001),
-                'scale_correction': 1.0 + np.random.normal(0, 0.01),
-                'noise_level': np.random.uniform(0.001, 0.01)
+                'calibration_status': 'not_performed',
+                'sensitivity_v_per_unit': config.sensor_sensitivity,
             }
             
         logger.info("Calibration système terminée")
@@ -901,6 +1046,8 @@ class AcquisitionController:
         if self.is_acquiring:
             self.stop_acquisition()
             
+        if self._daq_backend is not None:
+            self._daq_backend.close()
         if self.daq:
             self.daq.close()
 
@@ -919,7 +1066,7 @@ class AcquisitionController:
         self.close()
 
 # Fonctions utilitaires pour l'interface
-def create_default_maritime_config() -> Dict[int, MaritimeChannelConfig]:
+def create_default_maritime_config() -> dict[int, MaritimeChannelConfig]:
     """
     Crée une configuration par défaut pour l'acquisition maritime
     

@@ -61,6 +61,20 @@ class AcquisitionControllerTests(unittest.TestCase):
             )
         )
 
+    def test_hardware_scan_can_be_deferred_until_operator_request(self):
+        calls = []
+        controller = AcquisitionController(
+            board_scanner=lambda: calls.append("scan") or [],
+            auto_initialize=False,
+        )
+        try:
+            self.assertEqual(calls, [])
+            self.assertEqual(controller.get_available_boards(), [])
+            self.assertFalse(controller.refresh_hardware())
+            self.assertEqual(calls, ["scan"])
+        finally:
+            controller.close()
+
     def test_simulation_respects_configured_rate(self):
         started = time.monotonic()
         self.assertTrue(

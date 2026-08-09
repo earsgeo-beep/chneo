@@ -4,14 +4,17 @@ Interface en ligne de commande pour CHNeoWave.
 """
 
 import argparse
+import faulthandler
 import logging
 import os
 import sys
+from pathlib import Path
 
 from hrneowave import __version__
 
 QApplication = None
 Qt = None
+_FAULT_LOG_STREAM = None
 
 
 def _ensure_qt_imports() -> str | None:
@@ -63,20 +66,42 @@ def _ensure_project_root_on_path() -> None:
 
 def _configure_logging(debug: bool = False) -> logging.Logger:
     """Initialise un logging simple utilisable dès le bootstrap."""
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    try:
+        handlers.append(
+            logging.FileHandler("chneowave_debug.log", mode="w", encoding="utf-8")
+        )
+    except OSError:
+        pass
     logging.basicConfig(
         level=logging.DEBUG if debug else logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        filename="chneowave_debug.log",
-        filemode="w",
+        handlers=handlers,
+        force=True,
     )
     return logging.getLogger(__name__)
 
 
-def run_gui() -> int:
+def _enable_native_fault_logging(logger: logging.Logger) -> None:
+    """Conserve une trace exploitable si une DLL native ferme le processus."""
+
+    global _FAULT_LOG_STREAM
+    if _FAULT_LOG_STREAM is not None:
+        return
+    try:
+        crash_path = Path.cwd() / "chneowave_crash.log"
+        _FAULT_LOG_STREAM = crash_path.open("a", encoding="utf-8", buffering=1)
+        faulthandler.enable(file=_FAULT_LOG_STREAM, all_threads=True)
+    except (OSError, RuntimeError) as exc:
+        logger.warning("Journal natif indisponible: %s", exc)
+
+
+def run_gui(debug: bool = False) -> int:
     """
     Lance l'interface graphique CHNeoWave.
     """
-    logger = logging.getLogger(__name__)
+    logger = _configure_logging(debug=debug)
+    _enable_native_fault_logging(logger)
     logger.info("run_gui() started")
 
     _ensure_project_root_on_path()
@@ -142,11 +167,8 @@ def run_cli(argv: list[str] | None = None) -> int:
     )
 
     args = parser.parse_args(argv)
-    logger = _configure_logging(debug=args.debug)
-    logger.info("run_cli() started")
-
     # Application desktop: sans sous-commande dédiée, la GUI reste le comportement par défaut.
-    return run_gui()
+    return run_gui(debug=args.debug)
 
 
 if __name__ == "__main__":

@@ -41,6 +41,19 @@ class FakeUL:
         self.queue = None
         self.scan_options = None
         self.stopped = False
+        self.direct_mode_calls = 0
+        self.created_devices = {}
+
+    def ignore_instacal(self):
+        self.direct_mode_calls += 1
+
+    def get_daq_device_inventory(self, interface_type):
+        return [SimpleNamespace(product_name="USB-1608FS", unique_id="TEST-1608")]
+
+    def create_daq_device(self, board_num, device):
+        if board_num in self.created_devices:
+            raise RuntimeError("device already created")
+        self.created_devices[board_num] = device
 
     def get_board_name(self, board_num):
         if board_num == 0:
@@ -99,6 +112,7 @@ def fake_api():
         FunctionType=FakeFunctionType,
         ScanOptions=FakeScanOptions,
         ULRange=FakeULRange,
+        InterfaceType=SimpleNamespace(ANY=0),
     )
 
 
@@ -113,8 +127,13 @@ class MCCBackendTests(unittest.TestCase):
     def tearDown(self):
         self.backend.close()
 
-    def test_detects_instacal_board(self):
+    def test_detects_direct_usb_board_without_instacal_configuration(self):
         self.assertEqual(MCCDAQ_USB1608FS.detect_boards(api=self.api), [0])
+        self.assertEqual(self.api.ul.direct_mode_calls, 1)
+
+        # Un nouveau scan reutilise le mode direct et la carte deja creee.
+        self.assertEqual(MCCDAQ_USB1608FS.detect_boards(api=self.api), [0])
+        self.assertEqual(self.api.ul.direct_mode_calls, 1)
 
     def test_uses_channel_gain_queue(self):
         self.assertTrue(

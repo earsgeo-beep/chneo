@@ -106,7 +106,10 @@ class DaqBackendP1Tests(unittest.TestCase):
         self.assertGreater(controller.stats["samples_acquired"], 0)
         self.assertTrue(controller.data_buffer)
         self.assertEqual(controller.current_session.metadata["backend_name"], "simulated")
-        self.assertEqual(controller.current_session.metadata["hardware_validation_status"], "pending_hardware")
+        self.assertEqual(
+            controller.current_session.metadata["hardware_validation_status"],
+            "pending_hardware",
+        )
         self.assertFalse(controller.is_hardware_available())
 
 

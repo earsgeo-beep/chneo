@@ -12,7 +12,7 @@ echo.
 
 set PYTHONUTF8=1
 
-REM Vérifier si Python est disponible
+REM Utiliser Python 3.13 si disponible, sinon le Python du PATH
 py -3.13 --version >nul 2>&1
 if errorlevel 1 (
     python --version >nul 2>&1
@@ -41,14 +41,14 @@ if not exist "chneowave.py" (
 echo Lancement de CHNeoWave...
 echo.
 
-REM Lancer CHNeoWave
-%PY_CMD% chneowave.py --gui
+REM Lancer CHNeoWave avec diagnostic des erreurs natives (DLL MCC)
+%PY_CMD% -X faulthandler chneowave.py --gui
 
 REM Vérifier le code de sortie
 if errorlevel 1 (
     echo.
     echo ERREUR: CHNeoWave s'est ferme avec une erreur
-    echo Consultez les logs pour plus d'informations
+    echo Consultez chneowave_debug.log et chneowave_crash.log
     pause
 ) else (
     echo.
