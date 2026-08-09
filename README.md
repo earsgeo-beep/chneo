@@ -1,16 +1,23 @@
 # CHNeoWave
 
-CHNeoWave est une application desktop Qt pour l'acquisition, le traitement et l'export de donnees maritimes en laboratoire de modele reduit. Le depot a ete nettoye pour ne decrire que le flux actif valide dans le code.
+CHNeoWave est une plateforme desktop Qt de laboratoire pour l'acquisition,
+la metrologie, le traitement scientifique et la tracabilite de donnees
+maritimes. Le noyau ne depend d'aucun constructeur: chaque famille de cartes
+est integree par un pilote qui publie ses capacites au registre materiel.
 
 Le runtime principal est un client Python/Qt lance depuis `chneowave.py`, `main.py`, `python -m hrneowave` ou `CHNeoWave.bat`.
 
 ## Flux actuellement branche
 
 1. creation d'un projet
-2. acquisition ou simulation multi-canaux
-3. export des donnees brutes
-4. analyse post-acquisition
-5. generation de rapport
+2. detection et validation d'un equipement physique
+3. calibration des chaines capteur
+4. acquisition multi-canaux avec enregistrement HDF5 continu
+5. analyse scientifique et controle qualite
+6. export et rapport tracable
+
+Il n'existe aucun repli automatique vers des donnees artificielles. Sans
+equipement physique connecte, l'acquisition reste verrouillee.
 
 ## Structure utile du depot
 
@@ -70,11 +77,22 @@ Par defaut, les projets sont crees dans `~/CHNeoWave_Projects` avec la structure
 └── project_metadata.json
 ```
 
+## Materiel
+
+Le premier pilote livre est celui de la MCC USB-1608FS. Il utilise l'Universal
+Library en mode de detection USB directe et ne depend pas d'une configuration
+``cb.cfg`` creee par InstaCal. L'application InstaCal reste utile pour un
+diagnostic constructeur, mais elle n'est pas necessaire au lancement de
+CHNeoWave. Les pilotes IOtech, Keithley et Amplicon seront ajoutes au meme
+registre apres validation sur les materiels reels.
+
 ## Limites connues
 
-- la vue d'acquisition expose encore des boutons de chargement/sauvegarde de configuration non implementes
 - le mode HDF5 depend de `h5py`
-- le support MCC depend des DLLs Measurement Computing et du materiel cible
+- le pilote MCC depend des DLLs Measurement Computing installees localement
+- la MCC doit encore franchir les paliers de validation 1 min, 10 min et 60 min
+  sur le PC Windows du laboratoire
+- les autres familles de cartes ne sont pas encore livrees comme pilotes actifs
 - plusieurs modules secondaires restent presents dans `src/hrneowave`, mais la documentation ne couvre que le flux actif valide
 
 ## Documentation
@@ -83,3 +101,4 @@ Par defaut, les projets sont crees dans `~/CHNeoWave_Projects` avec la structure
 - [docs/index.rst](docs/index.rst)
 - [docs/user_guide.rst](docs/user_guide.rst)
 - [docs/technical_guide.rst](docs/technical_guide.rst)
+- [docs/laboratory_platform_architecture_2026-08-09.rst](docs/laboratory_platform_architecture_2026-08-09.rst)

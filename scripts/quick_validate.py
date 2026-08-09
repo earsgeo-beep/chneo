@@ -77,12 +77,15 @@ class QuickValidator:
             # Import des modules principaux disponibles
             from hrneowave.gui.main_window import MainWindow
             from hrneowave.core.project_manager import ProjectManager
-            from hrneowave.hardware.manager import HardwareManager
+            from hrneowave.hardware import build_default_hardware_registry
             from hrneowave.core.config_manager import ConfigManager
             
             # Test création objets
             config_mgr = ConfigManager()
             project_mgr = ProjectManager()
+            hardware_registry = build_default_hardware_registry()
+            if not hardware_registry.registered_drivers():
+                raise RuntimeError("Aucun pilote matériel enregistré")
             
             print("✅ Modules core fonctionnels")
             return True

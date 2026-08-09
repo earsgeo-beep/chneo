@@ -12,11 +12,11 @@ from hrneowave.acquisition.acquisition_controller import (
     AcquisitionSession,
     MaritimeChannelConfig,
 )
-from hrneowave.acquisition.mcc_daq_wrapper import MCCRanges
 from hrneowave.acquisition.session_recorder import (
     ContinuousHDF5Recorder,
     inspect_recording,
 )
+from hrneowave.hardware import VoltageRange
 
 H5PY_AVAILABLE = importlib.util.find_spec("h5py") is not None
 
@@ -32,7 +32,7 @@ class ContinuousHDF5RecorderTests(unittest.TestCase):
                 sensor_type="wave_height",
                 label="Sonde A",
                 units="V",
-                range_type=MCCRanges.BIP10VOLTS,
+                voltage_range=VoltageRange.BIPOLAR_10_V,
                 physical_units="m",
                 sensor_sensitivity=2.0,
                 probe_position_m=0.0,
@@ -42,7 +42,7 @@ class ContinuousHDF5RecorderTests(unittest.TestCase):
                 sensor_type="pressure",
                 label="Pression B",
                 units="V",
-                range_type=MCCRanges.BIP5VOLTS,
+                voltage_range=VoltageRange.BIPOLAR_5_V,
                 physical_units="hPa",
                 sensor_sensitivity=0.01,
             ),
@@ -56,6 +56,7 @@ class ContinuousHDF5RecorderTests(unittest.TestCase):
             metadata={
                 "selected_channels": [0, 3],
                 "hardware_available": True,
+                "acquisition_source": "physical_hardware",
                 "water_depth_m": 0.8,
             },
         )

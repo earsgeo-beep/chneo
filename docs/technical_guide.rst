@@ -12,6 +12,8 @@ Le depot a ete reduit autour d'une chaine principale:
 - ``src/hrneowave/gui/views/`` pour les ecrans actifs
 - ``src/hrneowave/core/project_manager.py`` pour la persistence projet
 - ``src/hrneowave/acquisition/acquisition_controller.py`` pour l'acquisition
+- ``src/hrneowave/hardware/registry.py`` pour la decouverte multi-pilotes
+- ``src/hrneowave/hardware/contracts.py`` pour les capacites generiques
 - ``src/hrneowave/core/post_processor.py`` pour le post-traitement
 - ``src/hrneowave/gui/views/report_view.py`` pour la sortie rapport
 
@@ -43,13 +45,14 @@ Contraintes techniques reelles
 - ``ThemeManager`` importe directement ``PySide6``: dans l'etat actuel, ``PyQt6`` n'est pas un runtime garanti
 - ``PostProcessor`` charge ``pandas`` pour CSV et ``h5py`` pour HDF5
 - ``ReportView`` genere les PDF via ``QTextDocument`` et ``QPrinter``
-- le backend MCC charge ``mcculw`` localement, au-dessus de l'Universal
-  Library installee avec InstaCal
+- le pilote MCC charge ``mcculw`` et l'Universal Library localement
+- la detection USB directe ignore la configuration ``cb.cfg``; InstaCal est
+  seulement un outil de diagnostic constructeur optionnel
 
-Stockage pendant l'acquisition MCC
-----------------------------------
+Stockage pendant toute acquisition physique
+--------------------------------------------
 
-``ContinuousHDF5Recorder`` est branche directement au controleur MCC. Chaque
+``ContinuousHDF5Recorder`` est branche directement au controleur generique. Chaque
 bloc est ecrit dans deux groupes extensibles: ``raw_voltage`` pour la mesure en
 volts et ``acquisition_data`` pour la valeur physique calibree. Le tampon du
 controleur sert uniquement a l'affichage recent et ne constitue pas le stockage
@@ -63,11 +66,13 @@ le confondre avec une acquisition valide.
 Modules secondaires
 -------------------
 
-Le depot conserve encore des packages secondaires ``hardware``, ``tools`` et ``utils``. Ils sont documentes comme modules presents, pas comme flux principal garanti.
+Le registre ``hardware`` fait maintenant partie du flux principal. Les packages
+``tools`` et ``utils`` conservent encore des composants historiques qui devront
+etre classes, testes ou retires au fil des phases suivantes.
 
 Limites ouvertes
 ----------------
 
-- boutons de configuration acquisition encore non implementes
-- couverture de tests automatisee encore minimale
+- validation MCC longue duree encore a executer sur le PC Windows du laboratoire
+- test GUI offscreen execute en CI mais non disponible dans tous les environnements locaux
 - plusieurs modules secondaires n'ont pas encore ete reduits au strict necessaire

@@ -109,8 +109,8 @@ def build_channel_metadata(channels: Iterable[Any]) -> list[dict[str, Any]]:
     channel_metadata = []
     for index, channel in enumerate(channels):
         channel_number = int(getattr(channel, "channel", index))
-        range_type = getattr(channel, "range_type", "")
-        range_name = getattr(range_type, "name", str(range_type))
+        voltage_range = getattr(channel, "voltage_range", None)
+        range_name = getattr(voltage_range, "label", str(voltage_range or ""))
         calibration_record = _calibration_record_to_dict(getattr(channel, "calibration_record", None))
         record_coefficients = {}
         if calibration_record:

@@ -11,11 +11,12 @@ d'une campagne de deux heures.
 Preparation
 -----------
 
-1. Verifier dans InstaCal que la carte apparait comme ``USB-1608FS``.
-2. Executer le test InstaCal de la carte.
-3. Relier les entrees inutilisees a ``AGND`` conformement au manuel MCC.
-4. Ne pas connecter les capteurs de campagne pendant le premier diagnostic.
-5. Installer CHNeoWave et ``mcculw`` avec le kit hors ligne decrit dans
+1. Installer le pilote Measurement Computing et l'Universal Library.
+2. Verifier la detection USB directe avec le diagnostic CHNeoWave ci-dessous.
+3. En cas d'echec uniquement, utiliser InstaCal comme diagnostic constructeur.
+4. Relier les entrees inutilisees a ``AGND`` conformement au manuel MCC.
+5. Ne pas connecter les capteurs de campagne pendant le premier diagnostic.
+6. Installer CHNeoWave et ``mcculw`` avec le kit hors ligne decrit dans
    ``INSTALL.md``.
 
 Diagnostic non destructif
@@ -57,7 +58,7 @@ Pour chaque essai, conserver:
 - le fichier HDF5 cree automatiquement dans ``<projet>/data``;
 - un export CSV seulement pour les essais courts qui doivent etre relus dans
   un tableur;
-- une capture de la configuration InstaCal.
+- le rapport du diagnostic USB direct CHNeoWave.
 
 Enregistrement continu
 ----------------------
@@ -118,8 +119,9 @@ produit:
 Limite actuelle
 ---------------
 
-Le stockage HDF5 continu est maintenant integre et teste en simulation. Ne pas
-encore lancer de campagne de deux heures: il reste a valider sur le PC Windows
+Le stockage HDF5 continu est integre et valide par des doubles de banc dans la
+suite automatisee. Ne pas encore lancer de campagne de deux heures: il reste a
+valider sur le PC Windows
 du laboratoire les paliers de 60 secondes, 10 minutes puis 60 minutes, avec
 ``recording_status = complete``, le compte exact d'echantillons et zero
 ``buffer_overruns``. La campagne longue sera autorisee apres ces trois paliers.

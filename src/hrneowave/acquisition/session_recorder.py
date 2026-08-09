@@ -15,7 +15,12 @@ from typing import Any
 import numpy as np
 
 from hrneowave import __version__
-from hrneowave.core.session_schema import build_channel_metadata
+from hrneowave.core.session_schema import (
+    CLOCK_DOMAIN,
+    DATA_KIND_PHYSICAL,
+    SCHEMA_VERSION,
+    build_channel_metadata,
+)
 
 
 class RecordingError(RuntimeError):
@@ -75,10 +80,21 @@ class ContinuousHDF5Recorder:
             handle.attrs["software"] = "CHNeoWave"
             handle.attrs["software_version"] = __version__
             handle.attrs["format_version"] = self.FORMAT_VERSION
+            handle.attrs["schema_version"] = SCHEMA_VERSION
             handle.attrs["recording_status"] = "recording"
             handle.attrs["created_at"] = session.start_time.isoformat()
             handle.attrs["n_channels"] = len(session.channels)
             handle.attrs["n_samples"] = 0
+            handle.attrs["sample_rate_hz"] = float(session.sampling_rate)
+            handle.attrs["dt_seconds"] = 1.0 / float(session.sampling_rate)
+            handle.attrs["clock_domain"] = CLOCK_DOMAIN
+            handle.attrs["data_kind"] = DATA_KIND_PHYSICAL
+            handle.attrs["hardware_available"] = bool(
+                session.metadata.get("hardware_available", False)
+            )
+            handle.attrs["acquisition_source"] = str(
+                session.metadata.get("acquisition_source", "unknown")
+            )
 
             metadata = handle.create_group("metadata")
             session_group = metadata.create_group("session")
@@ -136,7 +152,9 @@ class ContinuousHDF5Recorder:
                 channel_group.attrs["sensor_type"] = channel.sensor_type
                 channel_group.attrs["physical_unit"] = channel.physical_units
                 channel_group.attrs["voltage_unit"] = channel.units
-                channel_group.attrs["input_range"] = channel.range_type.name
+                channel_group.attrs["input_range"] = channel.voltage_range.label
+                channel_group.attrs["input_range_min_v"] = float(channel.voltage_range.minimum)
+                channel_group.attrs["input_range_max_v"] = float(channel.voltage_range.maximum)
                 channel_group.attrs["sensor_sensitivity"] = float(channel.sensor_sensitivity)
                 for name, value in channel_contracts[key].items():
                     if value is not None:
@@ -234,6 +252,13 @@ class ContinuousHDF5Recorder:
             session_group.attrs["end_time"] = session.end_time.isoformat() if session.end_time else ""
             session_group.attrs["total_samples"] = int(self.sample_count)
             self._file.attrs["n_samples"] = int(self.sample_count)
+            self._file.attrs["duration_s"] = self.sample_count / float(session.sampling_rate)
+            self._file.attrs["time_start"] = 0.0
+            self._file.attrs["time_end"] = (
+                (self.sample_count - 1) / float(session.sampling_rate)
+                if self.sample_count
+                else 0.0
+            )
             self._file.attrs["recording_status"] = recording_status
             if expected_samples is not None:
                 self._file.attrs["expected_samples"] = int(expected_samples)
@@ -244,6 +269,7 @@ class ContinuousHDF5Recorder:
             self._file.attrs["completed_at"] = session.end_time.isoformat() if session.end_time else ""
             self._file.attrs["errors"] = int(statistics.get("errors", 0))
             self._file.attrs["buffer_overruns"] = int(statistics.get("buffer_overruns", 0))
+            self._file.attrs["recording_errors"] = int(statistics.get("recording_errors", 0))
             self.flush()
         finally:
             self._close_handle()
@@ -297,9 +323,20 @@ def inspect_recording(file_path: str | Path) -> dict[str, Any]:
             declared_samples = int(handle.attrs.get("n_samples", -1))
             errors = int(handle.attrs.get("errors", 0))
             overruns = int(handle.attrs.get("buffer_overruns", 0))
+            recording_errors = int(handle.attrs.get("recording_errors", 0))
             processed_group = handle.get("acquisition_data")
             raw_group = handle.get("raw_voltage")
             session_group = handle.get("metadata/session")
+            hardware_available = bool(
+                session_group.attrs.get("hardware_available", False)
+                if session_group is not None
+                else False
+            )
+            acquisition_source = str(
+                session_group.attrs.get("acquisition_source", "")
+                if session_group is not None
+                else ""
+            )
 
             issues: list[str] = []
             if processed_group is None or raw_group is None or session_group is None:
@@ -335,6 +372,12 @@ def inspect_recording(file_path: str | Path) -> dict[str, Any]:
                 issues.append(f"{errors} erreur(s) signalee(s)")
             if overruns:
                 issues.append(f"{overruns} debordement(s) de buffer")
+            if recording_errors:
+                issues.append(f"{recording_errors} erreur(s) d'enregistrement")
+            if not hardware_available:
+                issues.append("Equipement physique non atteste")
+            if acquisition_source != "physical_hardware":
+                issues.append(f"Source d'acquisition interdite: {acquisition_source or 'absente'}")
 
             return {
                 "ok": not issues,
@@ -349,6 +392,9 @@ def inspect_recording(file_path: str | Path) -> dict[str, Any]:
                 "duration_seconds": (declared_samples / sample_rate if sample_rate > 0 else None),
                 "errors": errors,
                 "buffer_overruns": overruns,
+                "recording_errors": recording_errors,
+                "hardware_available": hardware_available,
+                "acquisition_source": acquisition_source,
                 "channel_lengths": lengths,
                 "issues": issues,
             }

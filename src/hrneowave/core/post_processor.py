@@ -120,6 +120,32 @@ class PostProcessor(QObject):
                     return value
         return value
 
+    @staticmethod
+    def _validate_acquisition_integrity(
+        metadata: dict[str, Any],
+        statistics: dict[str, Any] | None,
+        source_format: str,
+    ) -> None:
+        """Refuse les sessions CHNeoWave incomplètes ou non matérielles."""
+
+        counters = dict(statistics or {})
+        for key in ("errors", "buffer_overruns", "recording_errors"):
+            counters.setdefault(key, metadata.get(key, 0))
+            if int(counters.get(key, 0) or 0) > 0:
+                raise ValueError(
+                    f"Session {source_format} contenant {key}={counters[key]}"
+                )
+        status = metadata.get("recording_status")
+        if status is not None and str(status) != "complete":
+            raise ValueError(
+                f"Session {source_format} non valide: recording_status={status}"
+            )
+        if metadata.get("hardware_available") is False:
+            raise ValueError(f"Session {source_format} non issue d'un équipement physique")
+        source_kind = metadata.get("acquisition_source")
+        if source_kind is not None and source_kind != "physical_hardware":
+            raise ValueError(f"Source d'acquisition interdite: {source_kind}")
+
     def load_data_file(self, file_path: str) -> bool:
         try:
             path = Path(file_path).expanduser().resolve()
@@ -211,11 +237,13 @@ class PostProcessor(QObject):
             }
         )
         channel_metadata: list[dict[str, Any]] = []
+        sidecar_statistics: dict[str, Any] = {}
         sidecar_path = Path(f"{file_path}.metadata.json")
         if sidecar_path.is_file():
             with sidecar_path.open("r", encoding="utf-8") as handle:
                 sidecar = json.load(handle)
             channel_metadata = list(sidecar.get("channel_metadata", []))
+            sidecar_statistics = dict(sidecar.get("statistics", {}))
             sidecar_metadata = {
                 key: self._normalize_metadata_value(value)
                 for key, value in sidecar.get("metadata", {}).items()
@@ -231,6 +259,8 @@ class PostProcessor(QObject):
             for key, value in sidecar_metadata.items():
                 if key not in metadata:
                     metadata[key] = value
+
+        self._validate_acquisition_integrity(metadata, sidecar_statistics, "CSV")
 
         return {
             "source_format": "csv",
@@ -254,6 +284,11 @@ class PostProcessor(QObject):
         metadata = {
             key: self._normalize_metadata_value(value) for key, value in payload.get("metadata", {}).items()
         }
+        self._validate_acquisition_integrity(
+            metadata,
+            dict(payload.get("statistics", {})),
+            "JSON",
+        )
         session = payload.get("session", {})
         sample_rate = extract_sample_rate(metadata, session)
         if sample_rate is None and time_values.size:
@@ -317,6 +352,7 @@ class PostProcessor(QObject):
                     for key, value in handle["metadata/session"].attrs.items()
                 }
                 metadata.update(session)
+            self._validate_acquisition_integrity(metadata, None, "HDF5")
             if "metadata/channels" in handle:
                 for key, group in handle["metadata/channels"].items():
                     channel_metadata[key] = {

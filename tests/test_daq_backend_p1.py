@@ -1,23 +1,23 @@
-import json
-import tempfile
 import unittest
-from pathlib import Path
 
 import numpy as np
 
-from hrneowave.acquisition.acquisition_controller import AcquisitionController, create_default_maritime_config
-from hrneowave.acquisition.daq_backend import (
-    FileReplayBackend,
-    SimulatedDaqBackend,
-    detect_voltage_saturation,
+from hrneowave.acquisition.acquisition_controller import create_default_maritime_config
+from hrneowave.acquisition.daq_backend import DaqBackend, DaqReadResult, detect_voltage_saturation
+from hrneowave.hardware import HardwareRegistry
+from hrneowave.hardware.drivers.mcc_usb1608fs import MccUsb1608FsProvider
+from tests.hardware_test_doubles import (
+    DeterministicPhysicalBackend,
+    StaticPhysicalProvider,
+    physical_test_device,
 )
 
 
-class DaqBackendP1Tests(unittest.TestCase):
-    def test_simulated_backend_returns_raw_voltage_matrix_with_monotonic_time(self):
-        configs = create_default_maritime_config()
-        channels = [configs[0], configs[2]]
-        backend = SimulatedDaqBackend(seed=42)
+class DaqBackendContractTests(unittest.TestCase):
+    def test_physical_backend_returns_raw_matrix_with_monotonic_time(self):
+        backend = DeterministicPhysicalBackend()
+        backend.connect()
+        channels = [create_default_maritime_config()[0], create_default_maritime_config()[2]]
 
         actual_rate = backend.start(sample_rate_hz=50.0, channels=channels, chunk_size=8)
         result = backend.read(num_samples=8)
@@ -27,12 +27,19 @@ class DaqBackendP1Tests(unittest.TestCase):
         self.assertEqual(result.time.shape, (8,))
         self.assertTrue(np.all(np.diff(result.time) > 0.0))
         self.assertTrue(np.allclose(np.diff(result.time), 1.0 / 50.0))
-        self.assertEqual(result.hardware_validation_status, "pending_hardware")
-        self.assertFalse(np.any(np.abs(result.raw_data[:, 1]) > 5.0))
+        self.assertEqual(result.hardware_validation_status, "test_fixture_validated")
 
-    def test_voltage_saturation_detection_uses_channel_ranges(self):
-        configs = create_default_maritime_config()
-        pressure = configs[2]
+    def test_read_result_rejects_non_monotonic_time(self):
+        with self.assertRaises(ValueError, msg="L'axe temporel doit être strictement monotone"):
+            DaqReadResult(
+                raw_data=np.zeros((3, 1)),
+                time=np.array([0.0, 0.02, 0.01]),
+                sample_rate_hz=50.0,
+                backend_name="invalid",
+            )
+
+    def test_voltage_saturation_detection_uses_generic_channel_ranges(self):
+        pressure = create_default_maritime_config()[2]
         raw_data = np.array([[0.0], [4.999], [-1.0]], dtype=float)
 
         warnings = detect_voltage_saturation(raw_data, [pressure])
@@ -40,77 +47,66 @@ class DaqBackendP1Tests(unittest.TestCase):
         self.assertTrue(warnings)
         self.assertIn("VOLTAGE_SATURATION_RISK", warnings[0])
 
-    def test_file_replay_backend_preserves_raw_channels_and_time_axis(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "replay.json"
-            payload = {
-                "metadata": {
-                    "schema_version": "1.0.0",
-                    "sample_rate_hz": 50.0,
-                    "clock_domain": "relative_monotonic_seconds",
-                },
-                "time": [0.0, 0.02, 0.04, 0.06],
-                "channels": {
-                    "channel_00": [0.0, 0.5, 1.0, 0.5],
-                    "channel_01": [1.0, 1.5, 2.0, 1.5],
-                },
-                "raw_channels": {
-                    "channel_00": [0.0, 0.1, 0.2, 0.1],
-                    "channel_01": [0.0, 0.2, 0.4, 0.2],
-                },
-            }
-            path.write_text(json.dumps(payload), encoding="utf-8")
+    def test_registry_discovers_and_opens_a_physical_device(self):
+        calls: list[str] = []
+        registry = HardwareRegistry()
+        registry.register(StaticPhysicalProvider(calls=calls))
 
-            backend = FileReplayBackend(str(path))
-            actual_rate = backend.start(sample_rate_hz=50.0, channels=[], chunk_size=2)
-            first = backend.read(num_samples=2)
-            second = backend.read(num_samples=2)
-            exhausted = backend.read(num_samples=2)
+        report = registry.discover()
+        backend = registry.open_device(report.devices[0].key)
 
-            self.assertEqual(actual_rate, 50.0)
-            self.assertTrue(np.allclose(first.raw_data[:, 0], [0.0, 0.1]))
-            self.assertTrue(np.allclose(second.raw_data[:, 1], [0.4, 0.2]))
-            self.assertTrue(np.allclose(second.time, [0.04, 0.06]))
-            self.assertIsNone(exhausted)
+        self.assertEqual(report.devices[0], physical_test_device())
+        self.assertTrue(backend.connected)
+        self.assertEqual(calls, ["discover", f"open:{report.devices[0].key}"])
 
-    def test_file_replay_rejects_sample_rate_mismatch(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "bad_rate.json"
-            payload = {
-                "metadata": {"sample_rate_hz": 50.0},
-                "time": [0.0, 0.02, 0.04],
-                "channels": {"channel_00": [0.0, 1.0, 0.0]},
-            }
-            path.write_text(json.dumps(payload), encoding="utf-8")
+    def test_mcc_is_an_isolated_driver_with_declared_capabilities(self):
+        opened: list[tuple[int, str]] = []
 
-            backend = FileReplayBackend(str(path))
-            with self.assertRaises(ValueError):
-                backend.start(sample_rate_hz=100.0, channels=[])
+        def backend_factory(board_num, descriptor):
+            opened.append((board_num, descriptor.key))
+            return DeterministicPhysicalBackend(descriptor)
 
-    def test_acquisition_controller_accepts_injected_simulated_backend(self):
-        backend = SimulatedDaqBackend(seed=7, realtime=False)
-        controller = AcquisitionController(daq_backend=backend)
-        controller.channels_config = {0: create_default_maritime_config()[0]}
-
-        self.assertTrue(
-            controller.start_acquisition_session(
-                "backend_p1",
-                sampling_rate=100.0,
-                duration_seconds=0.001,
-                channels=[0],
-            )
+        provider = MccUsb1608FsProvider(
+            scanner=lambda: [2],
+            backend_factory=backend_factory,
         )
-        controller.acquisition_thread.join(timeout=2.0)
+        device = provider.discover()[0]
+        backend = provider.open(device)
 
-        self.assertFalse(controller.is_acquiring)
-        self.assertGreater(controller.stats["samples_acquired"], 0)
-        self.assertTrue(controller.data_buffer)
-        self.assertEqual(controller.current_session.metadata["backend_name"], "simulated")
-        self.assertEqual(
-            controller.current_session.metadata["hardware_validation_status"],
-            "pending_hardware",
-        )
-        self.assertFalse(controller.is_hardware_available())
+        self.assertEqual(device.model, "USB-1608FS")
+        self.assertEqual(device.capabilities.analog_input_channels, 8)
+        self.assertEqual(device.capabilities.max_sample_rate_hz_per_channel, 12_500.0)
+        self.assertEqual(opened, [(2, device.key)])
+        self.assertTrue(backend.connected)
+
+    def test_registry_rejects_non_hardware_provider_result(self):
+        class ForbiddenSource(DaqBackend):
+            is_hardware = False
+
+            def connect(self):
+                self.connected = True
+
+            def start(self, sample_rate_hz, channels, chunk_size=100):
+                return float(sample_rate_hz)
+
+            def read(self, num_samples=100):
+                return None
+
+            def status(self):
+                return {}
+
+        class ForbiddenProvider(StaticPhysicalProvider):
+            def open(self, device):
+                source = ForbiddenSource(device)
+                source.connect()
+                return source
+
+        registry = HardwareRegistry()
+        registry.register(ForbiddenProvider())
+        report = registry.discover()
+
+        with self.assertRaises(TypeError):
+            registry.open_device(report.devices[0].key)
 
 
 if __name__ == "__main__":

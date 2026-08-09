@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""
-Contrôleur d'acquisition pour CHNeoWave
-Module d'interface pour l'acquisition de données maritime avec MCC DAQ USB-1608FS
+"""Orchestrateur matériel et scientifique des acquisitions CHNeoWave.
 
-Auteur: CHNeoWave Development Team
-Version: 1.0.0
+Ce contrôleur ne contient aucun générateur de données. Une session ne peut
+démarrer qu'avec un backend physique connecté par le registre matériel.
 """
 
-import json
+from __future__ import annotations
+
 import logging
 import re
 import threading
@@ -22,39 +21,34 @@ from typing import Any
 import numpy as np
 
 from hrneowave.core.calibration import CALIBRATION_VALID, CalibrationRecord
-from hrneowave.core.session_schema import (
-    DATA_KIND_PHYSICAL,
-    build_channel_metadata,
-    build_csv_metadata_row,
-    build_session_metadata,
+from hrneowave.hardware import (
+    DeviceDescriptor,
+    DiscoveryReport,
+    HardwareRegistry,
+    VoltageRange,
+    build_default_hardware_registry,
 )
 
 from .daq_backend import DaqBackend
-from .mcc_daq_wrapper import (
-    MCCDAQ_USB1608FS,
-    MCCBackendError,
-    MCCRanges,
-    scan_available_boards,
-)
+from .session_exporter import SessionExporter
 from .session_recorder import ContinuousHDF5Recorder, RecordingError
 
-# Configuration du logging
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class MaritimeChannelConfig:
-    """Configuration d'un canal pour l'acquisition maritime"""
+    """Chaîne capteur générique, indépendante du constructeur de la DAQ."""
 
     channel: int
-    sensor_type: str  # 'pressure', 'accelerometer', 'wave_height', 'temperature'
+    sensor_type: str
     label: str
-    units: str
-    range_type: MCCRanges
+    units: str = "V"
+    voltage_range: VoltageRange = VoltageRange.BIPOLAR_10_V
     calibration_offset: float = 0.0
     calibration_scale: float = 1.0
-    physical_units: str = "m"  # Unités physiques finales
-    sensor_sensitivity: float = 1.0  # V/unité physique
+    physical_units: str = "m"
+    sensor_sensitivity: float = 1.0
     enabled: bool = True
     sensor_id: str = ""
     probe_position_m: float | None = None
@@ -65,7 +59,7 @@ class MaritimeChannelConfig:
 
 @dataclass
 class AcquisitionSession:
-    """Session d'acquisition de données maritimes"""
+    """Contrat traçable d'une session physique de laboratoire."""
 
     session_id: str
     project_name: str
@@ -79,46 +73,51 @@ class AcquisitionSession:
 
 
 class AcquisitionController:
-    """
-    Contrôleur principal pour l'acquisition de données maritime
-
-    Gère l'interface entre l'interface utilisateur CHNeoWave et la carte MCC DAQ,
-    avec des fonctionnalités spécialisées pour l'acquisition de houle maritime.
-    """
+    """Pilote une session réelle tout en protégeant son intégrité sur disque."""
 
     def __init__(
         self,
         data_callback: Callable | None = None,
-        daq_factory: Callable[[], MCCDAQ_USB1608FS] = MCCDAQ_USB1608FS,
-        board_scanner: Callable[[], list[int]] = scan_available_boards,
         recorder_factory: Callable[[], ContinuousHDF5Recorder] = ContinuousHDF5Recorder,
+        exporter_factory: Callable[[], SessionExporter] = SessionExporter,
+        hardware_registry: HardwareRegistry | None = None,
         auto_initialize: bool = True,
         daq_backend: DaqBackend | None = None,
-    ):
-        """
-        Initialise le contrôleur d'acquisition
+    ) -> None:
+        if daq_backend is not None and not bool(getattr(daq_backend, "is_hardware", False)):
+            raise TypeError("AcquisitionController refuse les sources non matérielles")
 
-        Args:
-            data_callback: Fonction appelée lors de nouveaux données
-        """
-        self.daq = None
         self.data_callback = data_callback
-        self._daq_factory = daq_factory
-        self._board_scanner = board_scanner
         self._recorder_factory = recorder_factory
+        self._exporter_factory = exporter_factory
+        self.hardware_registry = hardware_registry or build_default_hardware_registry()
         self._daq_backend = daq_backend
         self._recorder: ContinuousHDF5Recorder | None = None
+        self.available_devices: list[DeviceDescriptor] = []
+        self.discovery_errors: dict[str, str] = {}
+        self.selected_device: DeviceDescriptor | None = (
+            daq_backend.descriptor if daq_backend is not None else None
+        )
+
         self.is_acquiring = False
-        self.acquisition_thread = None
+        self.acquisition_thread: threading.Thread | None = None
         self.data_queue = Queue()
+        self.channels_config: dict[int, MaritimeChannelConfig] = {}
+        self.current_session: AcquisitionSession | None = None
+        self.stats = self._new_statistics()
 
-        # Configuration
-        self.channels_config = {}
-        self.current_session = None
-        self.available_boards = []
+        self.data_buffer: list[dict[str, Any]] = []
+        self.preview_sample_limit = 100_000
+        self.buffer_size = 10_000
+        self._data_lock = threading.RLock()
+        self.last_exported_path: str | None = None
 
-        # Statistiques en temps réel
-        self.stats = {
+        if auto_initialize and daq_backend is None:
+            self.refresh_hardware()
+
+    @staticmethod
+    def _new_statistics() -> dict[str, Any]:
+        return {
             "samples_acquired": 0,
             "acquisition_rate": 0.0,
             "last_update": None,
@@ -127,68 +126,76 @@ class AcquisitionController:
             "recording_errors": 0,
         }
 
-        # Buffer pour données
-        self.data_buffer = []
-        self.buffer_size = 10000
-        self._data_lock = threading.RLock()
-        self._simulation_sample_index = 0
-        self.last_exported_path: str | None = None
+    def discover_hardware(self) -> DiscoveryReport:
+        """Interroge tous les pilotes enregistrés sans fallback logiciel."""
 
-        if auto_initialize and self._daq_backend is None:
-            self._initialize_system()
-
-    def _initialize_system(self):
-        """Initialise le système d'acquisition"""
-        return self.refresh_hardware()
-
-    def refresh_hardware(self) -> bool:
-        """Detecte puis initialise explicitement la premiere carte MCC.
-
-        La vue graphique appelle cette methode uniquement a la demande de
-        l'operateur. Ainsi, un probleme dans la bibliotheque native MCC ne peut
-        plus interrompre la construction de la fenetre principale.
-        """
         if self.is_acquiring:
-            logger.warning("Scan MCC refuse pendant une acquisition")
+            raise RuntimeError("Inventaire matériel interdit pendant une acquisition")
+        report = self.hardware_registry.discover()
+        self.available_devices = list(report.devices)
+        self.discovery_errors = dict(report.driver_errors)
+        logger.info(
+            "Inventaire matériel terminé: %s équipement(s), %s erreur(s) pilote",
+            len(self.available_devices),
+            len(self.discovery_errors),
+        )
+        return report
+
+    def connect_hardware(self, device_key: str) -> bool:
+        """Sélectionne un équipement physique du dernier inventaire."""
+
+        if self.is_acquiring:
+            logger.error("Changement de matériel interdit pendant une acquisition")
+            return False
+        try:
+            backend = self.hardware_registry.open_device(device_key)
+            if self._daq_backend is not None and self._daq_backend is not backend:
+                self._daq_backend.close()
+            self._daq_backend = backend
+            self.selected_device = backend.descriptor
+            logger.info("Équipement connecté: %s", self.selected_device.display_name)
+            return True
+        except Exception as exc:
+            logger.exception("Connexion matérielle impossible: %s", exc)
+            self._daq_backend = None
+            self.selected_device = None
             return False
 
+    def refresh_hardware(self) -> bool:
+        """Inventorie les pilotes puis connecte le premier équipement détecté."""
+
         try:
-            if self.daq is not None:
-                self.daq.close()
-                self.daq = None
+            report = self.discover_hardware()
+        except Exception as exc:
+            logger.error("Inventaire matériel impossible: %s", exc)
+            return False
+        if not report.devices:
+            logger.warning("Aucun équipement d'acquisition physique détecté")
+            return False
+        return self.connect_hardware(report.devices[0].key)
 
-            # Scan des cartes disponibles
-            self.available_boards = self._board_scanner()
-            logger.info(f"Cartes MCC détectées: {self.available_boards}")
+    def get_available_devices(self) -> list[DeviceDescriptor]:
+        return list(self.available_devices)
 
-            if self.available_boards:
-                # Initialisation avec la première carte
-                self.daq = self._daq_factory()
-                if self.daq.initialize(self.available_boards[0]):
-                    logger.info("Système d'acquisition initialisé")
-                    return True
-                else:
-                    logger.error("Erreur d'initialisation de la carte")
-                    self.daq = None
-            else:
-                logger.warning("Aucune carte MCC détectée - Mode simulation")
+    def get_hardware_capabilities(self):
+        return self.selected_device.capabilities if self.selected_device else None
 
-        except Exception as e:
-            logger.error(f"Erreur d'initialisation du système: {e}")
-            self.available_boards = []
-            self.daq = None
-        return False
-
-    def get_available_boards(self) -> list[int]:
-        """Retourne la liste des cartes disponibles"""
-        return self.available_boards.copy()
+    def get_hardware_status(self) -> dict[str, Any]:
+        if not self.is_hardware_available() or self._daq_backend is None:
+            return {
+                "connected": False,
+                "device": None,
+                "driver_errors": dict(self.discovery_errors),
+            }
+        return self._daq_backend.status()
 
     def is_hardware_available(self) -> bool:
-        """Vérifie si le matériel est disponible"""
-        daq_backend = getattr(self, "_daq_backend", None)
-        if daq_backend is not None:
-            return bool(getattr(daq_backend, "is_hardware", False))
-        return self.daq is not None and self.daq.is_initialized
+        backend = self._daq_backend
+        return bool(
+            backend is not None
+            and getattr(backend, "is_hardware", False)
+            and getattr(backend, "connected", False)
+        )
 
     def configure_maritime_channel(
         self,
@@ -200,84 +207,55 @@ class AcquisitionController:
         physical_units: str = "m",
         probe_position_m: float | None = None,
     ) -> bool:
-        """
-        Configure un canal pour l'acquisition maritime
-
-        Args:
-            channel: Numéro du canal (0-7)
-            sensor_type: Type de capteur ('pressure', 'accelerometer', 'wave_height', 'temperature')
-            label: Étiquette du canal
-            range_volts: Plage de tension (1, 2, 5, 10)
-            sensor_sensitivity: Sensibilité du capteur (V/unité physique)
-            physical_units: Unités physiques
-            probe_position_m: Position longitudinale de la sonde de houle [m]
-
-        Returns:
-            True si la configuration réussit
-        """
-        if not (0 <= channel <= 7):
-            logger.error(f"Numéro de canal invalide: {channel}")
+        if channel < 0:
+            logger.error("Numéro de canal négatif: %s", channel)
+            return False
+        capabilities = self.get_hardware_capabilities()
+        if capabilities is not None and channel >= capabilities.analog_input_channels:
+            logger.error(
+                "Canal %s hors capacité du matériel (%s voies)",
+                channel,
+                capabilities.analog_input_channels,
+            )
             return False
         if not np.isfinite(sensor_sensitivity) or sensor_sensitivity == 0:
-            logger.error(
-                "La sensibilite du canal %s doit etre finie et non nulle",
-                channel,
-            )
+            logger.error("Sensibilité invalide sur le canal %s", channel)
             return False
         if probe_position_m is not None and not np.isfinite(probe_position_m):
             logger.error("Position de sonde invalide sur le canal %s", channel)
             return False
+        try:
+            voltage_range = VoltageRange.from_limit(range_volts)
+        except ValueError as exc:
+            logger.error("%s", exc)
+            return False
+        if capabilities is not None and voltage_range not in capabilities.voltage_ranges:
+            logger.error("Plage %s non prise en charge par le matériel", voltage_range.label)
+            return False
 
-        # Conversion de la plage de tension
-        range_mapping = {
-            10.0: MCCRanges.BIP10VOLTS,
-            5.0: MCCRanges.BIP5VOLTS,
-            2.0: MCCRanges.BIP2VOLTS,
-            1.0: MCCRanges.BIP1VOLTS,
-        }
-
-        range_type = range_mapping.get(range_volts, MCCRanges.BIP10VOLTS)
-
-        # Configuration du canal maritime
-        config = MaritimeChannelConfig(
-            channel=channel,
-            sensor_type=sensor_type,
-            label=label,
+        self.channels_config[channel] = MaritimeChannelConfig(
+            channel=int(channel),
+            sensor_type=str(sensor_type),
+            label=str(label),
             units="V",
-            range_type=range_type,
-            physical_units=physical_units,
+            voltage_range=voltage_range,
+            physical_units=str(physical_units),
             sensor_sensitivity=float(sensor_sensitivity),
             probe_position_m=(float(probe_position_m) if probe_position_m is not None else None),
         )
-
-        self.channels_config[channel] = config
-
-        # Configuration de la carte si disponible
-        if self.daq:
-            self.daq.configure_channel(channel, range_type, label, "V")
-
-        logger.info(f"Canal maritime {channel} configuré: {sensor_type} - {label}")
+        logger.info("Canal %s configuré: %s - %s", channel, sensor_type, label)
         return True
 
     def get_channel_configuration(self, channel: int) -> dict[str, Any] | None:
-        """
-        Récupère la configuration d'un canal
-
-        Args:
-            channel: Numéro du canal
-
-        Returns:
-            Dictionnaire avec la configuration
-        """
         config = self.channels_config.get(channel)
-        if not config:
+        if config is None:
             return None
-
         return {
             "channel": config.channel,
             "sensor_type": config.sensor_type,
             "label": config.label,
-            "range_volts": config.range_type.name,
+            "range_volts": config.voltage_range.value,
+            "range_label": config.voltage_range.label,
             "physical_units": config.physical_units,
             "sensor_sensitivity": config.sensor_sensitivity,
             "enabled": config.enabled,
@@ -287,17 +265,15 @@ class AcquisitionController:
         }
 
     def apply_calibration_record(self, record: CalibrationRecord) -> bool:
-        """Applique uniquement un certificat metrologique valide au canal vise."""
-
         if not isinstance(record, CalibrationRecord):
             logger.error("Enregistrement de calibration invalide")
             return False
         if record.validity_status != CALIBRATION_VALID:
-            logger.error("Calibration refusee: statut %s", record.validity_status)
+            logger.error("Calibration refusée: statut %s", record.validity_status)
             return False
         config = self.channels_config.get(int(record.channel))
         if config is None:
-            logger.error("Calibration sans canal configure: %s", record.channel)
+            logger.error("Calibration sans canal configuré: %s", record.channel)
             return False
 
         config.sensor_id = record.sensor_id
@@ -309,7 +285,7 @@ class AcquisitionController:
         config.calibration_id = record.calibration_id
         config.calibration_status = record.validity_status
         config.calibration_record = record.to_dict()
-        logger.info("Calibration %s appliquee au canal %s", record.calibration_id, record.channel)
+        logger.info("Calibration %s appliquée au canal %s", record.calibration_id, record.channel)
         return True
 
     def start_acquisition_session(
@@ -321,166 +297,120 @@ class AcquisitionController:
         recording_directory: str | None = None,
         water_depth_m: float | None = None,
     ) -> bool:
-        """
-        Démarre une session d'acquisition
-
-        Args:
-            project_name: Nom du projet
-            sampling_rate: Fréquence d'échantillonnage (Hz)
-            duration_seconds: Durée d'acquisition (None = continue)
-            channels: Liste des canaux à acquérir (None = tous configurés)
-            recording_directory: Repertoire du fichier HDF5 alimente en continu
-            water_depth_m: Profondeur d'eau de l'essai [m]
-
-        Returns:
-            True si l'acquisition démarre
-        """
         if self.is_acquiring:
             logger.error("Acquisition déjà en cours")
             return False
+        if not self.is_hardware_available() or self._daq_backend is None:
+            logger.error("Acquisition interdite: aucun équipement physique connecté")
+            return False
+        if recording_directory is None:
+            logger.error("Acquisition interdite: répertoire d'enregistrement obligatoire")
+            return False
         if not np.isfinite(sampling_rate) or sampling_rate <= 0:
-            logger.error("Frequence d'echantillonnage invalide: %s", sampling_rate)
+            logger.error("Fréquence d'échantillonnage invalide: %s", sampling_rate)
             return False
-        if duration_seconds is not None and (not np.isfinite(duration_seconds) or duration_seconds <= 0):
-            logger.error("Duree d'acquisition invalide: %s", duration_seconds)
+        if duration_seconds is not None and (
+            not np.isfinite(duration_seconds) or duration_seconds <= 0
+        ):
+            logger.error("Durée d'acquisition invalide: %s", duration_seconds)
             return False
-        if water_depth_m is not None and (not np.isfinite(water_depth_m) or water_depth_m <= 0):
+        if water_depth_m is not None and (
+            not np.isfinite(water_depth_m) or water_depth_m <= 0
+        ):
             logger.error("Profondeur d'eau invalide: %s", water_depth_m)
             return False
 
-        if not self.is_hardware_available() and not self._simulation_mode():
-            logger.error("Matériel non disponible")
-            return False
-
-        # Détermination des canaux à utiliser
-        if channels is None:
-            channels = list(self.channels_config.keys())
-
-        if not channels:
+        selected_channels = list(self.channels_config) if channels is None else list(channels)
+        if not selected_channels:
             logger.error("Aucun canal configuré")
             return False
-        missing_channels = [channel for channel in channels if channel not in self.channels_config]
-        if missing_channels:
-            logger.error("Canaux non configures: %s", missing_channels)
+        missing = [item for item in selected_channels if item not in self.channels_config]
+        if missing:
+            logger.error("Canaux non configurés: %s", missing)
             return False
-
-        selected_configs = [self.channels_config[channel] for channel in channels]
+        selected_configs = [self.channels_config[item] for item in selected_channels]
+        try:
+            self._daq_backend.capabilities.validate(sampling_rate, len(selected_configs))
+        except ValueError as exc:
+            logger.error("Configuration incompatible avec le matériel: %s", exc)
+            return False
 
         with self._data_lock:
             self.data_buffer.clear()
-        self._simulation_sample_index = 0
-        self.stats = {
-            "samples_acquired": 0,
-            "acquisition_rate": 0.0,
-            "last_update": None,
-            "errors": 0,
-            "buffer_overruns": 0,
-            "recording_errors": 0,
-        }
+        self.stats = self._new_statistics()
 
-        # Création de la session
-        session_start = datetime.now()
+        start_time = datetime.now()
         project_slug = re.sub(r"[^A-Za-z0-9._-]+", "_", project_name.strip())
         project_slug = project_slug.strip("._-")[:80] or "Acquisition_Maritime"
-        session_id = f"{project_slug}_{session_start.strftime('%Y%m%d_%H%M%S_%f')[:-3]}"
+        session_id = f"{project_slug}_{start_time.strftime('%Y%m%d_%H%M%S_%f')[:-3]}"
         self.current_session = AcquisitionSession(
             session_id=session_id,
             project_name=project_name,
-            start_time=session_start,
-            sampling_rate=sampling_rate,
+            start_time=start_time,
+            sampling_rate=float(sampling_rate),
             channels=selected_configs,
             metadata={
+                "acquisition_source": "physical_hardware",
                 "duration_seconds": duration_seconds,
-                "selected_channels": channels,
-                "hardware_available": self.is_hardware_available(),
-                "water_depth_m": (float(water_depth_m) if water_depth_m is not None else None),
+                "selected_channels": selected_channels,
+                "hardware_available": True,
+                "water_depth_m": float(water_depth_m) if water_depth_m is not None else None,
+                **self.selected_device.to_metadata(),
             },
         )
 
-        # Démarrage de l'acquisition
         try:
-            if self._daq_backend is not None:
-                actual_rate = self._daq_backend.start(
-                    sample_rate_hz=sampling_rate,
-                    channels=selected_configs,
-                    chunk_size=min(self.buffer_size, 1000),
-                )
-                self.current_session.sampling_rate = float(actual_rate)
-                self.current_session.metadata.update(self._daq_backend.metadata())
-                self.current_session.metadata["requested_sampling_rate"] = sampling_rate
-                self.current_session.metadata["actual_sampling_rate"] = float(actual_rate)
-            elif self.daq:
-                # Configuration matérielle
-                self.daq.clear_channels()
-                for channel_config in selected_configs:
-                    self.daq.configure_channel(
-                        channel_config.channel,
-                        channel_config.range_type,
-                        channel_config.label,
-                        "V",
-                    )
-                low_chan = min(channels)
-                high_chan = max(channels)
-
-                success = self.daq.start_continuous_acquisition(
-                    low_chan=low_chan, high_chan=high_chan, rate=sampling_rate, buffer_size=self.buffer_size
-                )
-
-                if not success:
-                    logger.error("Erreur de démarrage de l'acquisition matérielle")
-                    self.current_session = None
-                    return False
-                self.current_session.sampling_rate = self.daq.acquisition_config.rate
-                self.current_session.metadata["requested_sampling_rate"] = sampling_rate
-                self.current_session.metadata["actual_sampling_rate"] = self.daq.acquisition_config.rate
-
+            actual_rate = self._daq_backend.start(
+                sample_rate_hz=float(sampling_rate),
+                channels=selected_configs,
+                chunk_size=min(self.buffer_size, 1000),
+            )
+            self.current_session.sampling_rate = float(actual_rate)
+            self.current_session.metadata.update(self._daq_backend.metadata())
+            self.current_session.metadata["requested_sampling_rate"] = float(sampling_rate)
+            self.current_session.metadata["actual_sampling_rate"] = float(actual_rate)
             if duration_seconds is not None:
                 self.current_session.metadata["expected_samples"] = max(
                     1,
-                    int(round(duration_seconds * self.current_session.sampling_rate)),
+                    int(round(duration_seconds * actual_rate)),
                 )
 
-            if recording_directory:
-                recording_path = Path(recording_directory) / f"{session_id}.h5"
-                self._recorder = self._recorder_factory()
-                resolved_path = self._recorder.start(recording_path, self.current_session)
-                self.current_session.data_file_path = str(resolved_path)
-                self.current_session.metadata["recording_path"] = str(resolved_path)
-                logger.info("Enregistrement continu active: %s", resolved_path)
+            recording_path = Path(recording_directory) / f"{session_id}.h5"
+            self._recorder = self._recorder_factory()
+            resolved = self._recorder.start(recording_path, self.current_session)
+            self.current_session.data_file_path = str(resolved)
+            self.current_session.metadata["recording_path"] = str(resolved)
 
-            # Démarrage du thread d'acquisition
             self.is_acquiring = True
             self.acquisition_thread = threading.Thread(
-                target=self._acquisition_loop, args=(duration_seconds,), daemon=True
+                target=self._acquisition_loop,
+                args=(duration_seconds,),
+                daemon=True,
+                name=f"CHNeoWave-{session_id}",
             )
             self.acquisition_thread.start()
-
-            logger.info(f"Session d'acquisition démarrée: {session_id}")
+            logger.info("Session physique démarrée: %s", session_id)
             return True
-
-        except Exception as e:
-            logger.error(f"Erreur lors du démarrage: {e}")
-            if self._recorder:
+        except Exception as exc:
+            logger.exception("Démarrage de session impossible: %s", exc)
+            if self._recorder is not None:
                 self._recorder.close()
                 self._recorder = None
-            if self.daq:
-                self.daq.stop_acquisition()
+            self._daq_backend.stop()
             self.current_session = None
             return False
 
-    def _acquisition_loop(self, duration_seconds: float | None):
-        """Boucle principale d'acquisition"""
-        start_time = time.monotonic()
-        last_stats_update = start_time
-        samples_since_last_update = 0
-        next_simulation_deadline = start_time
+    def _acquisition_loop(self, duration_seconds: float | None) -> None:
+        start_monotonic = time.monotonic()
+        last_stats_update = start_monotonic
+        samples_since_update = 0
         target_samples = (
             int(self.current_session.metadata.get("expected_samples", 0))
             if self.current_session and duration_seconds is not None
             else None
         )
-        acquisition_deadline = (
-            start_time + duration_seconds + max(2.0, duration_seconds * 0.1)
+        deadline = (
+            start_monotonic + duration_seconds + max(2.0, duration_seconds * 0.1)
             if duration_seconds is not None
             else None
         )
@@ -488,241 +418,136 @@ class AcquisitionController:
         try:
             while self.is_acquiring:
                 if target_samples is not None and self.stats["samples_acquired"] >= target_samples:
-                    logger.info("Durée d'acquisition atteinte")
                     break
-                if acquisition_deadline and time.monotonic() >= acquisition_deadline:
-                    logger.error(
-                        "Acquisition incomplete: %s/%s echantillons",
-                        self.stats["samples_acquired"],
-                        target_samples,
-                    )
+                if deadline is not None and time.monotonic() >= deadline:
                     self.stats["errors"] += 1
                     self.current_session.metadata["incomplete_reason"] = "acquisition_timeout"
                     break
 
-                block_samples = 100
+                requested = 100
                 if target_samples is not None:
-                    block_samples = min(
-                        block_samples,
-                        target_samples - self.stats["samples_acquired"],
-                    )
+                    requested = min(requested, target_samples - self.stats["samples_acquired"])
+                result = self._daq_backend.read(num_samples=requested)
+                if result is None:
+                    continue
+                if result.backend_name != self._daq_backend.name:
+                    raise RuntimeError("Le bloc reçu ne correspond pas au pilote actif")
+                if result.warnings:
+                    self.current_session.metadata.setdefault("warnings", []).extend(result.warnings)
+                self._process_acquired_data(result.raw_data)
+                samples_since_update += result.raw_data.shape[0]
 
-                # Acquisition des données
-                if self._daq_backend is not None:
-                    result = self._daq_backend.read(num_samples=block_samples)
-                    if result is None:
-                        break
-                    data = result.raw_data
-                    if result.warnings and self.current_session:
-                        self.current_session.metadata.setdefault("warnings", []).extend(result.warnings)
-                    self._process_acquired_data(data)
-                    samples_since_last_update += data.shape[0]
-                elif self.daq:
-                    # Acquisition matérielle
-                    data = self.daq.wait_for_data(num_samples=block_samples, timeout=0.25)
-                    if data is not None:
-                        self._process_acquired_data(data)
-                        samples_since_last_update += data.shape[0]
-                else:
-                    # Mode simulation
-                    data = self._generate_simulation_data(block_samples)
-                    self._process_acquired_data(data)
-                    samples_since_last_update += data.shape[0]
-                    next_simulation_deadline += data.shape[0] / self.current_session.sampling_rate
-                    sleep_duration = next_simulation_deadline - time.monotonic()
-                    if sleep_duration > 0:
-                        time.sleep(sleep_duration)
-
-                # Mise à jour des statistiques
-                current_time = time.monotonic()
-                if current_time - last_stats_update >= 1.0:  # Chaque seconde
-                    self.stats["acquisition_rate"] = samples_since_last_update / (
-                        current_time - last_stats_update
-                    )
+                now = time.monotonic()
+                if now - last_stats_update >= 1.0:
+                    self.stats["acquisition_rate"] = samples_since_update / (now - last_stats_update)
                     self.stats["last_update"] = datetime.now()
-                    samples_since_last_update = 0
-                    last_stats_update = current_time
-
-        except MCCBackendError as e:
-            logger.error("Erreur MCC dans la boucle d'acquisition: %s", e)
+                    samples_since_update = 0
+                    last_stats_update = now
+        except Exception as exc:
+            logger.exception("Erreur dans la boucle d'acquisition: %s", exc)
             self.stats["errors"] += 1
-            if self.daq:
-                self.stats["buffer_overruns"] = self.daq.buffer_overruns
-        except Exception as e:
-            logger.error(f"Erreur dans la boucle d'acquisition: {e}")
-            self.stats["errors"] += 1
-            if isinstance(e, RecordingError):
+            if isinstance(exc, RecordingError):
                 self.stats["recording_errors"] += 1
-
+            try:
+                status = self._daq_backend.status()
+                self.stats["buffer_overruns"] = int(status.get("buffer_overruns", 0))
+            except Exception:
+                pass
         finally:
             self._finalize_acquisition()
 
-    def _process_acquired_data(self, raw_data: np.ndarray):
-        """
-        Traite les données acquises
+    def _process_acquired_data(self, raw_data: np.ndarray) -> None:
+        raw = np.asarray(raw_data, dtype=float)
+        if raw.ndim != 2 or raw.shape[0] == 0:
+            raise ValueError("Bloc matériel vide ou de forme invalide")
+        if self.current_session is None or raw.shape[1] != len(self.current_session.channels):
+            raise ValueError("Le nombre de colonnes ne correspond pas aux canaux de la session")
+        if not np.all(np.isfinite(raw)):
+            raise ValueError("Le bloc matériel contient NaN ou Inf")
 
-        Args:
-            raw_data: Données brutes [samples, channels]
-        """
-        if raw_data is None or raw_data.size == 0:
-            return
+        processed = self._convert_to_physical_units(raw)
+        if self._recorder is None:
+            raise RecordingError("Enregistreur maître absent pendant l'acquisition")
+        self._recorder.append(raw, processed)
 
-        # Conversion en unités physiques
-        processed_data = self._convert_to_physical_units(raw_data)
-
-        # Le disque est la source complete. Une erreur d'ecriture interrompt la
-        # session afin de ne jamais annoncer une acquisition non sauvegardee.
-        if self._recorder:
-            self._recorder.append(raw_data, processed_data)
-
-        # Ajout au buffer
         with self._data_lock:
             self.data_buffer.append(
                 {
                     "timestamp": datetime.now(),
-                    "raw_data": raw_data.copy(),
-                    "processed_data": processed_data,
-                    "sample_count": raw_data.shape[0],
+                    "raw_data": raw.copy(),
+                    "processed_data": processed.copy(),
+                    "sample_count": raw.shape[0],
                 }
             )
+            preview_samples = sum(entry["sample_count"] for entry in self.data_buffer)
+            while self.data_buffer and preview_samples > self.preview_sample_limit:
+                preview_samples -= self.data_buffer.pop(0)["sample_count"]
 
-            # Buffer d'aperçu temporaire pour l'affichage en temps reel.
-            if len(self.data_buffer) > 1000:
-                self.data_buffer.pop(0)
-
-        # Mise à jour des statistiques
-        self.stats["samples_acquired"] += raw_data.shape[0]
-
-        # Callback utilisateur
-        if self.data_callback:
+        self.stats["samples_acquired"] += raw.shape[0]
+        if self.data_callback is not None:
             try:
-                self.data_callback(processed_data, self.current_session)
-            except Exception as e:
-                logger.error(f"Erreur dans le callback utilisateur: {e}")
+                self.data_callback(processed, self.current_session)
+            except Exception as exc:
+                logger.error("Erreur dans le callback d'affichage: %s", exc)
 
     def _convert_to_physical_units(self, raw_data: np.ndarray) -> np.ndarray:
-        """Convertit les données en unités physiques"""
         if self.current_session is None:
-            return raw_data
-
-        processed_data = np.zeros(raw_data.shape, dtype=np.float64)
-
-        for i, channel_config in enumerate(self.current_session.channels):
-            if i < raw_data.shape[1]:
-                # Application de la calibration et de la sensibilité
-                channel_data = raw_data[:, i]
-                channel_data = (
-                    channel_data + channel_config.calibration_offset
-                ) * channel_config.calibration_scale
-                channel_data = channel_data / channel_config.sensor_sensitivity
-                processed_data[:, i] = channel_data
-
-        return processed_data
-
-    def _generate_simulation_data(self, num_samples: int = 100) -> np.ndarray:
-        """Génère des données de simulation pour les tests"""
-        if not self.current_session:
-            return np.array([])
-
-        num_channels = len(self.current_session.channels)
-        # Axe temporel continu respectant exactement la frequence demandee.
-        sample_rate = self.current_session.sampling_rate
-        sample_indices = self._simulation_sample_index + np.arange(num_samples)
-        t = sample_indices / sample_rate
-        data = np.zeros((num_samples, num_channels))
-
-        for i, channel_config in enumerate(self.current_session.channels):
-            if channel_config.sensor_type == "wave_height":
-                # Signal de houle sinusoïdal avec bruit
-                frequency = 0.2 + 0.05 * i
-                physical_signal = 0.5 * np.sin(2 * np.pi * frequency * t)
-                noise = 0.005 * np.random.normal(0, 1, num_samples)
-                data[:, i] = physical_signal * channel_config.sensor_sensitivity + noise
-
-            elif channel_config.sensor_type == "pressure":
-                # Signal de pression hydrostatique
-                physical_signal = 10 * np.sin(2 * np.pi * 0.05 * t)
-                noise = 0.002 * np.random.normal(0, 1, num_samples)
-                data[:, i] = physical_signal * channel_config.sensor_sensitivity + noise
-
-            elif channel_config.sensor_type == "accelerometer":
-                # Signal d'accélération
-                physical_signal = 0.5 * np.sin(2 * np.pi * 2.0 * t)
-                noise = 0.002 * np.random.normal(0, 1, num_samples)
-                data[:, i] = physical_signal * channel_config.sensor_sensitivity + noise
-
-            else:
-                # Signal générique
-                data[:, i] = 0.1 * np.sin(2 * np.pi * (0.5 + i * 0.1) * t)
-
-        self._simulation_sample_index += num_samples
-
-        return data
+            raise RuntimeError("Conversion impossible sans session")
+        processed = np.empty(raw_data.shape, dtype=np.float64)
+        for index, config in enumerate(self.current_session.channels):
+            if config.sensor_sensitivity == 0:
+                raise ValueError(f"Sensibilité nulle sur le canal {config.channel}")
+            processed[:, index] = (
+                (raw_data[:, index] + config.calibration_offset)
+                * config.calibration_scale
+                / config.sensor_sensitivity
+            )
+        return processed
 
     def stop_acquisition(self) -> bool:
-        """
-        Arrête l'acquisition en cours
-
-        Returns:
-            True si l'arrêt réussit
-        """
         if not self.is_acquiring:
             logger.warning("Aucune acquisition en cours")
             return False
-
-        logger.info("Arrêt de l'acquisition demandé")
         self.is_acquiring = False
-
-        # Attente de la fin du thread
         if self.acquisition_thread and self.acquisition_thread.is_alive():
             self.acquisition_thread.join(timeout=5.0)
-
+        if self.acquisition_thread and self.acquisition_thread.is_alive():
+            logger.error("Le thread d'acquisition ne s'est pas arrêté dans le délai")
+            self.stats["errors"] += 1
+            return False
         return True
 
-    def _finalize_acquisition(self):
-        """Finalise la session d'acquisition"""
-        if self._daq_backend is not None:
-            self._daq_backend.stop()
-        elif self.daq:
-            self.daq.stop_acquisition()
-
-        if self.current_session:
-            self.current_session.end_time = datetime.now()
-            self.current_session.total_samples = self.stats["samples_acquired"]
-
-            if self._recorder:
-                try:
-                    self._recorder.finalize(self.current_session, self.stats)
-                except Exception as exc:
-                    self.stats["errors"] += 1
-                    self.stats["recording_errors"] += 1
-                    logger.error("Erreur de finalisation HDF5: %s", exc)
-                finally:
-                    self._recorder = None
-
-            logger.info(f"Session terminée: {self.current_session.session_id}")
-            logger.info(f"Échantillons acquis: {self.current_session.total_samples}")
-
-        self.is_acquiring = False
+    def _finalize_acquisition(self) -> None:
+        try:
+            if self._daq_backend is not None:
+                self._daq_backend.stop()
+        finally:
+            if self.current_session is not None:
+                self.current_session.end_time = datetime.now()
+                self.current_session.total_samples = int(self.stats["samples_acquired"])
+                if self._recorder is not None:
+                    try:
+                        self._recorder.finalize(self.current_session, self.stats)
+                    except Exception as exc:
+                        self.stats["errors"] += 1
+                        self.stats["recording_errors"] += 1
+                        logger.exception("Finalisation HDF5 impossible: %s", exc)
+                    finally:
+                        self._recorder = None
+            self.is_acquiring = False
 
     def get_acquisition_status(self) -> dict[str, Any]:
-        """
-        Récupère le statut de l'acquisition
-
-        Returns:
-            Dictionnaire avec le statut complet
-        """
-        status = {
+        status: dict[str, Any] = {
             "is_acquiring": self.is_acquiring,
             "hardware_available": self.is_hardware_available(),
             "statistics": self.stats.copy(),
             "session": None,
             "channels_configured": len(self.channels_config),
-            "data_buffer_size": len(self.data_buffer),
+            "preview_buffer_blocks": len(self.data_buffer),
             "recording_path": self.current_session.data_file_path if self.current_session else None,
+            "device": self.selected_device.to_metadata() if self.selected_device else None,
         }
-
-        if self.current_session:
+        if self.current_session is not None:
             status["session"] = {
                 "session_id": self.current_session.session_id,
                 "project_name": self.current_session.project_name,
@@ -731,469 +556,143 @@ class AcquisitionController:
                 "channels_count": len(self.current_session.channels),
                 "duration_seconds": (datetime.now() - self.current_session.start_time).total_seconds(),
             }
-
-        # Statut matériel
-        if self.daq:
-            hw_status = self.daq.get_acquisition_status()
-            status["hardware_status"] = hw_status
-
+        if self.is_hardware_available():
+            try:
+                status["hardware_status"] = self.get_hardware_status()
+            except Exception as exc:
+                status["hardware_status"] = {"connected": False, "error": str(exc)}
         return status
 
     def get_recent_data(self, num_samples: int = 1000) -> dict[str, Any] | None:
-        """
-        Récupère les données récentes
-
-        Args:
-            num_samples: Nombre d'échantillons à récupérer
-
-        Returns:
-            Dictionnaire avec les données
-        """
         with self._data_lock:
             if not self.data_buffer:
                 return None
-            buffer_snapshot = list(self.data_buffer)
-
-        # Agrégation des données récentes
-        recent_samples = []
-        total_samples = 0
-
-        for entry in reversed(buffer_snapshot):
-            if total_samples >= num_samples:
+            snapshot = list(self.data_buffer)
+        chunks: list[np.ndarray] = []
+        total = 0
+        for entry in reversed(snapshot):
+            if total >= num_samples:
                 break
-
-            recent_samples.append(entry["processed_data"])
-            total_samples += entry["sample_count"]
-
-        if not recent_samples:
+            chunks.append(entry["processed_data"])
+            total += entry["sample_count"]
+        if not chunks or self.current_session is None:
             return None
-
-        # Concaténation des données
-        all_data = np.vstack(recent_samples[::-1])  # Ordre chronologique
-
-        # Limitation au nombre demandé
-        if all_data.shape[0] > num_samples:
-            all_data = all_data[-num_samples:]
-
-        first_sample_index = max(0, self.stats["samples_acquired"] - all_data.shape[0])
-        time_interval = timedelta(seconds=1.0 / self.current_session.sampling_rate)
+        data = np.vstack(chunks[::-1])[-num_samples:]
+        first_index = max(0, self.stats["samples_acquired"] - data.shape[0])
+        interval = timedelta(seconds=1.0 / self.current_session.sampling_rate)
         timestamps = [
-            self.current_session.start_time + (first_sample_index + i) * time_interval
-            for i in range(all_data.shape[0])
+            self.current_session.start_time + (first_index + index) * interval
+            for index in range(data.shape[0])
         ]
-
         return {
-            "data": all_data,
+            "data": data,
             "timestamps": timestamps,
-            "channels": ([ch.label for ch in self.current_session.channels] if self.current_session else []),
-            "units": (
-                [ch.physical_units for ch in self.current_session.channels] if self.current_session else []
-            ),
-            "sample_count": all_data.shape[0],
+            "channels": [item.label for item in self.current_session.channels],
+            "units": [item.physical_units for item in self.current_session.channels],
+            "sample_count": data.shape[0],
         }
 
     def export_session_data(self, file_path: str, format: str = "csv") -> bool:
-        """
-        Exporte les données de la session
-
-        Args:
-            file_path: Chemin du fichier de sortie
-            format: Format d'export ('csv', 'json', 'hdf5')
-
-        Returns:
-            True si l'export réussit
-        """
-        if not self.current_session or not self.data_buffer:
-            logger.error("Pas de données à exporter")
+        if self.is_acquiring:
+            logger.error("Export interdit pendant l'acquisition")
             return False
-
+        if self.current_session is None or not self.current_session.data_file_path:
+            logger.error("Aucun fichier HDF5 maître disponible")
+            return False
         try:
-            if format.lower() == "csv":
-                success = self._export_csv(file_path)
-            elif format.lower() == "json":
-                success = self._export_json(file_path)
-            elif format.lower() == "hdf5":
-                success = self._export_hdf5(file_path)
-            else:
-                logger.error(f"Format d'export non supporté: {format}")
-                return False
-
-            if success:
-                self.last_exported_path = file_path
-            return success
-        except Exception as e:
-            logger.error(f"Erreur lors de l'export: {e}")
+            output = self._exporter_factory().export(
+                self.current_session.data_file_path,
+                file_path,
+                format,
+            )
+            self.last_exported_path = str(output)
+            logger.info("Session complète exportée: %s", output)
+            return True
+        except Exception as exc:
+            logger.exception("Export intègre impossible: %s", exc)
             return False
-
-    def _build_export_matrix(self) -> np.ndarray:
-        """Construit une matrice [samples, channels] à partir du buffer courant."""
-        if not self.data_buffer:
-            return np.empty((0, 0))
-
-        lock = getattr(self, "_data_lock", None)
-        if lock is None:
-            chunks = [
-                entry["processed_data"].copy() for entry in self.data_buffer if "processed_data" in entry
-            ]
-        else:
-            with lock:
-                chunks = [
-                    entry["processed_data"].copy() for entry in self.data_buffer if "processed_data" in entry
-                ]
-        if not chunks:
-            return np.empty((0, 0))
-
-        return np.vstack(chunks)
 
     def _build_time_vector(self, sample_count: int) -> np.ndarray:
-        """Construit l'axe temporel associé aux échantillons exportés."""
         if sample_count <= 0:
             return np.array([])
-
-        sample_rate = self.current_session.sampling_rate if self.current_session else 1.0
+        sample_rate = self.current_session.sampling_rate if self.current_session else 0.0
         if sample_rate <= 0:
-            sample_rate = 1.0
-
+            raise ValueError("Fréquence d'échantillonnage invalide")
         return np.arange(sample_count, dtype=float) / sample_rate
 
-    def _export_csv(self, file_path: str) -> bool:
-        """Exporte en format CSV compatible avec le post-traitement."""
-        import csv
-
-        data_matrix = self._build_export_matrix()
-        if data_matrix.size == 0:
-            logger.error("Aucune donnée consolidée disponible pour l'export CSV")
-            return False
-
-        time_vector = self._build_time_vector(data_matrix.shape[0])
-        channel_keys = [f"channel_{config.channel:02d}" for config in self.current_session.channels]
-        metadata_row = build_csv_metadata_row(
-            self.current_session.sampling_rate,
-            DATA_KIND_PHYSICAL,
-            data_matrix.shape[0],
-        )
-
-        with open(file_path, "w", newline="", encoding="utf-8") as csvfile:
-            writer = csv.writer(csvfile)
-
-            headers = ["time", "sample_rate"] + list(metadata_row) + channel_keys
-            writer.writerow(headers)
-
-            for index, row in enumerate(data_matrix):
-                writer.writerow(
-                    [float(time_vector[index]), float(self.current_session.sampling_rate)]
-                    + list(metadata_row.values())
-                    + row.tolist()
-                )
-
-        sidecar = {
-            "metadata": build_session_metadata(
-                self.current_session,
-                hardware_available=self.is_hardware_available(),
-                sample_count=data_matrix.shape[0],
-            ),
-            "channel_metadata": build_channel_metadata(self.current_session.channels),
-        }
-        with open(f"{file_path}.metadata.json", "w", encoding="utf-8") as handle:
-            json.dump(sidecar, handle, indent=2, ensure_ascii=False)
-
-        logger.info(f"Données exportées en CSV: {file_path}")
-        return True
-
-    def _export_json(self, file_path: str) -> bool:
-        """Exporte en format JSON compatible avec le post-traitement."""
-        data_matrix = self._build_export_matrix()
-        if data_matrix.size == 0:
-            logger.error("Aucune donnée consolidée disponible pour l'export JSON")
-            return False
-
-        time_vector = self._build_time_vector(data_matrix.shape[0])
-        channels_payload = {}
-
-        for index, channel in enumerate(self.current_session.channels):
-            channel_key = f"channel_{channel.channel:02d}"
-            channels_payload[channel_key] = data_matrix[:, index].tolist()
-
-        metadata = build_session_metadata(
-            self.current_session,
-            hardware_available=self.is_hardware_available(),
-            sample_count=data_matrix.shape[0],
-        )
-        metadata["channel_labels"] = [ch.label for ch in self.current_session.channels]
-        metadata["channel_units"] = [ch.physical_units for ch in self.current_session.channels]
-
-        export_data = {
-            "metadata": metadata,
-            "time": time_vector.tolist(),
-            "channels": channels_payload,
-            "session": {
-                "session_id": self.current_session.session_id,
-                "project_name": self.current_session.project_name,
-                "start_time": self.current_session.start_time.isoformat(),
-                "end_time": (
-                    self.current_session.end_time.isoformat() if self.current_session.end_time else None
-                ),
-                "sampling_rate": self.current_session.sampling_rate,
-                "total_samples": self.current_session.total_samples,
-            },
-            "channel_metadata": build_channel_metadata(self.current_session.channels),
-            "statistics": {
-                **self.stats,
-                "last_update": self.stats["last_update"].isoformat()
-                if self.stats.get("last_update")
-                else None,
-            },
-            "data_entries": len(self.data_buffer),
-        }
-
-        with open(file_path, "w", encoding="utf-8") as jsonfile:
-            json.dump(export_data, jsonfile, indent=2, ensure_ascii=False)
-
-        logger.info(f"Données exportées en JSON: {file_path}")
-        return True
-
-    def _export_hdf5(self, file_path: str) -> bool:
-        """Exporte un HDF5 auto-descriptif avec metadonnees metrologiques."""
-        try:
-            import h5py
-        except ImportError:
-            logger.error("h5py requis pour l'export HDF5")
-            return False
-
-        data_matrix = self._build_export_matrix()
-        if data_matrix.size == 0:
-            logger.error("Aucune donnée consolidée disponible pour l'export HDF5")
-            return False
-
-        metadata = build_session_metadata(
-            self.current_session,
-            hardware_available=self.is_hardware_available(),
-            sample_count=data_matrix.shape[0],
-        )
-        metadata["recording_status"] = "complete"
-        metadata["errors"] = int(self.stats.get("errors", 0))
-        metadata["buffer_overruns"] = int(self.stats.get("buffer_overruns", 0))
-        channel_metadata = build_channel_metadata(self.current_session.channels)
-
-        with h5py.File(file_path, "w") as handle:
-            for key, value in metadata.items():
-                if value is None:
-                    continue
-                if isinstance(value, (str, int, float, bool, np.integer, np.floating)):
-                    handle.attrs[key] = value
-                else:
-                    handle.attrs[key] = json.dumps(value, ensure_ascii=False)
-
-            acquisition = handle.create_group("acquisition_data")
-            acquisition.create_dataset(
-                "time",
-                data=self._build_time_vector(data_matrix.shape[0]),
-                compression="gzip",
-            )
-            for index, config in enumerate(self.current_session.channels):
-                acquisition.create_dataset(
-                    f"channel_{config.channel:02d}",
-                    data=data_matrix[:, index],
-                    compression="gzip",
-                )
-
-            metadata_group = handle.create_group("metadata")
-            session_group = metadata_group.create_group("session")
-            for key, value in metadata.items():
-                if value is None:
-                    continue
-                session_group.attrs[key] = (
-                    value
-                    if isinstance(value, (str, int, float, bool, np.integer, np.floating))
-                    else json.dumps(value, ensure_ascii=False)
-                )
-            channels_group = metadata_group.create_group("channels")
-            for item in channel_metadata:
-                channel_group = channels_group.create_group(item["key"])
-                for key, value in item.items():
-                    if value is None:
-                        continue
-                    channel_group.attrs[key] = (
-                        value
-                        if isinstance(value, (str, int, float, bool, np.integer, np.floating))
-                        else json.dumps(value, ensure_ascii=False)
-                    )
-
-        logger.info("Donnees exportees en HDF5: %s", file_path)
-        return True
-
-    def _simulation_mode(self) -> bool:
-        """Vérifie si on est en mode simulation"""
-        return not self.is_hardware_available()
-
     def calibrate_system(self) -> dict[str, Any]:
-        """
-        Lance une calibration du système
+        """Retourne l'état réel des certificats; aucune calibration n'est inventée."""
 
-        Returns:
-            Résultats de calibration
-        """
-        if not self.is_hardware_available():
-            logger.warning("Calibration en mode simulation")
-
-        results = {
-            "timestamp": datetime.now().isoformat(),
-            "channels": {},
-            "system_status": "not_calibrated",
-            "calibration_status": "not_performed",
-            "calibration_valid": False,
-        }
-
+        records = {}
         for channel, config in self.channels_config.items():
-            results["channels"][channel] = {
+            records[channel] = {
                 "channel": channel,
                 "label": config.label,
                 "sensor_type": config.sensor_type,
-                "calibration_status": "not_performed",
+                "calibration_status": config.calibration_status,
+                "calibration_id": config.calibration_id,
                 "sensitivity_v_per_unit": config.sensor_sensitivity,
             }
+        all_valid = bool(records) and all(
+            item["calibration_status"] == CALIBRATION_VALID for item in records.values()
+        )
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "channels": records,
+            "system_status": "calibrated" if all_valid else "not_calibrated",
+            "calibration_status": "valid" if all_valid else "not_performed",
+            "calibration_valid": all_valid,
+            "hardware_connected": self.is_hardware_available(),
+        }
 
-        logger.info("Calibration système terminée")
-        return results
-
-    def close(self):
-        """Ferme le contrôleur et libère les ressources"""
+    def close(self) -> None:
         if self.is_acquiring:
             self.stop_acquisition()
-
         if self._daq_backend is not None:
             self._daq_backend.close()
-        if self.daq:
-            self.daq.close()
-
-        if self._recorder:
+        if self._recorder is not None:
             self._recorder.close()
             self._recorder = None
-
         logger.info("Contrôleur d'acquisition fermé")
 
     def __enter__(self):
-        """Support du context manager"""
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Support du context manager"""
         self.close()
 
 
-# Fonctions utilitaires pour l'interface
-def create_default_maritime_config() -> dict[int, MaritimeChannelConfig]:
-    """
-    Crée une configuration par défaut pour l'acquisition maritime
+def create_default_maritime_config(channel_count: int = 8) -> dict[int, MaritimeChannelConfig]:
+    """Crée un preset capteurs; le nombre de voies vient ensuite du matériel."""
 
-    Returns:
-        Dictionnaire avec la configuration des 8 canaux
-    """
-    default_config = {
-        0: MaritimeChannelConfig(
-            channel=0,
-            sensor_type="wave_height",
-            label="Capteur Houle #1",
-            units="V",
-            range_type=MCCRanges.BIP10VOLTS,
-            physical_units="m",
-            sensor_sensitivity=2.0,  # 2V/m
-        ),
-        1: MaritimeChannelConfig(
-            channel=1,
-            sensor_type="wave_height",
-            label="Capteur Houle #2",
-            units="V",
-            range_type=MCCRanges.BIP10VOLTS,
-            physical_units="m",
-            sensor_sensitivity=2.0,
-        ),
-        2: MaritimeChannelConfig(
-            channel=2,
-            sensor_type="pressure",
-            label="Capteur Pression",
-            units="V",
-            range_type=MCCRanges.BIP5VOLTS,
-            physical_units="hPa",
-            sensor_sensitivity=0.01,  # 0.01V/hPa
-        ),
-        3: MaritimeChannelConfig(
-            channel=3,
-            sensor_type="accelerometer",
-            label="Accéléromètre X",
-            units="V",
-            range_type=MCCRanges.BIP10VOLTS,
-            physical_units="m/s²",
-            sensor_sensitivity=1.0,  # 1V/(m/s²)
-        ),
-        4: MaritimeChannelConfig(
-            channel=4,
-            sensor_type="accelerometer",
-            label="Accéléromètre Y",
-            units="V",
-            range_type=MCCRanges.BIP10VOLTS,
-            physical_units="m/s²",
-            sensor_sensitivity=1.0,
-        ),
-        5: MaritimeChannelConfig(
-            channel=5,
-            sensor_type="accelerometer",
-            label="Accéléromètre Z",
-            units="V",
-            range_type=MCCRanges.BIP10VOLTS,
-            physical_units="m/s²",
-            sensor_sensitivity=1.0,
-        ),
-        6: MaritimeChannelConfig(
-            channel=6,
-            sensor_type="temperature",
-            label="Température Eau",
-            units="V",
-            range_type=MCCRanges.BIP2VOLTS,
-            physical_units="°C",
-            sensor_sensitivity=0.1,  # 0.1V/°C
-        ),
-        7: MaritimeChannelConfig(
-            channel=7,
-            sensor_type="wave_height",
-            label="Référence Houle",
-            units="V",
-            range_type=MCCRanges.BIP10VOLTS,
-            physical_units="m",
-            sensor_sensitivity=2.0,
-        ),
-    }
-
-    return default_config
-
-
-if __name__ == "__main__":
-    # Test du contrôleur d'acquisition
-    print("Test du contrôleur d'acquisition maritime")
-    print("=" * 50)
-
-    def data_callback(data, session):
-        print(f"Nouvelles données: {data.shape} - Session: {session.session_id}")
-
-    with AcquisitionController(data_callback) as controller:
-        print(f"Matériel disponible: {controller.is_hardware_available()}")
-        print(f"Cartes détectées: {controller.get_available_boards()}")
-
-        # Configuration des canaux
-        controller.configure_maritime_channel(0, "wave_height", "Houle #1", 10.0, 2.0, "m")
-        controller.configure_maritime_channel(1, "pressure", "Pression", 5.0, 0.01, "hPa")
-
-        # Test d'acquisition courte
-        if controller.start_acquisition_session("Test_Project", 1000.0, 5.0, [0, 1]):
-            print("Acquisition démarrée...")
-            time.sleep(6)  # Laisser tourner 6 secondes
-
-            status = controller.get_acquisition_status()
-            print(f"Statut: {status}")
-
-            recent_data = controller.get_recent_data(100)
-            if recent_data:
-                print(f"Données récentes: {recent_data['sample_count']} échantillons")
-
-        controller.stop_acquisition()
-        print("Test terminé")
+    if channel_count <= 0:
+        raise ValueError("channel_count doit être positif")
+    templates = [
+        ("wave_height", "Capteur Houle #1", VoltageRange.BIPOLAR_10_V, "m", 2.0),
+        ("wave_height", "Capteur Houle #2", VoltageRange.BIPOLAR_10_V, "m", 2.0),
+        ("pressure", "Capteur Pression", VoltageRange.BIPOLAR_5_V, "hPa", 0.01),
+        ("accelerometer", "Accéléromètre X", VoltageRange.BIPOLAR_10_V, "m/s²", 1.0),
+        ("accelerometer", "Accéléromètre Y", VoltageRange.BIPOLAR_10_V, "m/s²", 1.0),
+        ("accelerometer", "Accéléromètre Z", VoltageRange.BIPOLAR_10_V, "m/s²", 1.0),
+        ("temperature", "Température Eau", VoltageRange.BIPOLAR_2_V, "°C", 0.1),
+        ("wave_height", "Référence Houle", VoltageRange.BIPOLAR_10_V, "m", 2.0),
+    ]
+    result: dict[int, MaritimeChannelConfig] = {}
+    for channel in range(channel_count):
+        if channel < len(templates):
+            sensor_type, label, voltage_range, physical_units, sensitivity = templates[channel]
+        else:
+            sensor_type = "generic"
+            label = f"Canal {channel}"
+            voltage_range = VoltageRange.BIPOLAR_10_V
+            physical_units = "V"
+            sensitivity = 1.0
+        result[channel] = MaritimeChannelConfig(
+            channel=channel,
+            sensor_type=sensor_type,
+            label=label,
+            voltage_range=voltage_range,
+            physical_units=physical_units,
+            sensor_sensitivity=sensitivity,
+        )
+    return result

@@ -337,7 +337,6 @@ class CalibrationPDFGenerator:
         Création du graphique de linéarité
         """
         try:
-            # Données de test (simulation si pas de données réelles)
             channels = calibration_data.get('channels', [])
             if not channels:
                 return None
@@ -345,25 +344,41 @@ class CalibrationPDFGenerator:
             # Création du graphique
             fig, ax = plt.subplots(figsize=(8, 6))
             
-            # Pour chaque canal, tracer la droite de calibration
+            plotted_channels = 0
+            # Pour chaque canal, tracer uniquement les points réellement saisis.
             for i, channel in enumerate(channels[:4]):  # Max 4 canaux pour la lisibilité
-                gain = channel.get('gain', 1.0)
-                offset = channel.get('offset', 0.0)
-                r_squared = channel.get('r_squared', 0.999)
-                
-                # Points de référence (simulation)
-                x_ref = np.linspace(0, 10, 11)
-                y_theoretical = gain * x_ref + offset
-                
-                # Ajout de bruit pour simuler les mesures réelles
-                noise_level = (1 - r_squared) * 0.1
-                y_measured = y_theoretical + np.random.normal(0, noise_level, len(x_ref))
+                record = channel.get('calibration_record') or channel
+                points = record.get('points') or []
+                if len(points) < 2:
+                    continue
+                x_ref = np.asarray(
+                    [point['reference_value'] for point in points],
+                    dtype=float,
+                )
+                y_measured = np.asarray(
+                    [point['measured_voltage'] for point in points],
+                    dtype=float,
+                )
+                gain = float(
+                    record.get('sensitivity_v_per_unit', record.get('gain', 0.0))
+                )
+                offset = float(
+                    record.get('intercept_volts', record.get('offset', 0.0))
+                )
+                r_squared = float(record.get('r_squared', 0.0))
+                fit_reference = np.linspace(float(np.min(x_ref)), float(np.max(x_ref)), 100)
+                fit_voltage = gain * fit_reference + offset
                 
                 # Tracé
                 color = plt.cm.tab10(i)
                 ax.scatter(x_ref, y_measured, color=color, alpha=0.7, 
                           label=f'Canal {channel.get("channel", i+1)} (R²={r_squared:.4f})')
-                ax.plot(x_ref, y_theoretical, color=color, linestyle='--', alpha=0.8)
+                ax.plot(fit_reference, fit_voltage, color=color, linestyle='--', alpha=0.8)
+                plotted_channels += 1
+
+            if not plotted_channels:
+                plt.close(fig)
+                return None
             
             ax.set_xlabel('Valeur de référence')
             ax.set_ylabel('Valeur mesurée')

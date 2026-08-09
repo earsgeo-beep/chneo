@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...acquisition import MARITIME_SENSOR_TYPES
 from ...core.calibration import CalibrationError, CalibrationPoint, CalibrationRecord
 
 
@@ -63,13 +64,13 @@ class CalibrationView(QWidget):
     calibration_completed = Signal(dict)
     step_changed = Signal(str)
 
-    CHANNEL_COUNT = 8
     DEFAULT_POINT_COUNT = 3
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, channel_count: int = 1):
         super().__init__(parent)
         self.setObjectName("calibrationWorkspace")
 
+        self.channel_count = max(1, int(channel_count))
         self._active_channel = 0
         self._channel_points: dict[int, list[tuple[float, float] | None]] = {}
         self._channel_records: dict[int, CalibrationRecord] = {}
@@ -121,7 +122,7 @@ class CalibrationView(QWidget):
 
         toolbar = QHBoxLayout()
         toolbar.setSpacing(8)
-        self.channel_progress_label = QLabel("CANAL 1 / 8")
+        self.channel_progress_label = QLabel(f"CANAL 1 / {self.channel_count}")
         self.channel_progress_label.setObjectName("pageEyebrow")
         context = QLabel("Configuration du capteur et traçabilité de l'étalonnage")
         context.setObjectName("sectionTitle")
@@ -144,14 +145,12 @@ class CalibrationView(QWidget):
         layout.setVerticalSpacing(5)
 
         self.channel_combo = QComboBox()
-        for channel in range(self.CHANNEL_COUNT):
+        for channel in range(self.channel_count):
             self.channel_combo.addItem(f"Canal {channel + 1}", channel)
 
         self.sensor_id_edit = QLineEdit("CAP-01")
         self.sensor_type_combo = QComboBox()
-        self.sensor_type_combo.addItems(
-            ["force", "wave_height", "pressure", "displacement", "inclination", "generic"]
-        )
+        self.sensor_type_combo.addItems(list(MARITIME_SENSOR_TYPES))
         self.unit_combo = QComboBox()
         self.unit_combo.setEditable(True)
         self.unit_combo.addItems(["g", "kg", "N", "mm", "cm", "m", "°", "bar"])
@@ -320,8 +319,43 @@ class CalibrationView(QWidget):
         self.previous_channel_button.clicked.connect(lambda: self._change_channel(-1))
         self.next_channel_button.clicked.connect(lambda: self._change_channel(1))
 
+    def set_channel_count(self, channel_count: int) -> None:
+        """Adapte la calibration aux voies offertes par le matériel actif."""
+
+        requested_count = int(channel_count)
+        if requested_count < 1 or requested_count == self.channel_count:
+            return
+
+        self._save_active_points()
+        self._save_active_metadata()
+        self.channel_count = requested_count
+        self._channel_points = {
+            channel: points
+            for channel, points in self._channel_points.items()
+            if channel < requested_count
+        }
+        self._channel_metadata = {
+            channel: metadata
+            for channel, metadata in self._channel_metadata.items()
+            if channel < requested_count
+        }
+        self._channel_records = {
+            channel: record
+            for channel, record in self._channel_records.items()
+            if channel < requested_count
+        }
+
+        self.channel_combo.blockSignals(True)
+        self.channel_combo.clear()
+        for channel in range(requested_count):
+            self.channel_combo.addItem(f"Canal {channel + 1}", channel)
+        self._active_channel = min(self._active_channel, requested_count - 1)
+        self.channel_combo.setCurrentIndex(self._active_channel)
+        self.channel_combo.blockSignals(False)
+        self._load_channel(self._active_channel)
+
     def _change_channel(self, offset: int) -> None:
-        target = max(0, min(self.CHANNEL_COUNT - 1, self._active_channel + offset))
+        target = max(0, min(self.channel_count - 1, self._active_channel + offset))
         self.channel_combo.setCurrentIndex(target)
 
     def _on_channel_changed(self, index: int) -> None:
@@ -340,9 +374,9 @@ class CalibrationView(QWidget):
 
     def _load_channel(self, channel: int) -> None:
         self._active_channel = channel
-        self.channel_progress_label.setText(f"CANAL {channel + 1} / {self.CHANNEL_COUNT}")
+        self.channel_progress_label.setText(f"CANAL {channel + 1} / {self.channel_count}")
         self.previous_channel_button.setEnabled(channel > 0)
-        self.next_channel_button.setEnabled(channel < self.CHANNEL_COUNT - 1)
+        self.next_channel_button.setEnabled(channel < self.channel_count - 1)
 
         points = self._channel_points.get(channel)
         if points is None:
@@ -628,18 +662,23 @@ class CalibrationView(QWidget):
         return {
             "timestamp": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
             "active_channel": self._active_channel,
-            "completed": len(self._channel_records) == self.CHANNEL_COUNT,
+            "channel_count": self.channel_count,
+            "completed": len(self._channel_records) == self.channel_count,
             "completed_channels": sorted(self._channel_records),
             "channels": {str(channel): record.to_dict() for channel, record in self._channel_records.items()},
         }
 
     def load_calibration_data(self, data: dict[str, Any]) -> None:
+        channel_count = int(data.get("channel_count", self.channel_count))
+        self.set_channel_count(max(channel_count, 1))
         records = data.get("channels", {})
         for channel_key, payload in records.items():
             try:
                 channel = int(channel_key)
                 record = CalibrationRecord.from_dict(payload)
             except (KeyError, TypeError, ValueError):
+                continue
+            if channel < 0 or channel >= self.channel_count:
                 continue
             self._channel_records[channel] = record
             self._channel_points[channel] = [
@@ -652,7 +691,10 @@ class CalibrationView(QWidget):
                 "operator": record.operator,
                 "reference_equipment": record.reference_equipment,
             }
-        active_channel = int(data.get("active_channel", self._active_channel))
+        active_channel = min(
+            max(int(data.get("active_channel", self._active_channel)), 0),
+            self.channel_count - 1,
+        )
         self.channel_combo.blockSignals(True)
         self.channel_combo.setCurrentIndex(active_channel)
         self.channel_combo.blockSignals(False)

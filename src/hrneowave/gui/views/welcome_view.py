@@ -37,7 +37,7 @@ class WelcomeView(QWidget):
         intro = QLabel("Démarrer une campagne d'essais")
         intro.setObjectName("viewTitle")
         description = QLabel(
-            "Le projet relie la configuration des capteurs, la session MCC, "
+            "Le projet relie la configuration des capteurs, l'équipement d'acquisition, "
             "l'analyse scientifique et le rapport final."
         )
         description.setObjectName("mutedText")
@@ -118,7 +118,7 @@ class WelcomeView(QWidget):
         context_layout.addWidget(
             self._context_item(
                 "01  Configuration",
-                "Carte MCC, canaux, capteurs, unités et certificats de calibration.",
+                "Équipement, pilote, canaux, capteurs, unités et certificats de calibration.",
             )
         )
         context_layout.addWidget(

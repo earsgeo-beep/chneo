@@ -147,7 +147,7 @@ class BreadcrumbButton(QPushButton):
     
     def _setup_hover_animation(self):
         """Configure l'animation au survol"""
-        # Animation simple d'élévation (simulation)
+        # Animation d'élévation réservée à une évolution ultérieure.
         pass
     
     def update_step_state(self, 

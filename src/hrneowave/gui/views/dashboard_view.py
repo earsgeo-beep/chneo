@@ -22,7 +22,12 @@ class DashboardViewMaritime(QWidget):
 
     WORKFLOW = (
         ("calibration", "01", "Calibration", "Valider les sensibilités, unités et certificats."),
-        ("acquisition", "02", "Acquisition MCC", "Configurer la USB-1608FS et enregistrer la session."),
+        (
+            "acquisition",
+            "02",
+            "Acquisition",
+            "Connecter un équipement physique et enregistrer la session maître.",
+        ),
         ("analysis", "03", "Analyse", "Contrôler la qualité, les spectres et les paramètres."),
         ("export", "04", "Rapport", "Consolider les résultats et produire le livrable."),
     )
@@ -56,7 +61,7 @@ class DashboardViewMaritime(QWidget):
 
         self.project_state = QLabel("CONTEXTE À DÉFINIR")
         self.project_state.setProperty("state", "warning")
-        self.hardware_state = QLabel("MCC NON VÉRIFIÉE")
+        self.hardware_state = QLabel("MATÉRIEL NON VÉRIFIÉ")
         self.hardware_state.setProperty("state", "neutral")
         summary_layout.addWidget(self.project_state)
         summary_layout.addWidget(self.hardware_state)

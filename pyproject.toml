@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "chneowave"
 dynamic = ["version"]
-description = "Acquisition et analyse de donnees maritimes avec MCC USB-1608FS"
+description = "Plateforme de laboratoire pour l'acquisition et l'analyse de donnees maritimes"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [

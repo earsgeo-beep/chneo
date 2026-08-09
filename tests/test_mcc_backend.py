@@ -194,6 +194,12 @@ class MCCBackendTests(unittest.TestCase):
         )
         self.assertIsNone(self.api.ul.active_handle)
 
+    def test_unwraps_signed_32_bit_point_counter_rollover(self):
+        self.assertEqual(self.backend._unwrap_point_counter(2_147_483_647), 2_147_483_647)
+        self.assertEqual(self.backend._unwrap_point_counter(-2_147_483_648), 2_147_483_648)
+        self.assertEqual(self.backend._unwrap_point_counter(-1), 4_294_967_295)
+        self.assertEqual(self.backend._unwrap_point_counter(0), 4_294_967_296)
+
 
 if __name__ == "__main__":
     unittest.main()

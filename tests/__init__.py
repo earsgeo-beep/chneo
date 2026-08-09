@@ -1,0 +1,1 @@
+"""Suite de validation CHNeoWave."""

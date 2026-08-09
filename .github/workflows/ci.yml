@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     env:
       PYTHONPATH: ${{ github.workspace }}/src
@@ -43,8 +43,15 @@ jobs:
       - name: Check critical code quality
         run: >-
           python -m ruff check
+          src/hrneowave/acquisition/acquisition_controller.py
+          src/hrneowave/acquisition/daq_backend.py
           src/hrneowave/acquisition/mcc_daq_wrapper.py
+          src/hrneowave/acquisition/session_exporter.py
           src/hrneowave/acquisition/session_recorder.py
           src/hrneowave/core/post_processor.py
           src/hrneowave/core/wave_analysis.py
+          src/hrneowave/gui/main_window.py
+          src/hrneowave/gui/views/acquisition_config_view.py
+          src/hrneowave/gui/views/calibration_view.py
+          src/hrneowave/hardware
           tests

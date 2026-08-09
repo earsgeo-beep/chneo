@@ -7,10 +7,12 @@ Vue d'ensemble
 L'application active suit un enchainement simple:
 
 1. creer un projet
-2. parametrer une acquisition
-3. exporter les donnees de session
-4. charger un fichier dans l'analyse
-5. produire un rapport exportable
+2. detecter et connecter un equipement physique
+3. calibrer et associer les capteurs
+4. parametrer une acquisition
+5. enregistrer la session HDF5 maitre
+6. charger le fichier dans l'analyse
+7. produire un rapport exportable
 
 Creation de projet
 ------------------
@@ -35,7 +37,8 @@ Fonctions actuellement branchees:
 - export ``csv``, ``json`` et ``hdf5``
 - emission automatique du fichier exporte vers la vue d'analyse
 
-Quand aucun materiel MCC n'est detecte, le controleur peut fonctionner en mode simulation.
+Quand aucun equipement physique pris en charge n'est detecte, le controleur
+verrouille le demarrage. Il ne fabrique jamais de donnees de remplacement.
 
 Limite actuelle:
 

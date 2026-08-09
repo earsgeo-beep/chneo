@@ -12,28 +12,24 @@ from hrneowave.acquisition.acquisition_controller import (
     AcquisitionSession,
     create_default_maritime_config,
 )
+from hrneowave.acquisition.daq_backend import detect_voltage_saturation
+from hrneowave.acquisition.session_recorder import ContinuousHDF5Recorder
 from hrneowave.core.optimized_goda_analyzer import OptimizedGodaAnalyzer, ProbeGeometry
 from hrneowave.core.post_processor import PostProcessor
 from hrneowave.core.session_schema import build_channel_metadata, build_session_metadata
+from tests.hardware_test_doubles import DeterministicPhysicalBackend
 
 
 class ScientificP0Tests(unittest.TestCase):
     def _build_export_controller(self):
-        controller = AcquisitionController.__new__(AcquisitionController)
-        controller.daq = None
-        controller.data_buffer = []
-        controller.last_exported_path = None
-        controller.stats = {
-            "samples_acquired": 5,
-            "acquisition_rate": 0.0,
-            "last_update": None,
-            "errors": 0,
-            "buffer_overruns": 0,
-        }
+        backend = DeterministicPhysicalBackend()
+        backend.connect()
+        controller = AcquisitionController(daq_backend=backend)
         configs = create_default_maritime_config()
         channels = [configs[0], configs[1]]
         channels[0].probe_position_m = 0.0
         channels[1].probe_position_m = 0.4
+        controller.channels_config = {channel.channel: channel for channel in channels}
         controller.current_session = AcquisitionSession(
             session_id="scientific_p0_export",
             project_name="scientific_p0_export",
@@ -41,7 +37,12 @@ class ScientificP0Tests(unittest.TestCase):
             sampling_rate=50.0,
             total_samples=5,
             channels=channels,
-            metadata={"water_depth_m": 0.8},
+            metadata={
+                "water_depth_m": 0.8,
+                "hardware_available": True,
+                "acquisition_source": "physical_hardware",
+                **backend.descriptor.to_metadata(),
+            },
         )
         raw_data = np.array(
             [
@@ -53,14 +54,15 @@ class ScientificP0Tests(unittest.TestCase):
             ],
             dtype=float,
         )
-        controller.data_buffer.append(
-            {
-                "timestamp": datetime.now(),
-                "raw_data": raw_data,
-                "processed_data": controller._convert_to_physical_units(raw_data),
-                "sample_count": raw_data.shape[0],
-            }
-        )
+        recording_directory = tempfile.TemporaryDirectory()
+        controller._test_recording_directory = recording_directory
+        master_path = Path(recording_directory.name) / "master.h5"
+        recorder = ContinuousHDF5Recorder()
+        recorder.start(master_path, controller.current_session)
+        recorder.append(raw_data, controller._convert_to_physical_units(raw_data))
+        controller.current_session.end_time = datetime.now()
+        recorder.finalize(controller.current_session, controller.stats)
+        controller.current_session.data_file_path = str(master_path)
         return controller
 
     def test_zero_crossing_returns_full_wave_height_for_sine(self):
@@ -180,28 +182,15 @@ class ScientificP0Tests(unittest.TestCase):
                     frequency,
                 )
 
-    def test_pressure_simulation_stays_inside_default_daq_range(self):
-        controller = AcquisitionController.__new__(AcquisitionController)
-        controller._simulation_sample_index = 0
-        controller._simulation_channel_state = {}
-        configs = create_default_maritime_config()
-        controller.current_session = AcquisitionSession(
-            session_id="scientific_p0",
-            project_name="scientific_p0",
-            start_time=datetime.now(),
-            sampling_rate=100.0,
-            channels=[configs[index] for index in sorted(configs)],
-        )
-
-        raw_data = controller._generate_simulation_data()
-        pressure_raw = raw_data[:, 2]
-
-        self.assertFalse(np.any(pressure_raw < -5.0))
-        self.assertFalse(np.any(pressure_raw > 5.0))
+    def test_saturation_control_uses_the_configured_physical_range(self):
+        pressure = create_default_maritime_config()[2]
+        self.assertEqual(pressure.voltage_range.minimum, -5.0)
+        self.assertEqual(pressure.voltage_range.maximum, 5.0)
+        warnings = detect_voltage_saturation(np.array([[0.0], [4.999]]), [pressure])
+        self.assertTrue(warnings)
 
     def test_calibration_contract_does_not_return_fake_ok_coefficients(self):
-        controller = AcquisitionController.__new__(AcquisitionController)
-        controller.daq = None
+        controller = AcquisitionController(auto_initialize=False)
         configs = create_default_maritime_config()
         controller.channels_config = {0: configs[0]}
 
@@ -211,7 +200,7 @@ class ScientificP0Tests(unittest.TestCase):
         self.assertFalse(result["calibration_valid"])
         self.assertEqual(result["calibration_status"], "not_performed")
         self.assertEqual(result["system_status"], "not_calibrated")
-        self.assertEqual(channel_result["calibration_status"], "not_performed")
+        self.assertEqual(channel_result["calibration_status"], "unverified")
         self.assertIn("sensitivity_v_per_unit", channel_result)
         self.assertNotIn("offset_correction", channel_result)
         self.assertNotIn("scale_correction", channel_result)
@@ -234,9 +223,9 @@ class ScientificP0Tests(unittest.TestCase):
             hdf5_path = output_dir / "session.h5"
             csv_path = output_dir / "session.csv"
 
-            self.assertTrue(controller._export_json(str(json_path)))
-            self.assertTrue(controller._export_hdf5(str(hdf5_path)))
-            self.assertTrue(controller._export_csv(str(csv_path)))
+            self.assertTrue(controller.export_session_data(str(json_path), "json"))
+            self.assertTrue(controller.export_session_data(str(hdf5_path), "hdf5"))
+            self.assertTrue(controller.export_session_data(str(csv_path), "csv"))
 
             payload = json.loads(json_path.read_text(encoding="utf-8"))
             metadata = payload["metadata"]
@@ -338,7 +327,7 @@ class ScientificP0Tests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             csv_path = Path(tmp) / "session.csv"
-            self.assertTrue(controller._export_csv(str(csv_path)))
+            self.assertTrue(controller.export_session_data(str(csv_path), "csv"))
 
             processor = PostProcessor()
             self.assertTrue(processor.load_data_file(str(csv_path)))
@@ -359,7 +348,7 @@ class ScientificP0Tests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             csv_path = Path(tmp) / "session.csv"
-            self.assertTrue(controller._export_csv(str(csv_path)))
+            self.assertTrue(controller.export_session_data(str(csv_path), "csv"))
             sidecar_path = Path(f"{csv_path}.metadata.json")
             sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
             sidecar["metadata"].update(
@@ -379,6 +368,33 @@ class ScientificP0Tests(unittest.TestCase):
             self.assertEqual(metadata["n_samples"], 5)
             self.assertEqual(metadata["duration_s"], 5.0 / 50.0)
             self.assertEqual(metadata["water_depth_m"], 1.2)
+
+    def test_csv_loader_rejects_recording_error_declared_by_sidecar(self):
+        controller = self._build_export_controller()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "session.csv"
+            self.assertTrue(controller.export_session_data(str(csv_path), "csv"))
+            sidecar_path = Path(f"{csv_path}.metadata.json")
+            sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            sidecar["statistics"]["recording_errors"] = 1
+            sidecar_path.write_text(json.dumps(sidecar), encoding="utf-8")
+
+            processor = PostProcessor()
+            self.assertFalse(processor.load_data_file(str(csv_path)))
+
+    def test_json_loader_rejects_non_physical_source(self):
+        controller = self._build_export_controller()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            json_path = Path(tmp) / "session.json"
+            self.assertTrue(controller.export_session_data(str(json_path), "json"))
+            payload = json.loads(json_path.read_text(encoding="utf-8"))
+            payload["metadata"]["acquisition_source"] = "forbidden_source"
+            json_path.write_text(json.dumps(payload), encoding="utf-8")
+
+            processor = PostProcessor()
+            self.assertFalse(processor.load_data_file(str(json_path)))
 
     def test_loader_rejects_sample_rate_inconsistent_with_time_axis(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -416,7 +432,7 @@ class ScientificP0Tests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             hdf5_path = Path(tmp) / "session.h5"
-            self.assertTrue(controller._export_hdf5(str(hdf5_path)))
+            self.assertTrue(controller.export_session_data(str(hdf5_path), "hdf5"))
 
             processor = PostProcessor()
             self.assertTrue(processor.load_data_file(str(hdf5_path)))

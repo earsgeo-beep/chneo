@@ -19,6 +19,7 @@ from hrneowave.gui.views.acquisition_config_view import AcquisitionConfigView
 from hrneowave.gui.views.analysis_view import AnalysisView
 from hrneowave.gui.views.calibration_view import CalibrationView
 from hrneowave.gui.widgets.main_sidebar import MainSidebar
+from tests.hardware_test_doubles import physical_test_device
 
 
 @pytest.fixture(scope="module")
@@ -54,6 +55,16 @@ def test_calibration_workspace_fits_real_linear_record(qt_app):
     assert view.calibration_status_label.text() == "CALIBRATION VALIDÉE"
 
 
+def test_calibration_channel_count_follows_active_hardware(qt_app):
+    view = CalibrationView(channel_count=2)
+
+    view.set_channel_count(24)
+
+    assert view.channel_count == 24
+    assert view.channel_combo.count() == 24
+    assert view.channel_progress_label.text() == "CANAL 1 / 24"
+
+
 def test_analysis_parameters_panel_is_collapsible(qt_app):
     view = AnalysisView()
 
@@ -64,21 +75,18 @@ def test_analysis_parameters_panel_is_collapsible(qt_app):
 
 
 def test_hardware_panel_uses_one_connected_state(qt_app):
-    class ConnectedDaq:
-        board_name = "USB-1608FS"
-
-        @staticmethod
-        def get_acquisition_status():
-            return {"board_name": "USB-1608FS"}
-
     class ConnectedController:
-        daq = ConnectedDaq()
+        selected_device = physical_test_device()
         channels_config = {}
         is_acquiring = False
 
         @staticmethod
         def is_hardware_available():
             return True
+
+        @staticmethod
+        def get_hardware_status():
+            return {"connected": True, "buffer_overruns": 0}
 
         @staticmethod
         def close():
@@ -93,14 +101,15 @@ def test_hardware_panel_uses_one_connected_state(qt_app):
     view.update_hardware_status()
 
     assert view.hardware_status_label.text() == "MATÉRIEL OPÉRATIONNEL"
-    assert view.board_name_label.text() == "USB-1608FS"
-    assert view.driver_status_label.text() == "Universal Library chargée"
-    assert view.operation_mode_label.text() == "Acquisition matérielle"
+    assert view.board_name_label.text() == "Test Laboratory Deterministic DAQ"
+    assert view.driver_status_label.text() == "test.physical.driver"
+    assert view.operation_mode_label.text() == "Acquisition physique"
 
 
 def test_acquisition_configuration_round_trip_preserves_scientific_geometry(qt_app):
     view = AcquisitionConfigView()
     try:
+        view._initialize_channels_table(8)
         view.project_name_edit.setText("Essai houle multidirectionnel")
         view.water_depth_spin.setValue(0.8)
         view.sampling_rate_spin.setValue(200.0)

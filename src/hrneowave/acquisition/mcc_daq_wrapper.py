@@ -127,7 +127,7 @@ def _load_mcc_api() -> SimpleNamespace:
 
 
 class MCCDAQ_USB1608FS:
-    """Acquisition continue fiable pour une MCC USB-1608FS configuree par InstaCal.
+    """Acquisition continue d'une MCC USB-1608FS decouverte directement en USB.
 
     ``api`` est injectable afin de tester toute la logique de buffer sans carte.
     En production, il est omis et le module charge l'Universal Library locale.
@@ -153,6 +153,9 @@ class MCCDAQ_USB1608FS:
         self._memhandle: int | None = None
         self._buffer_count = 0
         self._last_point_count = 0
+        self._last_raw_counter: int | None = None
+        self._counter_epoch = 0
+        self._last_observed_point_count = 0
         self._sequence = 0
         self._running = False
         self._output_indices: list[int] = []
@@ -406,6 +409,9 @@ class MCCDAQ_USB1608FS:
                 self._memhandle = memhandle
                 self._buffer_count = buffer_count
                 self._last_point_count = 0
+                self._last_raw_counter = None
+                self._counter_epoch = 0
+                self._last_observed_point_count = 0
                 self._sequence = 0
                 self.buffer_overruns = 0
                 self._running = True
@@ -464,6 +470,24 @@ class MCCDAQ_USB1608FS:
             )
         return volts
 
+    def _unwrap_point_counter(self, raw_count: int) -> int:
+        """Convertit le compteur signé 32 bits MCC en compteur Python monotone."""
+
+        unsigned_count = int(raw_count) & 0xFFFFFFFF
+        if self._last_raw_counter is not None and unsigned_count < self._last_raw_counter:
+            # Un retour de 0xFFFFFFFF vers 0 est le rollover documenté de
+            # l'Universal Library. Un petit recul signale au contraire un reset.
+            if self._last_raw_counter - unsigned_count > 0x7FFFFFFF:
+                self._counter_epoch += 0x1_0000_0000
+            else:
+                raise MCCBackendError("Le compteur MCC a reculé hors rollover 32 bits")
+        absolute_count = self._counter_epoch + unsigned_count
+        if absolute_count < self._last_observed_point_count:
+            raise MCCBackendError("Le compteur MCC absolu a reculé pendant le scan")
+        self._last_raw_counter = unsigned_count
+        self._last_observed_point_count = absolute_count
+        return absolute_count
+
     def get_data(self, num_samples: int = 1000) -> np.ndarray | None:
         """Retourne uniquement les nouveaux echantillons complets disponibles."""
 
@@ -475,10 +499,10 @@ class MCCDAQ_USB1608FS:
                 self.board_num,
                 self.api.FunctionType.AIFUNCTION,
             )
-            current_count = int(current_count)
             n_scan_channels = self.acquisition_config.n_scan_channels
 
             with self._lock:
+                current_count = self._unwrap_point_counter(int(current_count))
                 if current_count < self._last_point_count:
                     raise MCCBackendError("Le compteur MCC a recule pendant le scan")
 

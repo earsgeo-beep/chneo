@@ -145,7 +145,7 @@ class ContextualHelp:
             "btn_analyze": "Démarre l'analyse des données (Ctrl+R)",
             "spin_sample_rate": "Fréquence d'échantillonnage en Hz",
             "spin_duration": "Durée d'acquisition en secondes",
-            "combo_acquisition_mode": "Mode d'acquisition (Simulation/Réel)",
+            "combo_acquisition_mode": "Équipement physique et pilote sélectionnés",
             "progress_acquisition": "Progression de l'acquisition en cours",
             "chart_realtime": "Affichage temps réel des signaux",
             "list_sensors": "Liste des capteurs connectés",

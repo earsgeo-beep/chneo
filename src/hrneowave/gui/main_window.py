@@ -54,8 +54,8 @@ class ApplicationHeader(QFrame):
         ),
         "acquisition": (
             "ÉTAPE 02",
-            "Acquisition MCC",
-            "Configurer la USB-1608FS et enregistrer une session traçable.",
+            "Acquisition du laboratoire",
+            "Sélectionner un équipement physique et enregistrer une session traçable.",
         ),
         "analysis": (
             "ÉTAPE 03",
@@ -232,6 +232,13 @@ class MainWindow(QMainWindow):
             )
         if acquisition_view and hasattr(acquisition_view, "hardware_state_changed"):
             acquisition_view.hardware_state_changed.connect(self.sidebar.update_connection_status)
+        if (
+            acquisition_view
+            and calibration_view
+            and hasattr(acquisition_view, "hardware_channels_changed")
+            and hasattr(calibration_view, "set_channel_count")
+        ):
+            acquisition_view.hardware_channels_changed.connect(calibration_view.set_channel_count)
         if calibration_view and hasattr(calibration_view, "calibration_completed"):
             calibration_view.calibration_completed.connect(self._on_calibration_completed)
         if analysis_view and hasattr(analysis_view, "analysis_completed"):

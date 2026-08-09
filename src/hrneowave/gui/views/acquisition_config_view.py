@@ -34,8 +34,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...acquisition import MARITIME_SENSOR_TYPES
 from ...acquisition.acquisition_controller import AcquisitionController, create_default_maritime_config
 from ...core.calibration import CalibrationRecord
+from ...hardware import VoltageRange
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +50,7 @@ class AcquisitionConfigView(QWidget):
     calibration_requested = Signal()
     data_block_received = Signal(object, object)
     hardware_state_changed = Signal(bool, str)
+    hardware_channels_changed = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -81,9 +84,9 @@ class AcquisitionConfigView(QWidget):
         layout.setContentsMargins(18, 12, 18, 12)
 
         title_layout = QVBoxLayout()
-        title = QLabel("MCC USB-1608FS · 8 voies analogiques")
+        title = QLabel("Système d'acquisition du laboratoire")
         title.setObjectName("sectionTitle")
-        subtitle = QLabel("Session locale continue avec contrôle de traçabilité HDF5")
+        subtitle = QLabel("Pilotes matériels interchangeables · session HDF5 maître obligatoire")
         subtitle.setObjectName("mutedText")
         title_layout.addWidget(title)
         title_layout.addWidget(subtitle)
@@ -136,10 +139,10 @@ class AcquisitionConfigView(QWidget):
         summary_layout.setContentsMargins(14, 10, 14, 10)
         summary_text = QVBoxLayout()
         summary_text.setSpacing(1)
-        summary_title = QLabel("Panneau matériel MCC")
+        summary_title = QLabel("Gestionnaire des équipements")
         summary_title.setObjectName("sectionTitle")
         self.hardware_summary_label = QLabel(
-            "Lancez un scan USB pour vérifier ensemble la carte et la Universal Library."
+            "Détectez les équipements installés. Aucune acquisition n'est autorisée sans matériel réel."
         )
         self.hardware_summary_label.setObjectName("mutedText")
         self.hardware_summary_label.setWordWrap(True)
@@ -150,7 +153,7 @@ class AcquisitionConfigView(QWidget):
         detection_group = QGroupBox("Détection et sélection")
         detection_layout = QGridLayout(detection_group)
         self.board_combo = QComboBox()
-        self.scan_boards_btn = QPushButton("Scanner l'USB")
+        self.scan_boards_btn = QPushButton("Détecter les équipements")
         self.scan_boards_btn.setProperty("kind", "primaryLarge")
         self.test_connection_btn = QPushButton("Valider le fonctionnement")
         self.test_connection_btn.setProperty("kind", "secondary")
@@ -164,15 +167,15 @@ class AcquisitionConfigView(QWidget):
         info_group = QGroupBox("État technique cohérent")
         info_layout = QFormLayout(info_group)
         self.board_name_label = QLabel("Non scannée")
-        self.backend_label = QLabel("MCC Universal Library locale (mcculw)")
-        self.discovery_mode_label = QLabel("USB directe · configuration InstaCal ignorée")
+        self.backend_label = QLabel("Aucun pilote actif")
+        self.discovery_mode_label = QLabel("Registre de pilotes physiques")
         self.driver_status_label = QLabel("Non vérifié")
         self.operation_mode_label = QLabel("En attente du scan")
         self.last_hardware_check_label = QLabel("Aucun contrôle effectué")
         info_layout.addRow("Périphérique", self.board_name_label)
         info_layout.addRow("Backend", self.backend_label)
         info_layout.addRow("Détection", self.discovery_mode_label)
-        info_layout.addRow("Pilote MCC", self.driver_status_label)
+        info_layout.addRow("Pilote", self.driver_status_label)
         info_layout.addRow("Mode logiciel", self.operation_mode_label)
         info_layout.addRow("Dernier contrôle", self.last_hardware_check_label)
 
@@ -196,7 +199,7 @@ class AcquisitionConfigView(QWidget):
         actions.addStretch()
         layout.addLayout(actions)
 
-        self.channels_table = QTableWidget(8, 8)
+        self.channels_table = QTableWidget(0, 8)
         self.channels_table.setHorizontalHeaderLabels(
             [
                 "Canal",
@@ -221,9 +224,8 @@ class AcquisitionConfigView(QWidget):
         params_group = QGroupBox("Parametres d'acquisition")
         params_layout = QFormLayout(params_group)
         self.sampling_rate_spin = QDoubleSpinBox()
-        # Le USB-1608FS classique scanne toujours huit canaux et accepte au
-        # maximum 100 kS/s agreges, soit 12.5 kS/s par canal.
-        self.sampling_rate_spin.setRange(1.0, 12500.0)
+        # Les limites sont remplacées par celles du pilote après connexion.
+        self.sampling_rate_spin.setRange(1.0, 1_000_000.0)
         self.sampling_rate_spin.setValue(1000.0)
         self.sampling_rate_spin.setSuffix(" Hz")
         self.duration_spin = QDoubleSpinBox()
@@ -257,7 +259,7 @@ class AcquisitionConfigView(QWidget):
         self.stop_acquisition_btn.setText("Arrêter")
         self.stop_acquisition_btn.setProperty("kind", "danger")
         self.stop_acquisition_btn.setEnabled(False)
-        self.test_acquisition_btn = QPushButton("Test rapide")
+        self.test_acquisition_btn = QPushButton("Essai matériel 3 s")
         self.calibrate_btn = QPushButton("Calibration")
         self.test_acquisition_btn.setProperty("kind", "secondary")
         self.calibrate_btn.setProperty("kind", "secondary")
@@ -333,6 +335,7 @@ class AcquisitionConfigView(QWidget):
 
     def _setup_connections(self) -> None:
         self.scan_boards_btn.clicked.connect(self.scan_boards)
+        self.board_combo.currentIndexChanged.connect(self.select_hardware_device)
         self.test_connection_btn.clicked.connect(self.test_connection)
         self.load_preset_btn.clicked.connect(self.load_maritime_preset)
         self.clear_channels_btn.clicked.connect(self.clear_channels)
@@ -350,17 +353,23 @@ class AcquisitionConfigView(QWidget):
         self.data_block_received.connect(self._display_received_data)
         self.update_timer.start(1000)
 
-    def _initialize_channels_table(self) -> None:
-        sensor_types = ["wave_height", "pressure", "accelerometer", "temperature", "generic"]
-        voltage_ranges = ["±1V", "±2V", "±5V", "±10V"]
+    def _initialize_channels_table(
+        self,
+        channel_count: int = 0,
+        voltage_ranges: list[str] | None = None,
+    ) -> None:
+        sensor_types = list(MARITIME_SENSOR_TYPES)
+        voltage_ranges = voltage_ranges or ["±1V", "±2V", "±5V", "±10V"]
+        self.channels_table.clearContents()
+        self.channels_table.setRowCount(max(0, int(channel_count)))
 
-        for row in range(8):
+        for row in range(self.channels_table.rowCount()):
             channel_item = QTableWidgetItem(str(row))
             channel_item.setFlags(Qt.ItemIsEnabled)
             self.channels_table.setItem(row, 0, channel_item)
 
             enabled = QCheckBox()
-            enabled.setChecked(row < 4)
+            enabled.setChecked(False)
             self.channels_table.setCellWidget(row, 1, enabled)
 
             sensor_combo = QComboBox()
@@ -387,10 +396,12 @@ class AcquisitionConfigView(QWidget):
                 self.data_received_callback,
                 auto_initialize=False,
             )
-            self.log_message("Controleur prêt - cliquez sur Scanner les cartes")
+            self.log_message("Contrôleur prêt - détectez un équipement physique")
             self.board_combo.clear()
-            self.board_combo.addItem("Scan matériel non lancé")
+            self.board_combo.addItem("Inventaire matériel non lancé", None)
             self._hardware_state = "not_scanned"
+            self.start_acquisition_btn.setEnabled(False)
+            self.test_acquisition_btn.setEnabled(False)
             self.update_hardware_status()
         except Exception as exc:
             self.log_message(f"Erreur d'initialisation: {exc}")
@@ -417,39 +428,80 @@ class AcquisitionConfigView(QWidget):
         self.scan_boards_btn.setEnabled(False)
         self._hardware_state = "scanning"
         self.update_hardware_status()
-        self.log_message("Scan USB direct MCC DAQ (sans InstaCal)...")
+        self.log_message("Inventaire de tous les pilotes matériels enregistrés...")
         try:
-            connected = self.controller.refresh_hardware()
-            boards = self.controller.get_available_boards()
+            report = self.controller.discover_hardware()
+            devices = list(report.devices)
+            self.board_combo.blockSignals(True)
             self.board_combo.clear()
-            if connected and boards:
-                for board in boards:
-                    self.board_combo.addItem(f"Carte {board}")
-                board_name = getattr(self.controller.daq, "board_name", "USB-1608FS")
-                self._hardware_state = "connected"
-                self.last_hardware_check_label.setText(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
-                self.log_message(f"Carte MCC connectée directement: {board_name}")
+            if devices:
+                for device in devices:
+                    self.board_combo.addItem(device.display_name, device.key)
+                self.board_combo.setCurrentIndex(0)
+                self.board_combo.blockSignals(False)
+                self.select_hardware_device(0)
             else:
-                self.board_combo.addItem("Aucune USB-1608FS détectée")
+                self.board_combo.addItem("Aucun équipement physique détecté", None)
+                self.board_combo.blockSignals(False)
                 self._hardware_state = "not_found"
-                self.log_message("Aucune USB-1608FS détectée - simulation disponible")
+                self._initialize_channels_table(0)
+                self.hardware_channels_changed.emit(0)
+                self.start_acquisition_btn.setEnabled(False)
+                self.test_acquisition_btn.setEnabled(False)
+                self.log_message("Aucun équipement: acquisition verrouillée")
+                for driver_id, error in report.driver_errors.items():
+                    self.log_message(f"Pilote {driver_id}: {error}")
         except Exception as exc:
-            logger.exception("Scan MCC impossible")
+            logger.exception("Inventaire matériel impossible")
+            self.board_combo.blockSignals(False)
             self.board_combo.clear()
-            self.board_combo.addItem("Erreur de détection")
+            self.board_combo.addItem("Erreur d'inventaire", None)
             self._hardware_state = "error"
-            self.log_message(f"Erreur de détection MCC: {exc}")
+            self._initialize_channels_table(0)
+            self.hardware_channels_changed.emit(0)
+            self.log_message(f"Erreur de détection: {exc}")
         finally:
             self.scan_boards_btn.setEnabled(True)
             self.update_hardware_status()
 
+    def select_hardware_device(self, index: int) -> None:
+        if not self.controller or index < 0:
+            return
+        device_key = self.board_combo.itemData(index)
+        if not device_key:
+            return
+        if not self.controller.connect_hardware(str(device_key)):
+            self._hardware_state = "error"
+            self.start_acquisition_btn.setEnabled(False)
+            self.test_acquisition_btn.setEnabled(False)
+            self.log_message("Connexion matérielle refusée")
+            self.update_hardware_status()
+            return
+
+        device = self.controller.selected_device
+        capabilities = device.capabilities
+        range_labels = [item.label.replace(" ", "") for item in capabilities.voltage_ranges]
+        self._initialize_channels_table(capabilities.analog_input_channels, range_labels)
+        self.hardware_channels_changed.emit(capabilities.analog_input_channels)
+        self.sampling_rate_spin.setRange(
+            capabilities.min_sample_rate_hz,
+            capabilities.max_sample_rate_hz_per_channel,
+        )
+        self.sampling_rate_spin.setValue(
+            min(1000.0, capabilities.max_sample_rate_hz_per_channel)
+        )
+        self._hardware_state = "connected"
+        self.last_hardware_check_label.setText(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+        self.start_acquisition_btn.setEnabled(True)
+        self.test_acquisition_btn.setEnabled(True)
+        self.log_message(f"Équipement connecté: {device.display_name}")
+        self.update_hardware_status()
+
     def update_hardware_status(self) -> None:
         connected = bool(self.controller and self.controller.is_hardware_available())
-        board_name = (
-            str(getattr(self.controller.daq, "board_name", "USB-1608FS"))
-            if connected and self.controller
-            else ""
-        )
+        device = self.controller.selected_device if connected and self.controller else None
+        device_name = device.display_name if device else ""
+        driver_name = device.driver_id if device else "Non vérifié"
 
         state_content = {
             "not_scanned": (
@@ -457,40 +509,40 @@ class AcquisitionConfigView(QWidget):
                 "neutral",
                 "Non scannée",
                 "Non vérifié",
-                "En attente du scan",
-                "Lancez un scan USB pour vérifier ensemble la carte et la Universal Library.",
+                "Acquisition verrouillée",
+                "Détectez puis connectez un équipement physique pris en charge.",
             ),
             "scanning": (
-                "DÉTECTION USB…",
+                "INVENTAIRE…",
                 "neutral",
                 "Recherche en cours",
                 "Vérification en cours",
-                "Détection matérielle",
-                "Inventaire MCC USB en cours, sans lecture de la configuration InstaCal.",
+                "Détection multi-pilotes",
+                "Interrogation de chaque pilote physique enregistré.",
             ),
             "not_found": (
-                "CARTE NON DÉTECTÉE",
+                "AUCUN ÉQUIPEMENT",
                 "warning",
-                "USB-1608FS absente",
-                "Non confirmé · vérifier Universal Library",
-                "Simulation disponible",
-                "Aucune carte compatible n'a été trouvée. Le logiciel reste utilisable en simulation.",
+                "Matériel absent",
+                "Vérifier pilotes, alimentation et câblage",
+                "Acquisition verrouillée",
+                "Aucune donnée ne peut être créée sans équipement physique.",
             ),
             "error": (
                 "ERREUR MATÉRIELLE",
                 "danger",
                 "Détection interrompue",
                 "Erreur · consulter le journal",
-                "Simulation disponible",
+                "Acquisition verrouillée",
                 "Le contrôle matériel a échoué. Consultez le journal avant une acquisition réelle.",
             ),
             "connected": (
                 "MATÉRIEL OPÉRATIONNEL",
                 "success",
-                board_name or "USB-1608FS",
-                "Universal Library chargée",
-                "Acquisition matérielle",
-                "Carte et pilote validés par une seule séquence de détection USB directe.",
+                device_name or "Équipement connecté",
+                driver_name,
+                "Acquisition physique",
+                "Le pilote et l'équipement ont répondu à la séquence de connexion.",
             ),
         }
         effective_state = "connected" if connected else self._hardware_state
@@ -501,6 +553,7 @@ class AcquisitionConfigView(QWidget):
         self.hardware_status_label.setText(badge)
         self.hardware_status_label.setProperty("state", style_state)
         self.board_name_label.setText(device)
+        self.backend_label.setText(driver_name if connected else "Aucun pilote actif")
         self.driver_status_label.setText(driver)
         self.operation_mode_label.setText(mode)
         self.hardware_summary_label.setText(summary)
@@ -514,23 +567,27 @@ class AcquisitionConfigView(QWidget):
             return
         if self.controller.is_hardware_available():
             try:
-                status = self.controller.daq.get_acquisition_status()
+                status = self.controller.get_hardware_status()
                 self.last_hardware_check_label.setText(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+                model_name = status.get("model", status.get("board_name", "équipement"))
                 self.log_message(
-                    f"Validation matérielle OK · {status.get('board_name', 'USB-1608FS')} · scan arrêté"
+                    f"Validation matérielle OK · {model_name}"
                 )
             except Exception as exc:
                 self._hardware_state = "error"
                 self.update_hardware_status()
                 self.log_message(f"Validation matérielle échouée: {exc}")
         else:
-            self.log_message("Validation impossible: lancez d'abord un scan USB réussi")
+            self.log_message("Validation impossible: connectez d'abord un équipement pris en charge")
 
     def load_maritime_preset(self) -> None:
         if not self.controller:
             return
+        if self.channels_table.rowCount() <= 0:
+            self.log_message("Sélectionnez d'abord un équipement physique")
+            return
 
-        default_config = create_default_maritime_config()
+        default_config = create_default_maritime_config(self.channels_table.rowCount())
         for row, (_, config) in enumerate(default_config.items()):
             if row >= self.channels_table.rowCount():
                 break
@@ -538,7 +595,7 @@ class AcquisitionConfigView(QWidget):
                 config.channel,
                 config.sensor_type,
                 config.label,
-                10.0,
+                config.voltage_range.value,
                 config.sensor_sensitivity,
                 config.physical_units,
             )
@@ -546,6 +603,9 @@ class AcquisitionConfigView(QWidget):
             enabled = self.channels_table.cellWidget(row, 1)
             sensor_combo = self.channels_table.cellWidget(row, 2)
             self.channels_table.setItem(row, 3, QTableWidgetItem(config.label))
+            range_combo = self.channels_table.cellWidget(row, 4)
+            if range_combo:
+                range_combo.setCurrentText(config.voltage_range.label.replace(" ", ""))
             self.channels_table.setItem(row, 5, QTableWidgetItem(str(config.sensor_sensitivity)))
             self.channels_table.setItem(row, 6, QTableWidgetItem(config.physical_units))
             self.channels_table.setItem(
@@ -561,6 +621,9 @@ class AcquisitionConfigView(QWidget):
         self.log_message("Preset maritime charge")
 
     def clear_channels(self) -> None:
+        if self.controller:
+            self.controller.channels_config.clear()
+        self.calibration_records.clear()
         for row in range(self.channels_table.rowCount()):
             enabled = self.channels_table.cellWidget(row, 1)
             if enabled:
@@ -646,6 +709,9 @@ class AcquisitionConfigView(QWidget):
         if not self.controller:
             self.log_message("Pas de controleur disponible")
             return
+        if not self.controller.is_hardware_available():
+            self.log_message("Acquisition verrouillée: connectez un équipement physique")
+            return
 
         if not self.apply_channels_configuration():
             self.log_message("Acquisition annulée: corrigez la configuration des canaux")
@@ -657,6 +723,7 @@ class AcquisitionConfigView(QWidget):
 
         project_name = self.project_name_edit.text().strip() or "Acquisition_Maritime"
         duration = None if self.continuous_check.isChecked() else self.duration_spin.value()
+        self.controller.buffer_size = self.buffer_size_spin.value()
         success = self.controller.start_acquisition_session(
             project_name,
             sampling_rate=self.sampling_rate_spin.value(),
@@ -669,7 +736,7 @@ class AcquisitionConfigView(QWidget):
             self.log_message("Erreur de demarrage d'acquisition")
             return
 
-        self.log_message(f"Acquisition demarree: {project_name}")
+        self.log_message(f"Acquisition physique démarrée: {project_name}")
         if self.controller.current_session.data_file_path:
             self.log_message(f"Enregistrement continu: {self.controller.current_session.data_file_path}")
         self.start_acquisition_btn.setEnabled(False)
@@ -686,11 +753,14 @@ class AcquisitionConfigView(QWidget):
         self._reset_acquisition_controls()
 
     def test_acquisition(self) -> None:
+        if not self.controller or not self.controller.is_hardware_available():
+            self.log_message("Essai matériel impossible: aucun équipement connecté")
+            return
         original_duration = self.duration_spin.value()
         original_continuous = self.continuous_check.isChecked()
         self.duration_spin.setValue(3.0)
         self.continuous_check.setChecked(False)
-        self.log_message("Test rapide lance")
+        self.log_message("Essai matériel de 3 secondes lancé")
         self.start_acquisition()
         self.duration_spin.setValue(original_duration)
         self.continuous_check.setChecked(original_continuous)
@@ -857,6 +927,11 @@ class AcquisitionConfigView(QWidget):
         return {
             "schema_version": "1.0",
             "project_name": self.project_name_edit.text().strip(),
+            "hardware": (
+                self.controller.selected_device.to_metadata()
+                if self.controller and self.controller.selected_device
+                else None
+            ),
             "scientific_context": {
                 "water_depth_m": (
                     self.water_depth_spin.value() if self.water_depth_spin.value() > 0 else None
@@ -885,8 +960,14 @@ class AcquisitionConfigView(QWidget):
             or not isinstance(channels, list)
         ):
             raise ValueError("Structure de configuration incomplète")
-        if len(channels) != self.channels_table.rowCount():
-            raise ValueError("La configuration doit décrire exactement huit canaux MCC")
+        if not channels or len(channels) > 256:
+            raise ValueError("La configuration doit décrire entre 1 et 256 canaux")
+        capabilities = self.controller.get_hardware_capabilities() if self.controller else None
+        if capabilities is not None and len(channels) > capabilities.analog_input_channels:
+            raise ValueError(
+                "La configuration dépasse la capacité de l'équipement connecté: "
+                f"{len(channels)}/{capabilities.analog_input_channels}"
+            )
 
         sample_rate = float(acquisition["sample_rate_hz"])
         duration = float(acquisition["duration_seconds"])
@@ -899,11 +980,10 @@ class AcquisitionConfigView(QWidget):
             raise ValueError("Le mode continu doit être un booléen")
         water_depth = scientific_context.get("water_depth_m")
         water_depth_value = float(water_depth) if water_depth is not None else 0.0
-        if (
-            not math.isfinite(sample_rate)
-            or not self.sampling_rate_spin.minimum() <= sample_rate <= self.sampling_rate_spin.maximum()
-        ):
-            raise ValueError("Fréquence d'échantillonnage hors limites MCC")
+        if not math.isfinite(sample_rate) or sample_rate <= 0:
+            raise ValueError("Fréquence d'échantillonnage invalide")
+        if capabilities is not None:
+            capabilities.validate(sample_rate, max(1, sum(bool(item.get("enabled")) for item in channels)))
         if (
             not math.isfinite(duration)
             or not self.duration_spin.minimum() <= duration <= self.duration_spin.maximum()
@@ -919,22 +999,24 @@ class AcquisitionConfigView(QWidget):
 
         seen_channels: set[int] = set()
         normalized_channels: list[dict[str, Any]] = []
+        allowed_sensor_types = list(MARITIME_SENSOR_TYPES)
+        allowed_ranges = [
+            item.label.replace(" ", "")
+            for item in (capabilities.voltage_ranges if capabilities else tuple(VoltageRange))
+        ]
         for item in channels:
             if not isinstance(item, dict):
                 raise ValueError("Entrée canal invalide")
             channel = int(item["channel"])
-            if channel in seen_channels or channel < 0 or channel >= self.channels_table.rowCount():
+            if channel in seen_channels or channel < 0 or channel >= len(channels):
                 raise ValueError(f"Numéro de canal invalide ou dupliqué: {channel}")
             seen_channels.add(channel)
 
-            enabled = self.channels_table.cellWidget(channel, 1)
-            sensor_combo = self.channels_table.cellWidget(channel, 2)
-            range_combo = self.channels_table.cellWidget(channel, 4)
             sensor_type = str(item.get("sensor_type", "generic"))
             range_text = str(item.get("range", "±10V"))
-            if not sensor_combo or sensor_combo.findText(sensor_type) < 0:
+            if sensor_type not in allowed_sensor_types:
                 raise ValueError(f"Type de capteur inconnu sur le canal {channel}")
-            if not range_combo or range_combo.findText(range_text) < 0:
+            if range_text not in allowed_ranges:
                 raise ValueError(f"Plage de tension inconnue sur le canal {channel}")
             enabled_value = item.get("enabled", False)
             if not isinstance(enabled_value, bool):
@@ -970,6 +1052,7 @@ class AcquisitionConfigView(QWidget):
             )
 
         # The widget is modified only after the whole payload has passed validation.
+        self._initialize_channels_table(len(channels), allowed_ranges)
         self.project_name_edit.setText(str(payload.get("project_name") or "Acquisition_Maritime"))
         self.sampling_rate_spin.setValue(sample_rate)
         self.duration_spin.setValue(duration)

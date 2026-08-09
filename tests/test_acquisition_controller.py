@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import tempfile
 import time
 import unittest
@@ -8,6 +9,8 @@ from pathlib import Path
 
 from hrneowave.acquisition.acquisition_controller import AcquisitionController
 from hrneowave.core.post_processor import PostProcessor
+from hrneowave.hardware import HardwareRegistry
+from tests.hardware_test_doubles import DeterministicPhysicalBackend, StaticPhysicalProvider
 
 
 class FakeRecorder:
@@ -36,7 +39,10 @@ class FakeRecorder:
 
 class AcquisitionControllerTests(unittest.TestCase):
     def setUp(self):
-        self.controller = AcquisitionController(board_scanner=lambda: [])
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        backend = DeterministicPhysicalBackend()
+        backend.connect()
+        self.controller = AcquisitionController(daq_backend=backend)
         self.assertTrue(
             self.controller.configure_maritime_channel(
                 0,
@@ -51,6 +57,18 @@ class AcquisitionControllerTests(unittest.TestCase):
 
     def tearDown(self):
         self.controller.close()
+        self.temporary_directory.cleanup()
+
+    @property
+    def recording_directory(self) -> str:
+        return self.temporary_directory.name
+
+    def _start(self, project_name: str, **kwargs) -> bool:
+        return self.controller.start_acquisition_session(
+            project_name,
+            recording_directory=self.recording_directory,
+            **kwargs,
+        )
 
     def test_rejects_zero_sensitivity(self):
         self.assertFalse(
@@ -73,7 +91,7 @@ class AcquisitionControllerTests(unittest.TestCase):
             )
         )
         self.assertFalse(
-            self.controller.start_acquisition_session(
+            self._start(
                 "bad_rate",
                 sampling_rate=float("nan"),
                 duration_seconds=0.1,
@@ -81,7 +99,7 @@ class AcquisitionControllerTests(unittest.TestCase):
             )
         )
         self.assertFalse(
-            self.controller.start_acquisition_session(
+            self._start(
                 "bad_duration",
                 sampling_rate=100.0,
                 duration_seconds=float("inf"),
@@ -90,26 +108,38 @@ class AcquisitionControllerTests(unittest.TestCase):
         )
 
     def test_hardware_scan_can_be_deferred_until_operator_request(self):
-        calls = []
-        controller = AcquisitionController(
-            board_scanner=lambda: calls.append("scan") or [],
-            auto_initialize=False,
-        )
+        calls: list[str] = []
+        registry = HardwareRegistry()
+        registry.register(StaticPhysicalProvider(devices=[], calls=calls))
+        controller = AcquisitionController(hardware_registry=registry, auto_initialize=False)
         try:
             self.assertEqual(calls, [])
-            self.assertEqual(controller.get_available_boards(), [])
+            self.assertEqual(controller.get_available_devices(), [])
             self.assertFalse(controller.refresh_hardware())
-            self.assertEqual(calls, ["scan"])
+            self.assertEqual(calls, ["discover"])
         finally:
             controller.close()
 
-    def test_scientific_geometry_is_stored_in_session_contract(self):
-        self.assertEqual(
-            self.controller.get_channel_configuration(0)["probe_position_m"],
-            0.4,
-        )
+    def test_session_refuses_to_start_without_physical_hardware(self):
+        controller = AcquisitionController(auto_initialize=False)
+        try:
+            controller.channels_config = dict(self.controller.channels_config)
+            self.assertFalse(
+                controller.start_acquisition_session(
+                    "forbidden",
+                    sampling_rate=100.0,
+                    duration_seconds=0.1,
+                    channels=[0],
+                    recording_directory=self.recording_directory,
+                )
+            )
+        finally:
+            controller.close()
+
+    def test_scientific_geometry_is_stored_in_physical_session_contract(self):
+        self.assertEqual(self.controller.get_channel_configuration(0)["probe_position_m"], 0.4)
         self.assertTrue(
-            self.controller.start_acquisition_session(
+            self._start(
                 "geometry",
                 sampling_rate=100,
                 duration_seconds=0.1,
@@ -119,12 +149,15 @@ class AcquisitionControllerTests(unittest.TestCase):
         )
         self.controller.acquisition_thread.join(timeout=2)
 
-        self.assertEqual(self.controller.current_session.metadata["water_depth_m"], 0.8)
+        metadata = self.controller.current_session.metadata
+        self.assertEqual(metadata["water_depth_m"], 0.8)
+        self.assertEqual(metadata["acquisition_source"], "physical_hardware")
+        self.assertTrue(metadata["hardware_available"])
         self.assertEqual(self.controller.current_session.channels[0].probe_position_m, 0.4)
 
     def test_rejects_non_physical_water_depth(self):
         self.assertFalse(
-            self.controller.start_acquisition_session(
+            self._start(
                 "bad_depth",
                 sampling_rate=100,
                 duration_seconds=0.1,
@@ -133,10 +166,10 @@ class AcquisitionControllerTests(unittest.TestCase):
             )
         )
 
-    def test_simulation_respects_configured_rate(self):
+    def test_physical_backend_respects_configured_rate_and_sample_target(self):
         started = time.monotonic()
         self.assertTrue(
-            self.controller.start_acquisition_session(
+            self._start(
                 "timing",
                 sampling_rate=1000,
                 duration_seconds=0.25,
@@ -145,15 +178,14 @@ class AcquisitionControllerTests(unittest.TestCase):
         )
         self.controller.acquisition_thread.join(timeout=2)
         elapsed = time.monotonic() - started
-        samples = self.controller.stats["samples_acquired"]
 
         self.assertFalse(self.controller.is_acquiring)
         self.assertLess(elapsed, 1.0)
-        self.assertEqual(samples, 250)
+        self.assertEqual(self.controller.stats["samples_acquired"], 250)
 
-    def test_csv_preserves_sample_rate_for_analysis(self):
+    def test_csv_preserves_sample_rate_and_integrity_for_analysis(self):
         self.assertTrue(
-            self.controller.start_acquisition_session(
+            self._start(
                 "csv",
                 sampling_rate=500,
                 duration_seconds=0.12,
@@ -162,68 +194,84 @@ class AcquisitionControllerTests(unittest.TestCase):
         )
         self.controller.acquisition_thread.join(timeout=2)
 
-        with tempfile.TemporaryDirectory() as directory:
-            csv_path = Path(directory) / "session.csv"
-            self.assertTrue(self.controller.export_session_data(str(csv_path), "csv"))
+        csv_path = Path(self.recording_directory) / "session.csv"
+        self.assertTrue(self.controller.export_session_data(str(csv_path), "csv"))
+        with csv_path.open(newline="", encoding="utf-8") as handle:
+            header = next(csv.reader(handle))
+        self.assertEqual(header[:2], ["time", "sample_rate"])
 
-            with csv_path.open(newline="", encoding="utf-8") as handle:
-                header = next(csv.reader(handle))
-            self.assertEqual(header[:2], ["time", "sample_rate"])
+        processor = PostProcessor()
+        self.assertTrue(processor.load_data_file(str(csv_path)))
+        self.assertEqual(processor.sample_rate, 500.0)
 
-            processor = PostProcessor()
-            self.assertTrue(processor.load_data_file(str(csv_path)))
-            self.assertEqual(processor.sample_rate, 500.0)
+    def test_export_uses_complete_master_not_limited_preview(self):
+        self.controller.preview_sample_limit = 20
+        self.assertTrue(
+            self._start(
+                "complete_export",
+                sampling_rate=1000,
+                duration_seconds=0.125,
+                channels=[0],
+            )
+        )
+        self.controller.acquisition_thread.join(timeout=2)
+        preview_samples = sum(item["sample_count"] for item in self.controller.data_buffer)
+        self.assertLessEqual(preview_samples, self.controller.preview_sample_limit)
+
+        json_path = Path(self.recording_directory) / "complete.json"
+        self.assertTrue(self.controller.export_session_data(str(json_path), "json"))
+        payload = json.loads(json_path.read_text(encoding="utf-8"))
+        self.assertEqual(len(payload["time"]), 125)
+        self.assertEqual(len(payload["channels"]["channel_00"]), 125)
 
     def test_new_session_resets_previous_samples(self):
         self.assertTrue(
-            self.controller.start_acquisition_session(
-                "first", sampling_rate=500, duration_seconds=0.12, channels=[0]
-            )
+            self._start("first", sampling_rate=500, duration_seconds=0.12, channels=[0])
         )
         self.controller.acquisition_thread.join(timeout=2)
-        first_count = self.controller.stats["samples_acquired"]
-        self.assertGreater(first_count, 0)
+        self.assertGreater(self.controller.stats["samples_acquired"], 0)
 
         self.assertTrue(
-            self.controller.start_acquisition_session(
-                "second", sampling_rate=500, duration_seconds=0.12, channels=[0]
-            )
+            self._start("second", sampling_rate=500, duration_seconds=0.12, channels=[0])
         )
         self.controller.acquisition_thread.join(timeout=2)
-        second_count = self.controller.stats["samples_acquired"]
-        self.assertLessEqual(second_count, 200)
+        self.assertEqual(self.controller.stats["samples_acquired"], 60)
 
     def test_continuous_recorder_receives_every_acquired_sample(self):
         recorder = FakeRecorder()
-        controller = AcquisitionController(board_scanner=lambda: [], recorder_factory=lambda: recorder)
+        backend = DeterministicPhysicalBackend()
+        backend.connect()
+        controller = AcquisitionController(
+            daq_backend=backend,
+            recorder_factory=lambda: recorder,
+        )
         try:
             self.assertTrue(
                 controller.configure_maritime_channel(
                     0,
                     "wave_height",
-                    "Sonde enregistree",
+                    "Sonde enregistrée",
                     sensor_sensitivity=2.0,
                 )
             )
-            with tempfile.TemporaryDirectory() as directory:
-                self.assertTrue(
-                    controller.start_acquisition_session(
-                        "recording",
-                        sampling_rate=500,
-                        duration_seconds=0.12,
-                        channels=[0],
-                        recording_directory=directory,
-                    )
+            self.assertTrue(
+                controller.start_acquisition_session(
+                    "recording",
+                    sampling_rate=500,
+                    duration_seconds=0.12,
+                    channels=[0],
+                    recording_directory=self.recording_directory,
                 )
-                controller.acquisition_thread.join(timeout=2)
+            )
+            controller.acquisition_thread.join(timeout=2)
 
-                self.assertTrue(recorder.finalized)
-                self.assertEqual(recorder.samples, controller.stats["samples_acquired"])
-                self.assertEqual(recorder.final_samples, recorder.samples)
-                self.assertEqual(
-                    Path(controller.current_session.data_file_path).parent,
-                    Path(directory).resolve(),
-                )
+            self.assertTrue(recorder.finalized)
+            self.assertEqual(recorder.samples, controller.stats["samples_acquired"])
+            self.assertEqual(recorder.final_samples, recorder.samples)
+            self.assertEqual(
+                Path(controller.current_session.data_file_path).parent,
+                Path(self.recording_directory).resolve(),
+            )
         finally:
             controller.close()
 

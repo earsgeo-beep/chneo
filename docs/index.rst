@@ -1,10 +1,12 @@
 Documentation CHNeoWave
 =======================
 
-Cette documentation couvre le depot actif nettoye au 21 avril 2026. Elle decrit uniquement le flux reel aujourd'hui branche dans l'application desktop Qt:
+Cette documentation couvre le flux de laboratoire actif au 9 aout 2026:
 
 - creation de projet
-- acquisition ou simulation
+- detection d'un equipement physique par un pilote interchangeable
+- calibration des chaines capteur
+- acquisition physique avec HDF5 maitre obligatoire
 - export des donnees
 - analyse post-acquisition
 - generation de rapport
@@ -21,6 +23,7 @@ Le depot ne doit plus etre lu comme un prototype web ni comme une release autono
    data_analysis
    scientific_processing_v2
    interface_design
+   laboratory_platform_architecture_2026-08-09
 
 .. toctree::
    :maxdepth: 2
@@ -48,4 +51,6 @@ Points a retenir
 - ``PySide6`` est requis dans l'etat actuel du depot
 - ``pandas`` est necessaire pour certains flux CSV
 - ``h5py`` est necessaire pour le support HDF5
-- le support MCC reste optionnel et depend du materiel cible
+- le premier pilote livre cible la MCC USB-1608FS
+- le noyau metier ne depend pas de MCC et accepte de futurs pilotes
+- sans materiel physique connecte, l'acquisition est verrouillee
