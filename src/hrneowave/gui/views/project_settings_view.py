@@ -54,8 +54,8 @@ class ProjectSettingsView(QWidget):
     
     def _setup_ui(self):
         """Configuration de l'interface utilisateur moderne"""
-        # Layout principal avec Golden Ratio
-        main_layout = GoldenRatioLayout(self)
+        # Layout principal standard
+        main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(14)
         
