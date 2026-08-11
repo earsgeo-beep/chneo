@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from hrneowave.acquisition.mcc_daq_wrapper import scan_available_boards
+from hrneowave.acquisition.mcc_daq_wrapper import (
+    MccUsbDeviceInfo,
+    scan_available_devices,
+)
 
 from ..contracts import (
     AcquisitionCapabilities,
@@ -37,30 +40,48 @@ class MccUsb1608FsProvider(HardwareDriverProvider):
         supports_differential_inputs=False,
     )
 
-    def __init__(self, scanner=scan_available_boards, backend_factory=MccDaqBackend) -> None:
+    def __init__(self, scanner=scan_available_devices, backend_factory=MccDaqBackend) -> None:
         self._scanner = scanner
         self._backend_factory = backend_factory
 
     def discover(self) -> list[DeviceDescriptor]:
-        return [
-            DeviceDescriptor(
-                driver_id=self.driver_id,
-                device_id=str(board_num),
-                vendor="Measurement Computing",
-                model="USB-1608FS",
-                display_name=f"MCC USB-1608FS · carte {board_num}",
-                capabilities=self.CAPABILITIES,
-                transport="USB",
-                metadata={"board_num": int(board_num), "discovery": "direct_usb"},
+        devices: list[DeviceDescriptor] = []
+        for detected in self._scanner():
+            if isinstance(detected, MccUsbDeviceInfo):
+                board_num = detected.board_num
+                serial_number = detected.unique_id or None
+                product_name = detected.product_name
+            else:
+                # Compatibilité avec les scanners injectés par les tests et
+                # les intégrations historiques qui retournaient un entier.
+                board_num = int(detected)
+                serial_number = None
+                product_name = "USB-1608FS"
+            devices.append(
+                DeviceDescriptor(
+                    driver_id=self.driver_id,
+                    device_id=str(board_num),
+                    vendor="Measurement Computing",
+                    model="USB-1608FS",
+                    display_name=f"MCC USB-1608FS · carte {board_num}",
+                    capabilities=self.CAPABILITIES,
+                    serial_number=serial_number,
+                    transport="USB",
+                    metadata={
+                        "board_num": int(board_num),
+                        "discovery": "direct_usb",
+                        "usb_product_name": product_name,
+                    },
+                )
             )
-            for board_num in self._scanner()
-        ]
+        return devices
 
     def open(self, device: DeviceDescriptor) -> MccDaqBackend:
         if device.driver_id != self.driver_id:
             raise DeviceNotFoundError(f"Périphérique incompatible: {device.key}")
+        board_num = int(device.metadata.get("board_num", device.device_id))
         backend = self._backend_factory(
-            board_num=int(device.device_id),
+            board_num=board_num,
             descriptor=device,
         )
         backend.connect()

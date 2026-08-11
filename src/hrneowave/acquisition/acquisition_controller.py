@@ -309,6 +309,7 @@ class AcquisitionController:
         channels: list[int] | None = None,
         recording_directory: str | None = None,
         water_depth_m: float | None = None,
+        session_metadata: dict[str, Any] | None = None,
     ) -> bool:
         if self.is_acquiring:
             logger.error("Acquisition déjà en cours")
@@ -367,6 +368,7 @@ class AcquisitionController:
             sampling_rate=float(sampling_rate),
             channels=selected_configs,
             metadata={
+                **dict(session_metadata or {}),
                 "acquisition_source": "physical_hardware",
                 "duration_seconds": duration_seconds,
                 "selected_channels": selected_channels,

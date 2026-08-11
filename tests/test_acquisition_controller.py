@@ -187,6 +187,31 @@ class AcquisitionControllerTests(unittest.TestCase):
         self.assertTrue(metadata["hardware_available"])
         self.assertEqual(self.controller.current_session.channels[0].probe_position_m, 0.4)
 
+    def test_qualification_intent_persists_without_overriding_physical_proof(self):
+        self.assertTrue(
+            self._start(
+                "qualification",
+                sampling_rate=100,
+                duration_seconds=0.1,
+                channels=[0],
+                session_metadata={
+                    "qualification_intent": True,
+                    "qualification_protocol_id": "test-protocol",
+                    "qualification_stage": "Q0",
+                    "acquisition_source": "forbidden_override",
+                    "hardware_available": False,
+                },
+            )
+        )
+        self.controller.acquisition_thread.join(timeout=2)
+
+        metadata = self.controller.current_session.metadata
+        self.assertTrue(metadata["qualification_intent"])
+        self.assertEqual(metadata["qualification_protocol_id"], "test-protocol")
+        self.assertEqual(metadata["qualification_stage"], "Q0")
+        self.assertEqual(metadata["acquisition_source"], "physical_hardware")
+        self.assertTrue(metadata["hardware_available"])
+
     def test_rejects_non_physical_water_depth(self):
         self.assertFalse(
             self._start(

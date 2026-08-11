@@ -20,7 +20,7 @@ import numpy as np
 
 from .session_recorder import RecordingError, inspect_recording
 
-QUALIFICATION_SCHEMA_VERSION = "1.0.0"
+QUALIFICATION_SCHEMA_VERSION = "1.1.0"
 VERDICT_ACCEPTED = "accepted"
 VERDICT_REFUSED = "refused"
 
@@ -49,6 +49,11 @@ class QualificationCriteria:
 
     profile_name: str
     minimum_duration_seconds: float
+    protocol_id: str = ""
+    protocol_stage: str = ""
+    required_channel_count: int | None = None
+    minimum_distinct_ranges: int = 1
+    require_protocol_attestation: bool = False
     maximum_rate_relative_error: float = 0.01
     maximum_wall_rate_relative_error: float | None = 0.10
     maximum_timing_error_ratio: float = 0.05
@@ -74,6 +79,10 @@ class QualificationCriteria:
             raise ValueError("La durée minimale doit être positive")
         if self.maximum_missing_samples < 0:
             raise ValueError("Le nombre d'échantillons manquants toléré ne peut pas être négatif")
+        if self.required_channel_count is not None and self.required_channel_count <= 0:
+            raise ValueError("Le nombre de voies exigé doit être positif")
+        if self.minimum_distinct_ranges <= 0:
+            raise ValueError("Le nombre de plages distinctes doit être positif")
         if any(not math.isfinite(value) or value < 0 for value in bounded_fractions):
             raise ValueError("Les seuils de qualification doivent être finis et positifs")
         if not 0 < self.saturation_level_fraction <= 1:
@@ -276,6 +285,9 @@ class HardwareQualificationService:
                     "expected_samples",
                     "total_samples",
                     "acquisition_wall_elapsed_seconds",
+                    "qualification_protocol_id",
+                    "qualification_stage",
+                    "qualification_checklist_confirmed_at",
                 )
             },
             channels=tuple(channels),
@@ -327,6 +339,77 @@ class HardwareQualificationService:
                 "s",
             ),
         ]
+
+        if criteria.require_protocol_attestation:
+            recorded_protocol = str(metadata.get("qualification_protocol_id", ""))
+            recorded_stage = str(metadata.get("qualification_stage", ""))
+            checklist = metadata.get("qualification_operator_checklist", [])
+            if not isinstance(checklist, list):
+                checklist = []
+            attested = bool(
+                metadata.get("qualification_intent") is True
+                and recorded_protocol == criteria.protocol_id
+                and recorded_stage == criteria.protocol_stage
+                and checklist
+                and str(metadata.get("qualification_checklist_confirmed_at", "")).strip()
+            )
+            checks.append(
+                self._check(
+                    "protocol_attestation",
+                    "session",
+                    "Le palier et la checklist opérateur sont attestés dans le fichier maître",
+                    attested,
+                    {
+                        "protocol_id": recorded_protocol,
+                        "stage": recorded_stage,
+                        "checklist_items": len(checklist),
+                        "confirmed_at": metadata.get(
+                            "qualification_checklist_confirmed_at",
+                            "",
+                        ),
+                    },
+                    {
+                        "protocol_id": criteria.protocol_id,
+                        "stage": criteria.protocol_stage,
+                        "checklist_required": True,
+                    },
+                )
+            )
+
+        channel_group = handle.get("metadata/channels")
+        channel_count = len(channel_group) if channel_group is not None else 0
+        distinct_ranges = (
+            {
+                str(group.attrs.get("input_range", "")).strip()
+                for group in channel_group.values()
+                if str(group.attrs.get("input_range", "")).strip()
+            }
+            if channel_group is not None
+            else set()
+        )
+        if criteria.required_channel_count is not None:
+            checks.append(
+                self._check(
+                    "protocol_channel_count",
+                    "session",
+                    "Le nombre de voies respecte le palier du protocole",
+                    channel_count == criteria.required_channel_count,
+                    channel_count,
+                    criteria.required_channel_count,
+                    "channels",
+                )
+            )
+        if criteria.minimum_distinct_ranges > 1:
+            checks.append(
+                self._check(
+                    "protocol_distinct_ranges",
+                    "session",
+                    "Le palier utilise le nombre requis de plages électriques distinctes",
+                    len(distinct_ranges) >= criteria.minimum_distinct_ranges,
+                    sorted(distinct_ranges),
+                    {"minimum_distinct_ranges": criteria.minimum_distinct_ranges},
+                )
+            )
 
         if criteria.require_expected_samples:
             missing = abs(sample_count - expected_samples) if expected_samples is not None else None
@@ -749,7 +832,15 @@ class QualificationReportWriter:
         session_id = str(report.session.get("session_id") or "session")
         safe_session = re.sub(r"[^A-Za-z0-9._-]+", "_", session_id).strip("._-")
         suffix = report.qualification_id.split("-", 1)[0]
-        base_name = f"{safe_session}_{report.profile_name}_{suffix}_qualification"
+        stage = re.sub(
+            r"[^A-Za-z0-9._-]+",
+            "_",
+            report.criteria.protocol_stage,
+        ).strip("._-")
+        stage_prefix = f"{stage}_" if stage else ""
+        base_name = (
+            f"{safe_session}_{stage_prefix}{report.profile_name}_{suffix}_qualification"
+        )
         json_path = self.write_json(report, directory / f"{base_name}.json")
         hdf5_path = self.write_hdf5(report, directory / f"{base_name}.h5")
         return json_path, hdf5_path
@@ -778,6 +869,8 @@ class QualificationReportWriter:
             handle.attrs["evaluated_at_utc"] = report.evaluated_at_utc
             handle.attrs["verdict"] = report.verdict
             handle.attrs["profile_name"] = report.profile_name
+            handle.attrs["protocol_id"] = report.criteria.protocol_id
+            handle.attrs["protocol_stage"] = report.criteria.protocol_stage
             handle.attrs["source_master_file"] = report.source_master_file
             handle.attrs["source_sha256"] = report.source_sha256
             string_type = h5py.string_dtype(encoding="utf-8")

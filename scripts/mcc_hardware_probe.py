@@ -26,13 +26,17 @@ def main() -> int:
         "ok": False,
     }
     try:
-        boards = MCCDAQ_USB1608FS.detect_boards()
-        result["boards"] = boards
-        for board_num in boards:
+        detected_devices = MCCDAQ_USB1608FS.detect_devices()
+        result["boards"] = [device.board_num for device in detected_devices]
+        for detected in detected_devices:
             device = MCCDAQ_USB1608FS()
-            if device.initialize(board_num):
+            if device.initialize(detected.board_num):
                 result.setdefault("devices", []).append(
-                    {"board_num": board_num, "board_name": device.board_name}
+                    {
+                        "board_num": detected.board_num,
+                        "board_name": device.board_name,
+                        "unique_id": detected.unique_id,
+                    }
                 )
                 device.close()
         result["ok"] = bool(result.get("devices"))

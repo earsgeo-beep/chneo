@@ -17,7 +17,19 @@ from .hardware_qualification import (
     QualificationReport,
     QualificationReportWriter,
 )
-from .session_exporter import SessionExportError, SessionExporter
+from .qualification_protocol import (
+    GENERIC_DAQ_PROTOCOL,
+    MCC_USB1608FS_PROTOCOL,
+    HardwareQualificationProtocol,
+    QualificationHistoryEntry,
+    QualificationHistoryScan,
+    QualificationHistoryStore,
+    QualificationProtocolRegistry,
+    QualificationStage,
+    build_default_qualification_protocol_registry,
+    device_identity,
+)
+from .session_exporter import SessionExporter, SessionExportError
 from .session_recorder import ContinuousHDF5Recorder, RecordingError, inspect_recording
 
 DEFAULT_SAMPLING_RATE = 1000.0
@@ -45,19 +57,29 @@ __all__ = [
     "ContinuousHDF5Recorder",
     "DaqBackend",
     "DaqReadResult",
+    "GENERIC_DAQ_PROTOCOL",
+    "HardwareQualificationProtocol",
     "HardwareQualificationService",
+    "MCC_USB1608FS_PROTOCOL",
     "MARITIME_SENSOR_TYPES",
     "MaritimeChannelConfig",
     "RecordingError",
     "QualificationCheck",
     "QualificationCriteria",
     "QualificationError",
+    "QualificationHistoryEntry",
+    "QualificationHistoryScan",
+    "QualificationHistoryStore",
+    "QualificationProtocolRegistry",
     "QualificationReport",
     "QualificationReportWriter",
+    "QualificationStage",
     "SessionExportError",
     "SessionExporter",
     "VOLTAGE_RANGES",
     "VoltageRange",
+    "build_default_qualification_protocol_registry",
     "create_default_maritime_config",
     "inspect_recording",
+    "device_identity",
 ]

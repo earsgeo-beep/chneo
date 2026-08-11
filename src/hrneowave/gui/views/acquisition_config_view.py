@@ -4,7 +4,7 @@
 import json
 import logging
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -34,10 +34,17 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ...acquisition import MARITIME_SENSOR_TYPES, QualificationCriteria
+from ...acquisition import (
+    MARITIME_SENSOR_TYPES,
+    HardwareQualificationProtocol,
+    QualificationHistoryStore,
+    QualificationStage,
+    build_default_qualification_protocol_registry,
+)
 from ...acquisition.acquisition_controller import AcquisitionController, create_default_maritime_config
 from ...core.calibration import CalibrationRecord
 from ...hardware import VoltageRange
+from ..widgets.qualification_workspace import QualificationWorkspace
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +67,12 @@ class AcquisitionConfigView(QWidget):
         self.project_metadata: dict[str, Any] = {}
         self.project_dir: Path | None = None
         self._hardware_state = "not_scanned"
-        self._qualification_pending = False
+        self._pending_qualification_stage: QualificationStage | None = None
         self._last_qualification_verdict = "not_run"
         self._qualified_setup_signature: tuple[Any, ...] | None = None
+        self._qualification_protocol_registry = build_default_qualification_protocol_registry()
+        self._qualification_protocol: HardwareQualificationProtocol | None = None
+        self._qualification_history_store = QualificationHistoryStore()
         self.calibration_records: dict[int, CalibrationRecord] = {}
 
         self._build_ui()
@@ -108,11 +118,13 @@ class AcquisitionConfigView(QWidget):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 14, 0)
 
-        tabs = QTabWidget()
-        tabs.addTab(self._create_hardware_tab(), "Materiel")
-        tabs.addTab(self._create_channels_tab(), "Canaux")
-        tabs.addTab(self._create_acquisition_tab(), "Acquisition")
-        layout.addWidget(tabs)
+        self.config_tabs = QTabWidget()
+        self.config_tabs.addTab(self._create_hardware_tab(), "Materiel")
+        self.config_tabs.addTab(self._create_channels_tab(), "Canaux")
+        self.config_tabs.addTab(self._create_acquisition_tab(), "Acquisition")
+        self.qualification_workspace = QualificationWorkspace()
+        self.config_tabs.addTab(self.qualification_workspace, "Qualification")
+        layout.addWidget(self.config_tabs)
 
         buttons_layout = QHBoxLayout()
         self.load_config_btn = QPushButton("Charger config")
@@ -358,6 +370,12 @@ class AcquisitionConfigView(QWidget):
         self.export_hdf5_btn.clicked.connect(self.export_hdf5)
         self.update_timer.timeout.connect(self.update_display)
         self.data_block_received.connect(self._display_received_data)
+        self.qualification_workspace.stage_requested.connect(
+            self.start_qualification_stage
+        )
+        self.qualification_workspace.refresh_requested.connect(
+            self.refresh_qualification_history
+        )
         self.update_timer.start(1000)
 
     def _initialize_channels_table(
@@ -407,7 +425,9 @@ class AcquisitionConfigView(QWidget):
             self.board_combo.clear()
             self.board_combo.addItem("Inventaire matériel non lancé", None)
             self._hardware_state = "not_scanned"
-            self._qualification_pending = False
+            self._pending_qualification_stage = None
+            self._qualification_protocol = None
+            self.qualification_workspace.set_protocol(None)
             self._set_qualification_status("not_run")
             self.start_acquisition_btn.setEnabled(False)
             self.test_acquisition_btn.setEnabled(False)
@@ -430,6 +450,7 @@ class AcquisitionConfigView(QWidget):
         except (TypeError, ValueError):
             water_depth_value = 0.0
         self.water_depth_spin.setValue(max(0.0, water_depth_value))
+        self.refresh_qualification_history()
 
     def scan_boards(self) -> None:
         if not self.controller:
@@ -437,7 +458,8 @@ class AcquisitionConfigView(QWidget):
         if self.controller.is_acquiring:
             self.log_message("Inventaire interdit pendant une acquisition")
             return
-        self._qualification_pending = False
+        self._pending_qualification_stage = None
+        self.qualification_workspace.set_running(None)
         self._set_qualification_status("not_run")
         self.scan_boards_btn.setEnabled(False)
         self._hardware_state = "scanning"
@@ -458,6 +480,8 @@ class AcquisitionConfigView(QWidget):
                 self.board_combo.addItem("Aucun équipement physique détecté", None)
                 self.board_combo.blockSignals(False)
                 self._hardware_state = "not_found"
+                self._qualification_protocol = None
+                self.qualification_workspace.set_protocol(None)
                 self._initialize_channels_table(0)
                 self.hardware_channels_changed.emit(0)
                 self.start_acquisition_btn.setEnabled(False)
@@ -471,6 +495,8 @@ class AcquisitionConfigView(QWidget):
             self.board_combo.clear()
             self.board_combo.addItem("Erreur d'inventaire", None)
             self._hardware_state = "error"
+            self._qualification_protocol = None
+            self.qualification_workspace.set_protocol(None)
             self._initialize_channels_table(0)
             self.hardware_channels_changed.emit(0)
             self.log_message(f"Erreur de détection: {exc}")
@@ -489,6 +515,8 @@ class AcquisitionConfigView(QWidget):
             return
         if not self.controller.connect_hardware(str(device_key)):
             self._hardware_state = "error"
+            self._qualification_protocol = None
+            self.qualification_workspace.set_protocol(None)
             self.start_acquisition_btn.setEnabled(False)
             self.test_acquisition_btn.setEnabled(False)
             self.log_message("Connexion matérielle refusée")
@@ -508,7 +536,10 @@ class AcquisitionConfigView(QWidget):
             min(1000.0, capabilities.max_sample_rate_hz_per_channel)
         )
         self._hardware_state = "connected"
-        self._qualification_pending = False
+        self._pending_qualification_stage = None
+        self._qualification_protocol = self._qualification_protocol_registry.resolve(device)
+        self.qualification_workspace.set_protocol(self._qualification_protocol, device)
+        self.refresh_qualification_history()
         self._set_qualification_status("not_run")
         self.last_hardware_check_label.setText(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
         self.start_acquisition_btn.setEnabled(False)
@@ -751,7 +782,12 @@ class AcquisitionConfigView(QWidget):
     def start_acquisition(self) -> bool:
         return self._start_acquisition(require_qualified_setup=True)
 
-    def _start_acquisition(self, *, require_qualified_setup: bool) -> bool:
+    def _start_acquisition(
+        self,
+        *,
+        require_qualified_setup: bool,
+        session_metadata: dict[str, Any] | None = None,
+    ) -> bool:
         if not self.controller:
             self.log_message("Pas de controleur disponible")
             return False
@@ -790,6 +826,7 @@ class AcquisitionConfigView(QWidget):
             channels=active_channels,
             recording_directory=str(self._get_default_data_directory()),
             water_depth_m=(self.water_depth_spin.value() if self.water_depth_spin.value() > 0 else None),
+            session_metadata=session_metadata,
         )
         if not success:
             self.log_message("Erreur de demarrage d'acquisition")
@@ -814,24 +851,99 @@ class AcquisitionConfigView(QWidget):
         if self.controller and self.controller.is_acquiring:
             self.controller.stop_acquisition()
             self.log_message("Acquisition arretee")
-        qualification_pending = self._qualification_pending
-        self._qualification_pending = False
+        pending_stage = self._pending_qualification_stage
+        self._pending_qualification_stage = None
         self._reset_acquisition_controls()
-        if qualification_pending:
-            self._complete_quick_qualification()
+        if pending_stage is not None:
+            self._complete_qualification_stage(pending_stage)
 
     def test_acquisition(self) -> None:
         if not self.controller or not self.controller.is_hardware_available():
             self.log_message("Essai matériel impossible: aucun équipement connecté")
             return
+        if self._qualification_protocol is None:
+            self.log_message("Aucun protocole de qualification compatible")
+            return
+        first_stage = self._qualification_protocol.stages[0]
+        self.qualification_workspace.select_stage(first_stage.stage_id)
+        self.config_tabs.setCurrentWidget(self.qualification_workspace)
+        self.log_message(
+            f"Préparez la checklist du palier {first_stage.stage_id} avant son lancement"
+        )
+
+    def start_qualification_stage(self, stage_id: str) -> None:
+        if (
+            not self.controller
+            or not self.controller.is_hardware_available()
+            or self._qualification_protocol is None
+        ):
+            self.log_message("Qualification impossible: aucun équipement compatible connecté")
+            return
+        try:
+            stage = self._qualification_protocol.stage(stage_id)
+        except KeyError as exc:
+            self.log_message(str(exc))
+            return
+        if not QualificationHistoryStore.is_stage_unlocked(
+            stage,
+            self.qualification_workspace.accepted_stage_ids,
+        ):
+            self.log_message(
+                f"Palier {stage.stage_id} verrouillé: terminez d'abord ses prérequis"
+            )
+            return
+        if not self.qualification_workspace.checklist_complete():
+            self.log_message(f"Checklist incomplète pour le palier {stage.stage_id}")
+            return
+
+        if stage.required_sample_rate_hz is not None:
+            self.sampling_rate_spin.setValue(stage.required_sample_rate_hz)
+        if not self.apply_channels_configuration():
+            self.log_message("Qualification annulée: configuration des voies invalide")
+            return
+        active_channels = self._get_active_channels()
+        configured_channels = [
+            self.controller.channels_config[channel] for channel in active_channels
+        ]
+        setup_issues = stage.validate_setup(
+            configured_channels,
+            self.sampling_rate_spin.value(),
+        )
+        if setup_issues:
+            for issue in setup_issues:
+                self.log_message(f"Palier {stage.stage_id}: {issue}")
+            return
+
         original_duration = self.duration_spin.value()
         original_continuous = self.continuous_check.isChecked()
-        self.duration_spin.setValue(3.0)
+        self.duration_spin.setValue(stage.duration_seconds)
         self.continuous_check.setChecked(False)
-        self.log_message("Essai matériel de 3 secondes lancé")
-        self._qualification_pending = self._start_acquisition(require_qualified_setup=False)
+        self.log_message(
+            f"Palier {stage.stage_id} lancé · {stage.duration_seconds:g} s · "
+            f"{stage.required_channel_count} voie(s)"
+        )
+        started = self._start_acquisition(
+            require_qualified_setup=False,
+            session_metadata={
+                "qualification_intent": True,
+                "qualification_protocol_id": self._qualification_protocol.protocol_id,
+                "qualification_stage": stage.stage_id,
+                "qualification_operator_checklist": list(
+                    self.qualification_workspace.checklist_attestations()
+                ),
+                "qualification_checklist_confirmed_at": datetime.now(timezone.utc)
+                .replace(microsecond=0)
+                .isoformat(),
+            },
+        )
         self.duration_spin.setValue(original_duration)
         self.continuous_check.setChecked(original_continuous)
+        if not started:
+            self.qualification_workspace.set_running(None)
+            return
+
+        self._pending_qualification_stage = stage
+        self.qualification_workspace.set_running(stage.stage_id)
 
     def open_calibration_workspace(self) -> None:
         self.log_message("Ouverture du poste de calibration canal par canal")
@@ -892,23 +1004,24 @@ class AcquisitionConfigView(QWidget):
             )
 
         if not status.get("is_acquiring") and self.stop_acquisition_btn.isEnabled():
-            qualification_pending = self._qualification_pending
-            self._qualification_pending = False
+            pending_stage = self._pending_qualification_stage
+            self._pending_qualification_stage = None
             self._reset_acquisition_controls()
-            if qualification_pending:
-                self._complete_quick_qualification()
+            if pending_stage is not None:
+                self._complete_qualification_stage(pending_stage)
 
-    def _complete_quick_qualification(self) -> None:
-        if not self.controller:
+    def _complete_qualification_stage(self, stage: QualificationStage) -> None:
+        if not self.controller or self._qualification_protocol is None:
             return
         try:
             report = self.controller.qualify_current_session(
-                QualificationCriteria.quick_functional(minimum_duration_seconds=3.0)
+                stage.criteria(self._qualification_protocol.protocol_id)
             )
         except Exception as exc:
             logger.exception("Qualification automatique impossible")
             self._set_qualification_status("refused")
-            self.log_message(f"Qualification impossible: {exc}")
+            self.qualification_workspace.set_running(None)
+            self.log_message(f"Qualification {stage.stage_id} impossible: {exc}")
             self.update_hardware_status()
             return
 
@@ -917,7 +1030,7 @@ class AcquisitionConfigView(QWidget):
         self._set_qualification_status(report.verdict, preserve_signature=report.accepted)
         summary = report.to_dict()["summary"]
         self.log_message(
-            "Qualification courte "
+            f"Qualification {stage.stage_id} "
             f"{report.verdict.upper()} · {summary['checks_passed']}/{summary['checks_total']} contrôles"
         )
         if self.controller.last_qualification_files:
@@ -930,7 +1043,18 @@ class AcquisitionConfigView(QWidget):
                     f"Échec {check.scope}/{check.code}: observé={check.observed}, limite={check.limit}"
                 )
         self.qualification_completed.emit(report.to_dict())
+        self.qualification_workspace.set_running(None)
+        self.refresh_qualification_history()
         self.update_hardware_status()
+
+    def refresh_qualification_history(self) -> None:
+        if not hasattr(self, "qualification_workspace"):
+            return
+        report_directory = self._get_default_data_directory() / "qualification_reports"
+        scan = self._qualification_history_store.scan(report_directory)
+        self.qualification_workspace.set_history(scan)
+        for error in scan.errors:
+            self.log_message(f"Rapport de qualification illisible: {error}")
 
     def export_csv(self) -> None:
         self._export_data("csv", "Fichiers CSV (*.csv)", "csv")

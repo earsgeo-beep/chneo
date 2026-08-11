@@ -46,6 +46,7 @@ jobs:
           src/hrneowave/acquisition/acquisition_controller.py
           src/hrneowave/acquisition/daq_backend.py
           src/hrneowave/acquisition/hardware_qualification.py
+          src/hrneowave/acquisition/qualification_protocol.py
           src/hrneowave/acquisition/mcc_daq_wrapper.py
           src/hrneowave/acquisition/session_exporter.py
           src/hrneowave/acquisition/session_recorder.py
@@ -54,6 +55,8 @@ jobs:
           src/hrneowave/gui/main_window.py
           src/hrneowave/gui/views/acquisition_config_view.py
           src/hrneowave/gui/views/calibration_view.py
+          src/hrneowave/gui/widgets/qualification_workspace.py
           src/hrneowave/hardware
+          scripts/mcc_hardware_probe.py
           scripts/qualify_hardware_session.py
           tests

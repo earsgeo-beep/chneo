@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from hrneowave.acquisition import (
     QualificationCriteria,
     QualificationReportWriter,
 )
+from hrneowave.acquisition.qualification_protocol import MCC_USB1608FS_PROTOCOL
 from hrneowave.hardware import VoltageRange
 
 
@@ -25,6 +27,7 @@ def _record_session(
     *,
     sample_rate: float = 100.0,
     timing_discontinuities: int = 0,
+    extra_metadata: dict | None = None,
 ) -> Path:
     raw = np.asarray(values, dtype=np.float64)
     if raw.ndim == 1:
@@ -62,6 +65,7 @@ def _record_session(
             "acquisition_wall_elapsed_seconds": elapsed,
             "backend_time_start_seconds": 0.0,
             "backend_time_end_seconds": (raw.shape[0] - 1) / sample_rate,
+            **dict(extra_metadata or {}),
         },
     )
     recorder = ContinuousHDF5Recorder(chunk_samples=32)
@@ -189,3 +193,54 @@ def test_non_finite_corruption_produces_a_serializable_refusal(tmp_path):
     assert not report.accepted
     assert "finite_values" in _failed_checks(report)
     assert payload["channels"][0]["mean_volts"] is None
+
+
+def test_protocol_requirements_are_verified_again_from_master_file(tmp_path):
+    source = _record_session(tmp_path / "q2_same_range.h5", np.zeros((100, 2)))
+    criteria = replace(
+        MCC_USB1608FS_PROTOCOL.stage("Q2").criteria(
+            MCC_USB1608FS_PROTOCOL.protocol_id,
+            check_wall_clock=False,
+        ),
+        minimum_duration_seconds=1.0,
+    )
+
+    report = HardwareQualificationService().evaluate(source, criteria)
+
+    assert not report.accepted
+    assert "protocol_distinct_ranges" in _failed_checks(report)
+    assert "protocol_channel_count" not in _failed_checks(report)
+
+
+def test_formal_stage_requires_and_accepts_operator_attestation(tmp_path):
+    source = _record_session(
+        tmp_path / "q0_attested.h5",
+        np.zeros(100),
+        extra_metadata={
+            "qualification_intent": True,
+            "qualification_protocol_id": MCC_USB1608FS_PROTOCOL.protocol_id,
+            "qualification_stage": "Q0",
+            "qualification_operator_checklist": ["Câblage contrôlé"],
+            "qualification_checklist_confirmed_at": "2026-08-09T12:00:00+00:00",
+        },
+    )
+    criteria = replace(
+        MCC_USB1608FS_PROTOCOL.stage("Q0").criteria(
+            MCC_USB1608FS_PROTOCOL.protocol_id,
+            check_wall_clock=False,
+        ),
+        minimum_duration_seconds=1.0,
+    )
+
+    report = HardwareQualificationService().evaluate(source, criteria)
+    json_path, hdf5_path = QualificationReportWriter().write_bundle(
+        report,
+        tmp_path / "formal_reports",
+    )
+
+    assert report.accepted
+    assert "protocol_attestation" not in _failed_checks(report)
+    assert "Q0" in json_path.name
+    with h5py.File(hdf5_path, "r") as handle:
+        assert handle.attrs["schema_version"] == "1.1.0"
+        assert handle.attrs["protocol_stage"] == "Q0"

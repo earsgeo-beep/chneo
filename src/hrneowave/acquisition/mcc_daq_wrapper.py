@@ -105,6 +105,15 @@ class AcquisitionConfig:
     n_scan_channels: int = 0
 
 
+@dataclass(frozen=True)
+class MccUsbDeviceInfo:
+    """Identité USB conservée après la création du numéro logique UL."""
+
+    board_num: int
+    product_name: str
+    unique_id: str
+
+
 def _load_mcc_api() -> SimpleNamespace:
     """Charge mcculw uniquement quand le backend materiel est utilise."""
 
@@ -170,7 +179,11 @@ class MCCDAQ_USB1608FS:
         return self._api
 
     @classmethod
-    def detect_boards(cls, api: Any | None = None, max_boards: int = 10) -> list[int]:
+    def detect_devices(
+        cls,
+        api: Any | None = None,
+        max_boards: int = 10,
+    ) -> list[MccUsbDeviceInfo]:
         """Detecte les cartes MCC connectees en USB.
 
         La detection utilise exclusivement l'inventaire USB de l'Universal
@@ -182,7 +195,7 @@ class MCCDAQ_USB1608FS:
         except MCCUniversalLibraryUnavailable:
             return []
 
-        boards: list[int] = []
+        detected: list[MccUsbDeviceInfo] = []
         try:
             _enable_direct_discovery(active_api)
             devices = active_api.ul.get_daq_device_inventory(
@@ -193,12 +206,15 @@ class MCCDAQ_USB1608FS:
                 if product_name.upper() != "USB-1608FS":
                     logger.info("Peripherique MCC ignore: %s", product_name or "inconnu")
                     continue
-                if len(boards) >= max_boards:
+                if len(detected) >= max_boards:
                     break
-                board_num = len(boards)
+                board_num = len(detected)
+                unique_id = str(getattr(dev, "unique_id", "")).strip()
                 try:
                     active_api.ul.create_daq_device(board_num, dev)
-                    boards.append(board_num)
+                    detected.append(
+                        MccUsbDeviceInfo(board_num, product_name, unique_id)
+                    )
                     logger.info(
                         "Carte MCC detectee (USB): %s (SN: %s) -> board %s",
                         dev.product_name,
@@ -213,12 +229,23 @@ class MCCDAQ_USB1608FS:
                     except Exception:
                         existing_name = ""
                     if str(existing_name).strip().upper() == "USB-1608FS":
-                        boards.append(board_num)
+                        detected.append(
+                            MccUsbDeviceInfo(board_num, product_name, unique_id)
+                        )
                     else:
                         logger.debug("create_daq_device(%s) echoue: %s", board_num, exc)
         except Exception as exc:
             logger.error("Detection USB directe impossible: %s", exc)
-        return boards
+        return detected
+
+    @classmethod
+    def detect_boards(cls, api: Any | None = None, max_boards: int = 10) -> list[int]:
+        """Retourne les numéros logiques historiques après l'inventaire USB."""
+
+        return [
+            device.board_num
+            for device in cls.detect_devices(api=api, max_boards=max_boards)
+        ]
 
     def initialize(self, board_num: int = 0) -> bool:
         """Ouvre logiquement une carte MCC.
@@ -618,6 +645,12 @@ def scan_available_boards(api: Any | None = None) -> list[int]:
     """Fonction de compatibilite utilisee par le controleur et l'interface."""
 
     return MCCDAQ_USB1608FS.detect_boards(api=api)
+
+
+def scan_available_devices(api: Any | None = None) -> list[MccUsbDeviceInfo]:
+    """Retourne l'identité USB nécessaire à la traçabilité métrologique."""
+
+    return MCCDAQ_USB1608FS.detect_devices(api=api)
 
 
 def get_error_message(error_code: int) -> str:

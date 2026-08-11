@@ -10,6 +10,7 @@ from hrneowave.acquisition.mcc_daq_wrapper import (
     MCCDAQ_USB1608FS,
     MCCBackendError,
     MCCRanges,
+    MccUsbDeviceInfo,
 )
 
 
@@ -128,7 +129,11 @@ class MCCBackendTests(unittest.TestCase):
         self.backend.close()
 
     def test_detects_direct_usb_board_without_instacal_configuration(self):
-        self.assertEqual(MCCDAQ_USB1608FS.detect_boards(api=self.api), [0])
+        devices = MCCDAQ_USB1608FS.detect_devices(api=self.api)
+        self.assertEqual(
+            devices,
+            [MccUsbDeviceInfo(0, "USB-1608FS", "TEST-1608")],
+        )
         self.assertEqual(self.api.ul.direct_mode_calls, 1)
 
         # Un nouveau scan reutilise le mode direct et la carte deja creee.

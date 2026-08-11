@@ -34,10 +34,19 @@ Le resultat attendu contient au minimum:
      "expected_device": "USB-1608FS",
      "boards": [0],
      "devices": [
-       {"board_num": 0, "board_name": "USB-1608FS"}
+       {
+         "board_num": 0,
+         "board_name": "USB-1608FS",
+         "unique_id": "identifiant-USB-fourni-par-MCC"
+       }
      ],
      "ok": true
    }
+
+L'identifiant ``unique_id`` doit rester stable entre deux lancements avec la
+meme carte. CHNeoWave l'enregistre comme numero de serie de la carte et separe
+ainsi l'historique Q0-Q4 de chaque interface physique, meme si Universal
+Library lui attribue toujours le numero logique ``board 0``.
 
 Validation progressive
 ----------------------
@@ -54,8 +63,7 @@ Chaque fichier doit ensuite etre qualifie avec le protocole detaille dans
 
 .. code-block:: powershell
 
-   python scripts\qualify_hardware_session.py "C:\chemin\session.h5" `
-     --profile quick --minimum-duration 60
+   python scripts\qualify_hardware_session.py "C:\chemin\session.h5" --stage Q1
 
 Pour chaque essai, conserver:
 

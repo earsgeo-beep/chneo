@@ -15,10 +15,12 @@ QtWidgets = pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
 
 from PySide6.QtWidgets import QApplication, QTableWidgetItem
 
+from hrneowave.acquisition import MCC_USB1608FS_PROTOCOL
 from hrneowave.gui.views.acquisition_config_view import AcquisitionConfigView
 from hrneowave.gui.views.analysis_view import AnalysisView
 from hrneowave.gui.views.calibration_view import CalibrationView
 from hrneowave.gui.widgets.main_sidebar import MainSidebar
+from hrneowave.gui.widgets.qualification_workspace import QualificationWorkspace
 from tests.hardware_test_doubles import physical_test_device
 
 
@@ -107,6 +109,24 @@ def test_hardware_panel_uses_one_connected_state(qt_app):
     assert view.operation_mode_label.text() == "Qualification à exécuter"
     assert not view.start_acquisition_btn.isEnabled()
     assert view.test_acquisition_btn.isEnabled()
+
+
+def test_qualification_workspace_requires_checklist_and_locks_while_running(qt_app):
+    workspace = QualificationWorkspace()
+    workspace.set_protocol(MCC_USB1608FS_PROTOCOL, physical_test_device())
+
+    assert workspace.selected_stage().stage_id == "Q0"
+    assert not workspace.start_stage_button.isEnabled()
+
+    for checkbox in workspace._checklist_widgets:
+        checkbox.setChecked(True)
+
+    assert workspace.checklist_complete()
+    assert workspace.start_stage_button.isEnabled()
+
+    workspace.set_running("Q0")
+
+    assert not workspace.start_stage_button.isEnabled()
 
 
 def test_acquisition_configuration_round_trip_preserves_scientific_geometry(qt_app):

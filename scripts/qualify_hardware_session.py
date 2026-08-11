@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from hrneowave.acquisition import (
+    MCC_USB1608FS_PROTOCOL,
     HardwareQualificationService,
     QualificationCriteria,
     QualificationError,
@@ -29,6 +30,12 @@ def _arguments() -> argparse.Namespace:
         choices=("quick", "grounded"),
         default="quick",
         help="quick: essai fonctionnel; grounded: entrées reliées à AGND",
+    )
+    parser.add_argument(
+        "--stage",
+        choices=tuple(stage.stage_id for stage in MCC_USB1608FS_PROTOCOL.stages),
+        default=None,
+        help="palier formel MCC Q0 à Q4; applique sa durée et ses exigences exactes",
     )
     parser.add_argument(
         "--minimum-duration",
@@ -56,6 +63,15 @@ def _arguments() -> argparse.Namespace:
 
 def _criteria(arguments: argparse.Namespace) -> QualificationCriteria:
     check_wall_clock = not arguments.ignore_wall_clock
+    if arguments.stage is not None:
+        if arguments.minimum_duration is not None:
+            raise ValueError("--minimum-duration ne peut pas modifier un palier formel Q0-Q4")
+        if arguments.ignore_wall_clock:
+            raise ValueError("--ignore-wall-clock est interdit pour un palier formel Q0-Q4")
+        return MCC_USB1608FS_PROTOCOL.stage(arguments.stage).criteria(
+            MCC_USB1608FS_PROTOCOL.protocol_id,
+            check_wall_clock=True,
+        )
     if arguments.profile == "grounded":
         duration = 60.0 if arguments.minimum_duration is None else arguments.minimum_duration
         return QualificationCriteria.grounded_inputs(
@@ -99,6 +115,8 @@ def main() -> int:
                 "verdict": report.verdict,
                 "accepted": report.accepted,
                 "profile": report.profile_name,
+                "protocol_id": report.criteria.protocol_id,
+                "protocol_stage": report.criteria.protocol_stage,
                 "source": report.source_master_file,
                 "source_sha256": report.source_sha256,
                 "failed_checks": failed,

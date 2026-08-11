@@ -18,6 +18,26 @@ Le moteur reste independant du constructeur. Il travaille uniquement sur le
 fichier HDF5 maitre termine et ne lit jamais le tampon d'apercu de l'interface.
 Il ne modifie pas ce fichier.
 
+Poste de qualification dans l'application
+------------------------------------------
+
+Apres connexion de la carte, ouvrir l'onglet ``Qualification``. Le logiciel:
+
+* selectionne le protocole correspondant au pilote et au modele detectes;
+* impose l'ordre Q0, Q1, Q2, Q3 puis Q4;
+* exige la checklist operateur avant chaque lancement;
+* controle le nombre de voies, les plages et la frequence du palier;
+* affiche uniquement l'historique de la carte connectee;
+* ne debloque jamais un palier sur la base d'un rapport refuse ou illisible.
+
+La carte est identifiee par l'identifiant USB renvoye par Universal Library,
+et non par le seul numero logique ``board 0``. La checklist horodatee, le
+protocole et le palier sont archives dans le HDF5 maitre avant le demarrage de
+l'acquisition, puis recopies dans les rapports de qualification.
+
+Le bouton ``Essai qualifie`` ouvre ce poste sur Q0. Il ne lance plus une
+acquisition avant que l'operateur ait valide la checklist physique.
+
 Profils automatiques
 --------------------
 
@@ -56,15 +76,23 @@ Depuis PowerShell, dans l'environnement CHNeoWave:
 
 .. code-block:: powershell
 
-   python scripts\qualify_hardware_session.py "C:\chemin\session.h5" `
-     --profile quick --minimum-duration 60
+   python scripts\qualify_hardware_session.py "C:\chemin\session_Q0.h5" --stage Q0
 
 Pour l'essai avec les entrees reliees a ``AGND``:
 
 .. code-block:: powershell
 
-   python scripts\qualify_hardware_session.py "C:\chemin\session.h5" `
-     --profile grounded --minimum-duration 60
+   python scripts\qualify_hardware_session.py "C:\chemin\session_Q1.h5" --stage Q1
+
+L'option ``--stage`` applique sans modification possible la duree, le profil,
+le nombre de voies et les plages du palier. Les options ``--profile`` et
+``--minimum-duration`` restent disponibles pour un diagnostic hors protocole,
+mais leur rapport ne valide aucun palier Q0-Q4.
+
+Un palier formel doit avoir ete lance depuis l'onglet ``Qualification``: la
+commande hors ligne reverifie l'attestation et la checklist deja presentes
+dans le fichier maitre. ``--ignore-wall-clock`` est reserve aux diagnostics
+hors protocole et ne peut pas affaiblir un palier Q0-Q4.
 
 Le code de sortie est ``0`` pour ``accepted``, ``2`` pour ``refused`` et ``1``
 si aucun rapport fiable ne peut etre produit. Un refus est un resultat de
@@ -108,7 +136,7 @@ deux rapports:
    * - Q3
      - 8
      - 10 min
-     - quick puis grounded
+     - grounded, incluant tous les controles quick
      - zero perte et zero saturation
    * - Q4
      - 8

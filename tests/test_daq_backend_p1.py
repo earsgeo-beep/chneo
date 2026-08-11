@@ -4,6 +4,7 @@ import numpy as np
 
 from hrneowave.acquisition.acquisition_controller import create_default_maritime_config
 from hrneowave.acquisition.daq_backend import DaqBackend, DaqReadResult, detect_voltage_saturation
+from hrneowave.acquisition.mcc_daq_wrapper import MccUsbDeviceInfo
 from hrneowave.hardware import HardwareRegistry
 from hrneowave.hardware.drivers.mcc_usb1608fs import MccUsb1608FsProvider
 from tests.hardware_test_doubles import (
@@ -78,6 +79,17 @@ class DaqBackendContractTests(unittest.TestCase):
         self.assertEqual(device.capabilities.max_sample_rate_hz_per_channel, 12_500.0)
         self.assertEqual(opened, [(2, device.key)])
         self.assertTrue(backend.connected)
+
+    def test_mcc_provider_preserves_the_physical_usb_identifier(self):
+        provider = MccUsb1608FsProvider(
+            scanner=lambda: [MccUsbDeviceInfo(0, "USB-1608FS", "MCC-SN-42")],
+        )
+
+        device = provider.discover()[0]
+
+        self.assertEqual(device.device_id, "0")
+        self.assertEqual(device.serial_number, "MCC-SN-42")
+        self.assertEqual(device.metadata["board_num"], 0)
 
     def test_registry_rejects_non_hardware_provider_result(self):
         class ForbiddenSource(DaqBackend):
