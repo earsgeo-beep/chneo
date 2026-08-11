@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import copy
 import os
+import tempfile
 import time
+from pathlib import Path
 
 import pytest
 
@@ -17,6 +19,7 @@ QtWidgets = pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
 from PySide6.QtWidgets import QApplication, QTableWidgetItem
 
 from hrneowave.acquisition import MCC_USB1608FS_PROTOCOL, AcquisitionController
+from hrneowave.core.legacy_raw import LegacyRawImportOptions
 from hrneowave.gui.views.acquisition_config_view import AcquisitionConfigView
 from hrneowave.gui.views.analysis_view import AnalysisView
 from hrneowave.gui.views.calibration_view import CalibrationView
@@ -99,6 +102,41 @@ def test_analysis_parameters_panel_is_collapsible(qt_app):
     assert not view._tools_panel_expanded
     assert view.tools_panel.parameters_panel.isHidden()
     assert view.tools_toggle_button.text() == "Afficher les réglages"
+
+
+def test_analysis_view_loads_raw_and_draws_time_signals(qt_app):
+    view = AnalysisView()
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "waves.raw"
+        path.write_text(
+            "\n".join(
+                [
+                    "2",
+                    "2",
+                    "2",
+                    "2.0 -0.5",
+                    "0 0.0 2.0",
+                    "1 0.5 1.0",
+                    "2 1.0 0.0",
+                    "3 1.5 -1.0",
+                ]
+            ),
+            encoding="ascii",
+        )
+
+        loaded = view.load_data_file(
+            str(path),
+            raw_options=LegacyRawImportOptions(
+                sensor_type="wave_height",
+                physical_unit="cm",
+                calibration_confirmed=True,
+            ),
+        )
+
+        assert loaded
+        assert view.post_processor.current_data["source_format"] == "legacy_raw"
+        assert view.post_processor.sample_rate == 2.0
+        assert len(view.results_area.time_figure.axes[0].lines) == 2
 
 
 def test_hardware_panel_uses_one_connected_state(qt_app):

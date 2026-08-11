@@ -15,6 +15,34 @@ elevation de surface calibree. Sur un canal de pression ou d'acceleration,
 elles ne deviennent pas des metres de houle sans une loi de conversion physique
 validee.
 
+Import des fichiers RAW historiques
+------------------------------------
+
+Le format ASCII historique ``.raw`` est accepte avec un contrat strict:
+
+- ligne 1: frequence d'echantillonnage en Hz;
+- ligne 2: duree declaree en secondes;
+- ligne 3: nombre de canaux;
+- ligne 4: un coefficient multiplicatif par canal;
+- lignes suivantes: indice entier puis une valeur brute par canal.
+
+L'import refuse une duree incoherente avec ``N/Fs``, un indice manquant, un
+nombre de colonnes incorrect, un coefficient nul, ou toute valeur ``NaN`` ou
+infinie. L'empreinte SHA-256 du fichier est conservee dans les metadonnees.
+
+Le format ne stocke ni le type de capteur ni l'unite des coefficients. Ces deux
+informations sont donc confirmees par l'operateur au chargement. Lorsque les
+coefficients sont appliques, la convention explicite est:
+
+.. math::
+
+   X = V C
+
+avec ``C`` en unite physique par volt et un zero deja applique pendant la
+mesure. Les tensions originales et les valeurs converties sont conservees
+separement. Sans confirmation, le logiciel permet uniquement une analyse en
+volts et interdit de presenter ``Hm0`` comme une hauteur de houle valide.
+
 Preparation du signal
 ---------------------
 
@@ -57,6 +85,10 @@ Les parametres exportes sont:
 parabolique locale. ``Te`` est calcule par ``m-1 / m0``. Les resultats incluent
 la resolution frequentielle, le nombre de segments Welch et les unites de la
 densite spectrale.
+
+L'interpolation de ``Tp`` est bornee a la bande frequentielle selectionnee: un
+pic situe sur une borne ne peut jamais produire une frequence exterieure aux
+limites demandees.
 
 Analyse temporelle
 ------------------

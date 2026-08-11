@@ -6,6 +6,7 @@ import math
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 
@@ -102,6 +103,32 @@ class WaveAnalyzerTests(unittest.TestCase):
         self.assertEqual(result["spectral"]["Hm0"], 0.0)
         self.assertEqual(result["wave_parameters"]["n_waves"], 0)
         self.assertIn("Signal constant", result["quality"]["warnings"][0])
+
+    def test_interpolated_peak_cannot_escape_the_selected_frequency_band(self):
+        sample_rate = 32.0
+        time = np.arange(8192, dtype=float) / sample_rate
+        low_frequency_signal = np.sin(2 * np.pi * 0.09 * time)
+        analyzer = WaveAnalyzer(
+            WaveAnalysisConfig(
+                segment_length=1024,
+                overlap_ratio=0.5,
+                min_frequency=0.1,
+                max_frequency=2.0,
+            )
+        )
+
+        spectrum = analyzer.analyze_channel(low_frequency_signal, sample_rate, "cm")["spectral"]
+
+        band_minimum, band_maximum = spectrum["analysis_band_hz"]
+        self.assertGreaterEqual(spectrum["peak_frequency"], band_minimum)
+        self.assertLessEqual(spectrum["peak_frequency"], band_maximum)
+        quality = analyzer.analyze_channel(low_frequency_signal, sample_rate, "cm")["quality"]
+        self.assertTrue(quality["peak_at_analysis_band_boundary"])
+        self.assertTrue(any("limite de bande" in warning for warning in quality["warnings"]))
+
+        with patch.object(WaveAnalyzer, "_interpolated_peak", return_value=0.0):
+            clamped = analyzer.analyze_channel(low_frequency_signal, sample_rate, "cm")["spectral"]
+        self.assertEqual(clamped["peak_frequency"], clamped["analysis_band_hz"][0])
 
 
 class PostProcessorSpectralTests(unittest.TestCase):

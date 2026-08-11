@@ -52,7 +52,7 @@ class WaveAnalysisConfig:
 class WaveAnalyzer:
     """Calcule statistiques, spectre, moments et vagues individuelles."""
 
-    METHOD_VERSION = "1.1"
+    METHOD_VERSION = "1.2"
 
     def __init__(self, config: WaveAnalysisConfig | None = None):
         self.config = config or WaveAnalysisConfig()
@@ -211,11 +211,18 @@ class WaveAnalyzer:
         }
         peak_local_index = int(np.argmax(band_density))
         peak_index = int(band_indices[peak_local_index])
+        has_resolved_peak = float(band_density[peak_local_index]) > np.finfo(np.float64).tiny
         peak_frequency = (
-            self._interpolated_peak(frequencies, density, peak_index)
-            if float(band_density[peak_local_index]) > np.finfo(np.float64).tiny
-            else 0.0
+            self._interpolated_peak(frequencies, density, peak_index) if has_resolved_peak else 0.0
         )
+        if has_resolved_peak:
+            peak_frequency = float(
+                np.clip(
+                    peak_frequency,
+                    float(band_frequencies[0]),
+                    float(band_frequencies[-1]),
+                )
+            )
 
         m0 = moments["m0"]
         m1 = moments["m1"]
@@ -378,6 +385,17 @@ class WaveAnalyzer:
         peak_resolution_ratio = (
             float(spectral["frequency_resolution"]) / peak_frequency if peak_frequency > 0 else 0.0
         )
+        analysis_band = spectral["analysis_band_hz"]
+        boundary_tolerance = float(spectral["frequency_resolution"]) * 0.51
+        peak_at_band_boundary = bool(
+            peak_frequency > 0
+            and (
+                abs(peak_frequency - float(analysis_band[0])) <= boundary_tolerance
+                or abs(peak_frequency - float(analysis_band[1])) <= boundary_tolerance
+            )
+        )
+        if peak_at_band_boundary:
+            warnings.append("Pic spectral sur une limite de bande: Tp non fiable; ajuster la bande d'analyse")
         if peak_frequency > 0 and samples_per_peak_period < 10.0:
             warnings.append("Moins de dix echantillons par periode de pic: resolution temporelle faible")
         if peak_frequency > 0 and record_cycles_at_peak < 10.0:
@@ -402,6 +420,7 @@ class WaveAnalyzer:
             "samples_per_peak_period": samples_per_peak_period,
             "record_cycles_at_peak": record_cycles_at_peak,
             "peak_frequency_resolution_ratio": peak_resolution_ratio,
+            "peak_at_analysis_band_boundary": peak_at_band_boundary,
             "linear_trend_per_second": trend_slope,
         }
 

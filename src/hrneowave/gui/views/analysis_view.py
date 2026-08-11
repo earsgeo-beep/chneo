@@ -9,8 +9,11 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QDoubleSpinBox,
     QFileDialog,
+    QFormLayout,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -27,7 +30,110 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...core.legacy_raw import (
+    LegacyRawError,
+    LegacyRawHeader,
+    LegacyRawImportOptions,
+    read_legacy_raw_header,
+)
 from ...core.post_processor import PostProcessor
+
+
+class LegacyRawImportDialog(QDialog):
+    """Confirme les seules hypotheses que le fichier RAW ne peut pas porter."""
+
+    SENSOR_TYPES = (
+        ("Élévation de houle", "wave_height", "cm"),
+        ("Déplacement", "displacement", "mm"),
+        ("Force", "force", "N"),
+        ("Accélération", "accelerometer", "m/s²"),
+        ("Pression", "pressure", "bar"),
+        ("Angle", "inclination", "°"),
+        ("Signal générique", "generic", "unité"),
+    )
+
+    def __init__(self, source_path: Path, header: LegacyRawHeader, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Interprétation du fichier RAW")
+        self.setModal(True)
+        self.setMinimumWidth(500)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(10)
+        identity = QLabel(
+            f"{source_path.name}\n"
+            f"{header.sample_rate_hz:g} Hz · {header.declared_duration_s:g} s · "
+            f"{header.channel_count} canaux"
+        )
+        identity.setObjectName("sectionTitle")
+        layout.addWidget(identity)
+
+        explanation = QLabel(
+            "Le format contient un facteur par canal mais pas son unité. "
+            "Pour une conversion traçable, confirmez la relation X = V × facteur "
+            "et l'unité physique de X."
+        )
+        explanation.setWordWrap(True)
+        explanation.setObjectName("mutedText")
+        layout.addWidget(explanation)
+
+        form = QFormLayout()
+        self.sensor_type_combo = QComboBox()
+        for label, sensor_type, _unit in self.SENSOR_TYPES:
+            self.sensor_type_combo.addItem(label, sensor_type)
+        self.physical_unit_combo = QComboBox()
+        self.physical_unit_combo.setEditable(True)
+        self.physical_unit_combo.addItems(["cm", "m", "mm", "N", "g", "kg", "m/s²", "bar", "°"])
+        self.apply_calibration_check = QCheckBox("Appliquer les coefficients de l'en-tête")
+        self.apply_calibration_check.setChecked(True)
+        self.confirm_calibration_check = QCheckBox(
+            "Je confirme le type, l'unité, les facteurs en unité/V et le zéro appliqué"
+        )
+        form.addRow("TYPE DE SIGNAL", self.sensor_type_combo)
+        form.addRow("UNITÉ PHYSIQUE", self.physical_unit_combo)
+        form.addRow("CONVERSION", self.apply_calibration_check)
+        form.addRow("CONFIRMATION", self.confirm_calibration_check)
+        layout.addLayout(form)
+
+        self.buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        layout.addWidget(self.buttons)
+
+        self.sensor_type_combo.currentIndexChanged.connect(self._apply_default_unit)
+        self.apply_calibration_check.toggled.connect(self._refresh_state)
+        self.confirm_calibration_check.toggled.connect(self._refresh_state)
+        self.physical_unit_combo.currentTextChanged.connect(self._refresh_state)
+        self._apply_default_unit(0)
+        self._refresh_state()
+
+    def _apply_default_unit(self, index: int) -> None:
+        self.physical_unit_combo.setCurrentText(self.SENSOR_TYPES[index][2])
+
+    def _refresh_state(self, *_args) -> None:
+        calibrated = self.apply_calibration_check.isChecked()
+        self.physical_unit_combo.setEnabled(calibrated)
+        self.confirm_calibration_check.setEnabled(calibrated)
+        enabled = not calibrated or (
+            self.confirm_calibration_check.isChecked()
+            and bool(self.physical_unit_combo.currentText().strip())
+        )
+        self.buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(enabled)
+
+    def import_options(self) -> LegacyRawImportOptions:
+        return LegacyRawImportOptions(
+            sensor_type=str(self.sensor_type_combo.currentData()),
+            physical_unit=self.physical_unit_combo.currentText().strip(),
+            apply_calibration=self.apply_calibration_check.isChecked(),
+            calibration_confirmed=(
+                self.confirm_calibration_check.isChecked()
+                if self.apply_calibration_check.isChecked()
+                else False
+            ),
+        )
 
 
 class AnalysisToolsPanel(QFrame):
@@ -213,6 +319,10 @@ class AnalysisResultsArea(QFrame):
         self.wave_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tab_widget.addTab(self.wave_table, "Parametres de houle")
 
+        self.time_figure = Figure(figsize=(7, 4), tight_layout=True)
+        self.time_canvas = FigureCanvas(self.time_figure)
+        self.tab_widget.addTab(self.time_canvas, "Signaux temporels")
+
         self.spectrum_figure = Figure(figsize=(7, 4), tight_layout=True)
         self.spectrum_canvas = FigureCanvas(self.spectrum_figure)
         self.tab_widget.addTab(self.spectrum_canvas, "Spectres")
@@ -327,7 +437,7 @@ class AnalysisView(QWidget):
             if not folder.exists():
                 continue
             for file_path in sorted(folder.glob("*")):
-                if file_path.suffix.lower() not in {".csv", ".json", ".h5", ".hdf5"}:
+                if file_path.suffix.lower() not in {".csv", ".json", ".h5", ".hdf5", ".raw"}:
                     continue
                 resolved = str(file_path.resolve())
                 if resolved in seen:
@@ -345,16 +455,33 @@ class AnalysisView(QWidget):
             self,
             "Charger des donnees",
             str(base_dir),
-            "Donnees (*.csv *.json *.h5 *.hdf5)",
+            "Données laboratoire (*.raw *.csv *.json *.h5 *.hdf5)",
         )
         if file_path:
             self.load_data_file(file_path)
 
-    def load_data_file(self, file_path: str) -> bool:
+    def load_data_file(
+        self,
+        file_path: str,
+        *,
+        raw_options: LegacyRawImportOptions | None = None,
+    ) -> bool:
         if not file_path:
             return False
 
-        if not self.post_processor.load_data_file(file_path):
+        source_path = Path(file_path)
+        if source_path.suffix.lower() == ".raw" and raw_options is None:
+            try:
+                header = read_legacy_raw_header(source_path)
+            except LegacyRawError as exc:
+                QMessageBox.warning(self, "Fichier RAW invalide", str(exc))
+                return False
+            dialog = LegacyRawImportDialog(source_path, header, self)
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return False
+            raw_options = dialog.import_options()
+
+        if not self.post_processor.load_data_file(file_path, raw_options=raw_options):
             QMessageBox.warning(self, "Chargement", f"Impossible de charger:\n{file_path}")
             return False
 
@@ -372,6 +499,7 @@ class AnalysisView(QWidget):
             self.results_area.rate_metric,
             f"{self.post_processor.sample_rate:g} Hz",
         )
+        self._update_time_plot()
         self.results_area.update_analysis_status("DONNÉES CHARGÉES", self.analysis_count)
         return True
 
@@ -395,7 +523,9 @@ class AnalysisView(QWidget):
         self._update_results_views()
         self._set_tools_panel_expanded(False)
         quality = self.current_analysis_result.get("quality", {})
-        warning_count = sum(len(item.get("warnings", [])) for item in quality.values())
+        channel_warning_count = sum(len(item.get("warnings", [])) for item in quality.values())
+        processing_warning_count = len(self.current_analysis_result.get("metadata", {}).get("warnings", []))
+        warning_count = channel_warning_count + processing_warning_count
         quality_text = "Validée" if warning_count == 0 else f"{warning_count} alerte(s)"
         self.results_area._set_metric(self.results_area.quality_metric, quality_text)
         self.results_area.analysis_status_label.setProperty(
@@ -472,6 +602,8 @@ class AnalysisView(QWidget):
         self.results_area.stats_table.setRowCount(0)
         self.results_area.wave_table.clearContents()
         self.results_area.wave_table.setRowCount(0)
+        self.results_area.time_figure.clear()
+        self.results_area.time_canvas.draw_idle()
         self.results_area.spectrum_figure.clear()
         self.results_area.spectrum_canvas.draw_idle()
         self.results_area.separation_figure.clear()
@@ -567,6 +699,49 @@ class AnalysisView(QWidget):
         self._update_separation_plot()
 
         self.results_area.report_text.setPlainText(self._build_report_text())
+
+    def _update_time_plot(self) -> None:
+        figure = self.results_area.time_figure
+        figure.clear()
+        axis = figure.add_subplot(111)
+        figure.set_facecolor("#FFFFFF")
+        axis.set_facecolor("#FFFFFF")
+        data = self.post_processor.current_data or {}
+        time_values = np.asarray(data.get("time", []), dtype=np.float64)
+        channels = data.get("channels", {})
+        channel_keys = list(data.get("channel_keys", []))
+        if time_values.size and channels:
+            stride = max(1, int(np.ceil(time_values.size / 8000)))
+            sampled_time = time_values[::stride]
+            for channel in channel_keys[:16]:
+                values = np.asarray(channels.get(channel, []), dtype=np.float64)
+                if values.size == time_values.size:
+                    axis.plot(sampled_time, values[::stride], linewidth=0.8, label=channel)
+            axis.set_xlabel("Temps (s)", color="#405965")
+            units = {
+                str(item.get("physical_unit", "")).strip()
+                for item in data.get("channel_metadata", [])
+                if isinstance(item, dict) and item.get("physical_unit")
+            }
+            unit = next(iter(units)) if len(units) == 1 else "unité physique"
+            axis.set_ylabel(unit, color="#405965")
+            if channel_keys:
+                axis.legend(loc="best", frameon=False, fontsize=7, ncol=2)
+        else:
+            axis.text(
+                0.5,
+                0.5,
+                "APERÇU TEMPOREL NON CHARGÉ POUR CE FORMAT",
+                ha="center",
+                va="center",
+                transform=axis.transAxes,
+                color="#667C88",
+            )
+        axis.tick_params(colors="#667C88", labelsize=9)
+        axis.grid(True, color="#DCE5EA", linewidth=0.7, alpha=0.8)
+        axis.spines["top"].set_visible(False)
+        axis.spines["right"].set_visible(False)
+        self.results_area.time_canvas.draw_idle()
 
     def _update_spectrum_plot(self) -> None:
         spectral = (self.current_analysis_result or {}).get("spectral_analysis", {})

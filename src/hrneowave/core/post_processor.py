@@ -11,6 +11,7 @@ from typing import Any
 import numpy as np
 from scipy import signal
 
+from .legacy_raw import LegacyRawImportOptions, load_legacy_raw
 from .session_schema import CLOCK_DOMAIN, SAMPLE_RATE_KEYS, SCHEMA_VERSION, extract_sample_rate
 from .wave_analysis import WaveAnalysisConfig, WaveAnalysisError, WaveAnalyzer
 from .wave_separation import (
@@ -137,21 +138,22 @@ class PostProcessor(QObject):
         ):
             counters.setdefault(key, metadata.get(key, 0))
             if int(counters.get(key, 0) or 0) > 0:
-                raise ValueError(
-                    f"Session {source_format} contenant {key}={counters[key]}"
-                )
+                raise ValueError(f"Session {source_format} contenant {key}={counters[key]}")
         status = metadata.get("recording_status")
         if status is not None and str(status) != "complete":
-            raise ValueError(
-                f"Session {source_format} non valide: recording_status={status}"
-            )
+            raise ValueError(f"Session {source_format} non valide: recording_status={status}")
         if metadata.get("hardware_available") is False:
             raise ValueError(f"Session {source_format} non issue d'un équipement physique")
         source_kind = metadata.get("acquisition_source")
         if source_kind is not None and source_kind != "physical_hardware":
             raise ValueError(f"Source d'acquisition interdite: {source_kind}")
 
-    def load_data_file(self, file_path: str) -> bool:
+    def load_data_file(
+        self,
+        file_path: str,
+        *,
+        raw_options: LegacyRawImportOptions | None = None,
+    ) -> bool:
         try:
             path = Path(file_path).expanduser().resolve()
             if not path.is_file():
@@ -163,6 +165,14 @@ class PostProcessor(QObject):
                 data = self._load_json(path)
             elif extension in {".h5", ".hdf5"}:
                 data = self._load_hdf5(path)
+            elif extension == ".raw":
+                if raw_options is None:
+                    raise ValueError(
+                        "L'import RAW exige la confirmation du type, de l'unite "
+                        "et des coefficients de calibration"
+                    )
+                data = load_legacy_raw(path, raw_options)
+                self.sample_rate = float(data["metadata"]["sample_rate_hz"])
             else:
                 raise ValueError(f"Format non supporte: {extension}")
 
@@ -783,18 +793,30 @@ class PostProcessor(QObject):
                     "elevation",
                     "houle",
                 }
-                interpretation_valid = sensor_type in wave_elevation_types
+                physical_unit = unit.strip().lower().replace(" ", "")
+                length_units = {"m", "cm", "mm"}
+                calibration_status = str(channel_info.get("calibration_status", "unverified"))
+                interpretation_valid = (
+                    sensor_type in wave_elevation_types
+                    and physical_unit in length_units
+                    and calibration_status == "valid"
+                )
                 channel_results["wave_parameters"]["interpretation"] = (
                     "wave_elevation" if interpretation_valid else "generic_amplitude"
                 )
                 channel_results["quality"]["wave_height_interpretation_valid"] = interpretation_valid
                 if not interpretation_valid:
-                    warning = (
-                        "Type de capteur absent: verifier que le signal represente une elevation"
-                        if not sensor_type
-                        else "Hm0 et H1/3 restent dans l'unite du capteur; ce ne sont pas "
-                        "des hauteurs de houle sans conversion en elevation"
-                    )
+                    if sensor_type not in wave_elevation_types:
+                        warning = (
+                            "Type de capteur absent: verifier que le signal represente une elevation"
+                            if not sensor_type
+                            else "Hm0 et H1/3 restent des amplitudes du capteur; "
+                            "ce ne sont pas des hauteurs de houle"
+                        )
+                    elif physical_unit not in length_units:
+                        warning = "Une unite de longueur m, cm ou mm est requise pour la hauteur de houle"
+                    else:
+                        warning = "Calibration valide requise pour interpreter Hm0 et H1/3 physiquement"
                     channel_results["quality"]["warnings"].append(warning)
                     channel_results["quality"]["valid"] = False
                 results["basic_stats"][channel] = channel_results["basic_stats"]
