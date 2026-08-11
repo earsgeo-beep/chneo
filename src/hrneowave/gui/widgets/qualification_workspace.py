@@ -51,13 +51,16 @@ class QualificationWorkspace(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(12)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(8)
 
         header = QFrame()
-        header.setObjectName("quietSurface")
-        header_layout = QVBoxLayout(header)
-        header_layout.setContentsMargins(14, 10, 14, 10)
+        header.setObjectName("contextBar")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(11, 7, 11, 7)
+        header_layout.setSpacing(12)
+        header_text = QVBoxLayout()
+        header_text.setSpacing(1)
         self.protocol_name_label = QLabel("Aucun protocole matériel")
         self.protocol_name_label.setObjectName("sectionTitle")
         self.protocol_description_label = QLabel(
@@ -66,42 +69,50 @@ class QualificationWorkspace(QWidget):
         self.protocol_description_label.setObjectName("mutedText")
         self.protocol_description_label.setWordWrap(True)
         self.protocol_progress = QProgressBar()
+        self.protocol_progress.setObjectName("qualificationProgress")
+        self.protocol_progress.setMinimumWidth(210)
+        self.protocol_progress.setMaximumWidth(300)
         self.protocol_progress.setFormat("%v / %m paliers acceptés")
-        header_layout.addWidget(self.protocol_name_label)
-        header_layout.addWidget(self.protocol_description_label)
+        header_text.addWidget(self.protocol_name_label)
+        header_text.addWidget(self.protocol_description_label)
+        header_layout.addLayout(header_text, 1)
         header_layout.addWidget(self.protocol_progress)
         layout.addWidget(header)
 
         stage_group = QGroupBox("Palier à exécuter")
+        stage_group.setObjectName("sectionSurface")
         stage_form = QFormLayout(stage_group)
         self.stage_combo = QComboBox()
         self.stage_requirement_label = QLabel("Aucun palier disponible")
         self.stage_requirement_label.setWordWrap(True)
-        self.stage_requirement_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
+        self.stage_requirement_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.stage_state_label = QLabel("EN ATTENTE")
         self.stage_state_label.setProperty("state", "neutral")
         stage_form.addRow("Palier", self.stage_combo)
         stage_form.addRow("Exigences", self.stage_requirement_label)
         stage_form.addRow("État", self.stage_state_label)
-        layout.addWidget(stage_group)
 
         self.checklist_group = QGroupBox("Checklist opérateur obligatoire")
+        self.checklist_group.setObjectName("sectionSurface")
         self.checklist_layout = QVBoxLayout(self.checklist_group)
-        layout.addWidget(self.checklist_group)
+        workspace_row = QHBoxLayout()
+        workspace_row.setSpacing(8)
+        workspace_row.addWidget(stage_group, 3)
+        workspace_row.addWidget(self.checklist_group, 2)
+        layout.addLayout(workspace_row)
 
         action_layout = QHBoxLayout()
         self.start_stage_button = QPushButton("Lancer le palier")
         self.start_stage_button.setProperty("kind", "primaryLarge")
         self.refresh_button = QPushButton("Actualiser l'historique")
         self.refresh_button.setProperty("kind", "secondary")
-        action_layout.addWidget(self.start_stage_button)
         action_layout.addWidget(self.refresh_button)
         action_layout.addStretch()
+        action_layout.addWidget(self.start_stage_button)
         layout.addLayout(action_layout)
 
         history_group = QGroupBox("Historique traçable des rapports")
+        history_group.setObjectName("flatGroup")
         history_layout = QVBoxLayout(history_group)
         self.history_summary_label = QLabel("Aucun rapport chargé")
         self.history_summary_label.setObjectName("mutedText")
@@ -161,9 +172,7 @@ class QualificationWorkspace(QWidget):
             self.protocol_progress.setValue(0)
         self._populate_history(entries)
         error_suffix = f" · {len(scan.errors)} rapport(s) illisible(s)" if scan.errors else ""
-        self.history_summary_label.setText(
-            f"{len(entries)} rapport(s) pour cet équipement{error_suffix}"
-        )
+        self.history_summary_label.setText(f"{len(entries)} rapport(s) pour cet équipement{error_suffix}")
         self._refresh_stage_details()
 
     def set_running(self, stage_id: str | None) -> None:
@@ -193,11 +202,7 @@ class QualificationWorkspace(QWidget):
         )
 
     def checklist_attestations(self) -> tuple[str, ...]:
-        return tuple(
-            checkbox.text()
-            for checkbox in self._checklist_widgets
-            if checkbox.isChecked()
-        )
+        return tuple(checkbox.text() for checkbox in self._checklist_widgets if checkbox.isChecked())
 
     def _refresh_stage_details(self) -> None:
         stage = self.selected_stage()
@@ -269,8 +274,7 @@ class QualificationWorkspace(QWidget):
         return tuple(
             entry
             for entry in entries
-            if entry.protocol_id == self.protocol.protocol_id
-            and entry.device_identity == identity
+            if entry.protocol_id == self.protocol.protocol_id and entry.device_identity == identity
         )
 
     def _populate_history(self, entries: Iterable[QualificationHistoryEntry]) -> None:
@@ -288,9 +292,7 @@ class QualificationWorkspace(QWidget):
             for column, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
                 if column in {4, 5}:
-                    item.setToolTip(
-                        entry.source_master_file if column == 4 else str(entry.report_path)
-                    )
+                    item.setToolTip(entry.source_master_file if column == 4 else str(entry.report_path))
                 self.history_table.setItem(row, column, item)
 
     def _set_stage_state(self, text: str, state: str) -> None:

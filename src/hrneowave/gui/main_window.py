@@ -73,15 +73,15 @@ class ApplicationHeader(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("applicationHeader")
-        self.setFixedHeight(76)
+        self.setFixedHeight(66)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(24, 10, 24, 10)
-        layout.setSpacing(14)
+        layout.setContentsMargins(18, 7, 18, 7)
+        layout.setSpacing(12)
 
         self.sidebar_toggle_button = QPushButton("←")
         self.sidebar_toggle_button.setObjectName("sidebarToggleButton")
-        self.sidebar_toggle_button.setFixedSize(36, 36)
+        self.sidebar_toggle_button.setFixedSize(32, 32)
         self.sidebar_toggle_button.setToolTip("Replier la navigation (F9)")
         self.sidebar_toggle_button.clicked.connect(self.sidebar_toggle_requested.emit)
         layout.addWidget(self.sidebar_toggle_button, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -122,7 +122,7 @@ class MainWindow(QMainWindow):
     def __init__(self, config=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("CHNeoWave")
-        self.setMinimumSize(1180, 760)
+        self.setMinimumSize(1060, 680)
 
         self.config = config or {}
         self.user_preferences = get_user_preferences()
@@ -239,6 +239,24 @@ class MainWindow(QMainWindow):
             and hasattr(calibration_view, "set_channel_count")
         ):
             acquisition_view.hardware_channels_changed.connect(calibration_view.set_channel_count)
+        if (
+            acquisition_view
+            and calibration_view
+            and hasattr(
+                calibration_view,
+                "bind_acquisition_controller",
+            )
+        ):
+            calibration_view.bind_acquisition_controller(acquisition_view.controller)
+        if (
+            acquisition_view
+            and calibration_view
+            and hasattr(acquisition_view, "hardware_state_changed")
+            and hasattr(calibration_view, "update_hardware_state")
+        ):
+            acquisition_view.hardware_state_changed.connect(calibration_view.update_hardware_state)
+        if calibration_view and hasattr(calibration_view, "hardware_setup_requested"):
+            calibration_view.hardware_setup_requested.connect(self._open_hardware_setup)
         if calibration_view and hasattr(calibration_view, "calibration_completed"):
             calibration_view.calibration_completed.connect(self._on_calibration_completed)
         if analysis_view and hasattr(analysis_view, "analysis_completed"):
@@ -265,6 +283,15 @@ class MainWindow(QMainWindow):
 
     def _update_header_for_view(self, view_name: str) -> None:
         self.application_header.set_view(view_name)
+        calibration_view = self.view_manager.get_view_widget("calibration")
+        if calibration_view and hasattr(calibration_view, "set_workspace_active"):
+            calibration_view.set_workspace_active(view_name == "calibration")
+
+    def _open_hardware_setup(self) -> None:
+        acquisition_view = self.view_manager.get_view_widget("acquisition")
+        if acquisition_view and hasattr(acquisition_view, "config_tabs"):
+            acquisition_view.config_tabs.setCurrentIndex(0)
+        self._on_navigation_requested("acquisition")
 
     def _toggle_sidebar(self) -> None:
         collapsed = not self.sidebar.is_collapsed

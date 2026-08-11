@@ -66,9 +66,9 @@ class MainSidebar(QFrame):
 
         header = QFrame()
         header.setObjectName("sidebar_header")
-        header.setFixedHeight(78)
+        header.setFixedHeight(66)
         self.header_layout = QHBoxLayout(header)
-        self.header_layout.setContentsMargins(18, 16, 14, 14)
+        self.header_layout.setContentsMargins(18, 10, 14, 10)
         header_layout = self.header_layout
         header_layout.setSpacing(11)
 
@@ -93,7 +93,7 @@ class MainSidebar(QFrame):
 
         nav_container = QFrame()
         nav_layout = QVBoxLayout(nav_container)
-        nav_layout.setContentsMargins(0, 18, 0, 12)
+        nav_layout.setContentsMargins(0, 14, 0, 10)
         nav_layout.setSpacing(2)
 
         self.workflow_section = QLabel("FLUX DE TRAVAIL")
@@ -122,7 +122,7 @@ class MainSidebar(QFrame):
 
         footer = QFrame()
         footer.setObjectName("sidebar_footer")
-        footer.setFixedHeight(62)
+        footer.setFixedHeight(54)
         self.footer_layout = QHBoxLayout(footer)
         self.footer_layout.setContentsMargins(18, 10, 14, 10)
         footer_layout = self.footer_layout
@@ -175,7 +175,7 @@ class MainSidebar(QFrame):
         self.status_text.setVisible(not self.is_collapsed)
         self.version.setVisible(not self.is_collapsed)
 
-        self.header_layout.setContentsMargins(18, 16, 14 if not self.is_collapsed else 18, 14)
+        self.header_layout.setContentsMargins(18, 10, 14 if not self.is_collapsed else 18, 10)
         self.header_layout.setSpacing(0 if self.is_collapsed else 11)
         self.footer_layout.setContentsMargins(
             18 if not self.is_collapsed else 28,
