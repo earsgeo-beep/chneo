@@ -239,6 +239,24 @@ class MainWindow(QMainWindow):
             and hasattr(calibration_view, "set_channel_count")
         ):
             acquisition_view.hardware_channels_changed.connect(calibration_view.set_channel_count)
+        if (
+            acquisition_view
+            and calibration_view
+            and hasattr(
+                calibration_view,
+                "bind_acquisition_controller",
+            )
+        ):
+            calibration_view.bind_acquisition_controller(acquisition_view.controller)
+        if (
+            acquisition_view
+            and calibration_view
+            and hasattr(acquisition_view, "hardware_state_changed")
+            and hasattr(calibration_view, "update_hardware_state")
+        ):
+            acquisition_view.hardware_state_changed.connect(calibration_view.update_hardware_state)
+        if calibration_view and hasattr(calibration_view, "hardware_setup_requested"):
+            calibration_view.hardware_setup_requested.connect(self._open_hardware_setup)
         if calibration_view and hasattr(calibration_view, "calibration_completed"):
             calibration_view.calibration_completed.connect(self._on_calibration_completed)
         if analysis_view and hasattr(analysis_view, "analysis_completed"):
@@ -265,6 +283,15 @@ class MainWindow(QMainWindow):
 
     def _update_header_for_view(self, view_name: str) -> None:
         self.application_header.set_view(view_name)
+        calibration_view = self.view_manager.get_view_widget("calibration")
+        if calibration_view and hasattr(calibration_view, "set_workspace_active"):
+            calibration_view.set_workspace_active(view_name == "calibration")
+
+    def _open_hardware_setup(self) -> None:
+        acquisition_view = self.view_manager.get_view_widget("acquisition")
+        if acquisition_view and hasattr(acquisition_view, "config_tabs"):
+            acquisition_view.config_tabs.setCurrentIndex(0)
+        self._on_navigation_requested("acquisition")
 
     def _toggle_sidebar(self) -> None:
         collapsed = not self.sidebar.is_collapsed

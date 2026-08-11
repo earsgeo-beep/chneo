@@ -152,6 +152,35 @@ class AcquisitionControllerTests(unittest.TestCase):
         finally:
             controller.close()
 
+    def test_calibration_preview_streams_only_from_the_physical_backend(self):
+        blocks: list[np.ndarray] = []
+
+        actual_rate = self.controller.start_calibration_preview(
+            0,
+            sample_rate_hz=200.0,
+            range_volts=5.0,
+            block_size=20,
+            data_callback=lambda data, _rate: blocks.append(data),
+        )
+        deadline = time.monotonic() + 1.0
+        while not blocks and time.monotonic() < deadline:
+            time.sleep(0.01)
+
+        self.assertEqual(actual_rate, 200.0)
+        self.assertTrue(blocks)
+        self.assertEqual(blocks[0].shape, (20, 1))
+        self.assertTrue(self.controller.is_calibration_preview_active)
+        self.assertTrue(self.controller.stop_calibration_preview())
+        self.assertFalse(self.controller.is_calibration_preview_active)
+
+    def test_calibration_preview_refuses_missing_physical_hardware(self):
+        controller = AcquisitionController(auto_initialize=False)
+        try:
+            with self.assertRaisesRegex(RuntimeError, "Aucun équipement physique"):
+                controller.start_calibration_preview(0)
+        finally:
+            controller.close()
+
     def test_session_refuses_to_start_without_physical_hardware(self):
         controller = AcquisitionController(auto_initialize=False)
         try:
@@ -282,15 +311,11 @@ class AcquisitionControllerTests(unittest.TestCase):
         self.assertEqual(len(payload["channels"]["channel_00"]), 125)
 
     def test_new_session_resets_previous_samples(self):
-        self.assertTrue(
-            self._start("first", sampling_rate=500, duration_seconds=0.12, channels=[0])
-        )
+        self.assertTrue(self._start("first", sampling_rate=500, duration_seconds=0.12, channels=[0]))
         self.controller.acquisition_thread.join(timeout=2)
         self.assertGreater(self.controller.stats["samples_acquired"], 0)
 
-        self.assertTrue(
-            self._start("second", sampling_rate=500, duration_seconds=0.12, channels=[0])
-        )
+        self.assertTrue(self._start("second", sampling_rate=500, duration_seconds=0.12, channels=[0]))
         self.controller.acquisition_thread.join(timeout=2)
         self.assertEqual(self.controller.stats["samples_acquired"], 60)
 

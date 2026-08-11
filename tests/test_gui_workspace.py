@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import copy
 import os
+import time
 
 import pytest
 
@@ -15,13 +16,13 @@ QtWidgets = pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
 
 from PySide6.QtWidgets import QApplication, QTableWidgetItem
 
-from hrneowave.acquisition import MCC_USB1608FS_PROTOCOL
+from hrneowave.acquisition import MCC_USB1608FS_PROTOCOL, AcquisitionController
 from hrneowave.gui.views.acquisition_config_view import AcquisitionConfigView
 from hrneowave.gui.views.analysis_view import AnalysisView
 from hrneowave.gui.views.calibration_view import CalibrationView
 from hrneowave.gui.widgets.main_sidebar import MainSidebar
 from hrneowave.gui.widgets.qualification_workspace import QualificationWorkspace
-from tests.hardware_test_doubles import physical_test_device
+from tests.hardware_test_doubles import DeterministicPhysicalBackend, physical_test_device
 
 
 @pytest.fixture(scope="module")
@@ -65,6 +66,30 @@ def test_calibration_channel_count_follows_active_hardware(qt_app):
     assert view.channel_count == 24
     assert view.channel_combo.count() == 24
     assert view.channel_progress_label.text() == "CANAL 1 / 24"
+
+
+def test_calibration_live_monitor_reads_the_shared_physical_controller(qt_app):
+    backend = DeterministicPhysicalBackend()
+    backend.connect()
+    controller = AcquisitionController(daq_backend=backend)
+    view = CalibrationView()
+    try:
+        view.bind_acquisition_controller(controller)
+        view._start_live_preview()
+        deadline = time.monotonic() + 3.0
+        while view._live_values.size == 0 and time.monotonic() < deadline:
+            qt_app.processEvents()
+            time.sleep(0.01)
+
+        assert view._live_values.size > 0
+        assert view.live_state_label.text() == "LECTURE LIVE"
+        assert view.live_voltage_label.text().endswith(" V")
+        assert controller.is_calibration_preview_active
+        assert view.signal_verdict_label.text() == "SIGNAL INSTABLE"
+        assert not view.record_point_button.isEnabled()
+    finally:
+        view._stop_live_preview()
+        controller.close()
 
 
 def test_analysis_parameters_panel_is_collapsible(qt_app):
