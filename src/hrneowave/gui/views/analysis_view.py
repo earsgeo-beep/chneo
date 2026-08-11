@@ -46,8 +46,8 @@ class AnalysisToolsPanel(QFrame):
         self.setObjectName("analysis_tools_panel")
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 10, 14, 10)
-        layout.setSpacing(9)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(7)
 
         source_row = QHBoxLayout()
         source_row.setSpacing(8)
@@ -71,14 +71,13 @@ class AnalysisToolsPanel(QFrame):
         source_row.addWidget(self.load_button)
         source_row.addWidget(self.refresh_button)
         source_row.addWidget(self.parameters_toggle_button)
-        source_row.addWidget(self.run_button)
         layout.addLayout(source_row)
 
         self.parameters_panel = QFrame()
-        self.parameters_panel.setObjectName("quietSurface")
-        parameters_layout = QHBoxLayout(self.parameters_panel)
-        parameters_layout.setContentsMargins(12, 8, 12, 8)
-        parameters_layout.setSpacing(18)
+        self.parameters_panel.setObjectName("flatPanel")
+        parameters_layout = QVBoxLayout(self.parameters_panel)
+        parameters_layout.setContentsMargins(0, 7, 0, 0)
+        parameters_layout.setSpacing(7)
 
         method_layout = QGridLayout()
         method_layout.setHorizontalSpacing(10)
@@ -118,14 +117,12 @@ class AnalysisToolsPanel(QFrame):
             method_layout.addWidget(widget, 1, column)
         method_layout.addWidget(self.detrend_check, 1, len(fields))
         method_layout.setColumnStretch(len(fields), 1)
-        parameters_layout.addLayout(method_layout, 1)
+        parameters_layout.addLayout(method_layout)
 
-        export_block = QVBoxLayout()
-        export_block.setSpacing(4)
+        actions_row = QHBoxLayout()
+        actions_row.setSpacing(6)
         export_label = QLabel("EXPORTER LES RÉSULTATS")
         export_label.setObjectName("metricLabel")
-        export_buttons = QHBoxLayout()
-        export_buttons.setSpacing(5)
         self.export_format_combo = QComboBox()
         for label, export_type in (
             ("CSV", "csv"),
@@ -139,11 +136,12 @@ class AnalysisToolsPanel(QFrame):
         self.export_button.clicked.connect(
             lambda: self.export_requested.emit(str(self.export_format_combo.currentData()))
         )
-        export_buttons.addWidget(self.export_format_combo)
-        export_buttons.addWidget(self.export_button)
-        export_block.addWidget(export_label)
-        export_block.addLayout(export_buttons)
-        parameters_layout.addLayout(export_block)
+        actions_row.addWidget(export_label)
+        actions_row.addWidget(self.export_format_combo)
+        actions_row.addWidget(self.export_button)
+        actions_row.addStretch()
+        actions_row.addWidget(self.run_button)
+        parameters_layout.addLayout(actions_row)
         layout.addWidget(self.parameters_panel)
 
     def _emit_analysis_request(self) -> None:
@@ -171,8 +169,8 @@ class AnalysisResultsArea(QFrame):
         self.setObjectName("analysis_results_area")
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 10, 14, 12)
-        layout.setSpacing(10)
+        layout.setContentsMargins(12, 8, 12, 10)
+        layout.setSpacing(8)
 
         header_layout = QHBoxLayout()
         title = QLabel("Résultats scientifiques")
@@ -188,7 +186,7 @@ class AnalysisResultsArea(QFrame):
         layout.addLayout(header_layout)
 
         metrics = QHBoxLayout()
-        metrics.setSpacing(10)
+        metrics.setSpacing(8)
         self.source_metric = self._metric_card("SOURCE", "Aucune")
         self.channels_metric = self._metric_card("CANAUX", "0")
         self.rate_metric = self._metric_card("ÉCHANTILLONNAGE", "—")
@@ -236,9 +234,9 @@ class AnalysisResultsArea(QFrame):
     def _metric_card(label: str, value: str) -> QFrame:
         card = QFrame()
         card.setObjectName("metricCard")
-        card.setMinimumHeight(60)
+        card.setMinimumHeight(50)
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(11, 7, 11, 7)
+        card_layout.setContentsMargins(9, 5, 9, 5)
         card_layout.setSpacing(2)
         label_widget = QLabel(label)
         label_widget.setObjectName("metricLabel")
@@ -284,8 +282,8 @@ class AnalysisView(QWidget):
     def _build_ui(self) -> None:
         self.setObjectName("analysis_view")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 14, 20, 16)
-        layout.setSpacing(10)
+        layout.setContentsMargins(16, 10, 16, 12)
+        layout.setSpacing(8)
         self.tools_panel = AnalysisToolsPanel()
         self.tools_toggle_button = self.tools_panel.parameters_toggle_button
         self.results_area = AnalysisResultsArea()
@@ -302,7 +300,10 @@ class AnalysisView(QWidget):
         self.tools_panel.parameters_toggle_requested.connect(self._toggle_tools_panel)
 
     def _toggle_tools_panel(self) -> None:
-        self._tools_panel_expanded = not self._tools_panel_expanded
+        self._set_tools_panel_expanded(not self._tools_panel_expanded)
+
+    def _set_tools_panel_expanded(self, expanded: bool) -> None:
+        self._tools_panel_expanded = bool(expanded)
         self.tools_panel.parameters_panel.setVisible(self._tools_panel_expanded)
         self.tools_toggle_button.setText(
             "Réduire les réglages" if self._tools_panel_expanded else "Afficher les réglages"
@@ -392,6 +393,7 @@ class AnalysisView(QWidget):
 
         self.current_analysis_result = self.post_processor.current_analysis
         self._update_results_views()
+        self._set_tools_panel_expanded(False)
         quality = self.current_analysis_result.get("quality", {})
         warning_count = sum(len(item.get("warnings", [])) for item in quality.values())
         quality_text = "Validée" if warning_count == 0 else f"{warning_count} alerte(s)"

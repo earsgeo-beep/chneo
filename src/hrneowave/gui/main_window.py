@@ -73,15 +73,15 @@ class ApplicationHeader(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("applicationHeader")
-        self.setFixedHeight(76)
+        self.setFixedHeight(66)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(24, 10, 24, 10)
-        layout.setSpacing(14)
+        layout.setContentsMargins(18, 7, 18, 7)
+        layout.setSpacing(12)
 
         self.sidebar_toggle_button = QPushButton("←")
         self.sidebar_toggle_button.setObjectName("sidebarToggleButton")
-        self.sidebar_toggle_button.setFixedSize(36, 36)
+        self.sidebar_toggle_button.setFixedSize(32, 32)
         self.sidebar_toggle_button.setToolTip("Replier la navigation (F9)")
         self.sidebar_toggle_button.clicked.connect(self.sidebar_toggle_requested.emit)
         layout.addWidget(self.sidebar_toggle_button, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -122,7 +122,7 @@ class MainWindow(QMainWindow):
     def __init__(self, config=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("CHNeoWave")
-        self.setMinimumSize(1180, 760)
+        self.setMinimumSize(1060, 680)
 
         self.config = config or {}
         self.user_preferences = get_user_preferences()

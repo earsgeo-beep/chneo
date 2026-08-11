@@ -40,10 +40,10 @@ class CalibrationMetric(QFrame):
     def __init__(self, label: str, value: str = "—", parent=None):
         super().__init__(parent)
         self.setObjectName("metricCard")
-        self.setMinimumHeight(58)
+        self.setMinimumHeight(50)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setContentsMargins(10, 6, 10, 6)
         layout.setSpacing(1)
 
         label_widget = QLabel(label)
@@ -82,8 +82,8 @@ class CalibrationView(QWidget):
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(20, 14, 20, 16)
-        root.setSpacing(10)
+        root.setContentsMargins(16, 10, 16, 12)
+        root.setSpacing(8)
 
         root.addWidget(self._create_configuration_strip())
 
@@ -93,11 +93,12 @@ class CalibrationView(QWidget):
         self.workspace_splitter.addWidget(self._create_points_panel())
         self.workspace_splitter.setStretchFactor(0, 5)
         self.workspace_splitter.setStretchFactor(1, 3)
-        self.workspace_splitter.setSizes([720, 500])
+        self.workspace_splitter.setHandleWidth(8)
+        self.workspace_splitter.setSizes([760, 420])
         root.addWidget(self.workspace_splitter, 1)
 
         metrics = QHBoxLayout()
-        metrics.setSpacing(10)
+        metrics.setSpacing(8)
         self.sensitivity_metric = CalibrationMetric("SENSIBILITÉ", "— V/unité")
         self.intercept_metric = CalibrationMetric("ORDONNÉE b", "— V")
         self.r_squared_metric = CalibrationMetric("LINÉARITÉ R²", "Non calculée")
@@ -117,8 +118,8 @@ class CalibrationView(QWidget):
         frame = QFrame()
         frame.setObjectName("surface")
         outer_layout = QVBoxLayout(frame)
-        outer_layout.setContentsMargins(16, 10, 16, 12)
-        outer_layout.setSpacing(9)
+        outer_layout.setContentsMargins(12, 8, 12, 9)
+        outer_layout.setSpacing(7)
 
         toolbar = QHBoxLayout()
         toolbar.setSpacing(8)
@@ -141,8 +142,8 @@ class CalibrationView(QWidget):
         outer_layout.addLayout(toolbar)
 
         layout = QGridLayout()
-        layout.setHorizontalSpacing(12)
-        layout.setVerticalSpacing(5)
+        layout.setHorizontalSpacing(10)
+        layout.setVerticalSpacing(4)
 
         self.channel_combo = QComboBox()
         for channel in range(self.channel_count):
@@ -168,7 +169,6 @@ class CalibrationView(QWidget):
             ("Identifiant capteur", self.sensor_id_edit),
             ("Type", self.sensor_type_combo),
             ("Unité physique", self.unit_combo),
-            ("Nombre de points", self.point_count_spin),
         )
         for column, (label, widget) in enumerate(primary_fields):
             label_widget = QLabel(label.upper())
@@ -176,20 +176,23 @@ class CalibrationView(QWidget):
             layout.addWidget(label_widget, 0, column)
             layout.addWidget(widget, 1, column)
 
+        points_label = QLabel("NOMBRE DE POINTS")
+        points_label.setObjectName("metricLabel")
         operator_label = QLabel("OPÉRATEUR")
         operator_label.setObjectName("metricLabel")
         reference_label = QLabel("RÉFÉRENCE MÉTROLOGIQUE UTILISÉE")
         reference_label.setObjectName("metricLabel")
-        layout.addWidget(operator_label, 2, 0, 1, 2)
-        layout.addWidget(reference_label, 2, 2, 1, 3)
-        layout.addWidget(self.operator_edit, 3, 0, 1, 2)
-        layout.addWidget(self.reference_equipment_edit, 3, 2, 1, 3)
+        layout.addWidget(points_label, 2, 0)
+        layout.addWidget(operator_label, 2, 1)
+        layout.addWidget(reference_label, 2, 2, 1, 2)
+        layout.addWidget(self.point_count_spin, 3, 0)
+        layout.addWidget(self.operator_edit, 3, 1)
+        layout.addWidget(self.reference_equipment_edit, 3, 2, 1, 2)
 
         layout.setColumnStretch(0, 1)
         layout.setColumnStretch(1, 2)
         layout.setColumnStretch(2, 1)
-        layout.setColumnStretch(3, 1)
-        layout.setColumnStretch(4, 1)
+        layout.setColumnStretch(3, 2)
         outer_layout.addLayout(layout)
         return frame
 
@@ -197,8 +200,8 @@ class CalibrationView(QWidget):
         panel = QFrame()
         panel.setObjectName("surface")
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(8)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(6)
 
         header = QHBoxLayout()
         title = QLabel("Courbe de linéarité")
@@ -213,7 +216,7 @@ class CalibrationView(QWidget):
         self.figure = Figure(figsize=(7.5, 4.8), tight_layout=True)
         self.canvas = FigureCanvas(self.figure)
         self.canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.canvas.setMinimumSize(400, 230)
+        self.canvas.setMinimumSize(320, 190)
         layout.addWidget(self.canvas, 1)
         self._draw_empty_plot()
         return panel
@@ -221,10 +224,10 @@ class CalibrationView(QWidget):
     def _create_points_panel(self) -> QFrame:
         panel = QFrame()
         panel.setObjectName("surface")
-        panel.setMinimumWidth(400)
+        panel.setMinimumWidth(340)
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(10)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(6)
 
         header = QHBoxLayout()
         title = QLabel("Points de mesure")
@@ -251,27 +254,27 @@ class CalibrationView(QWidget):
         self.points_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.points_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.points_table.setAlternatingRowColors(True)
-        self.points_table.verticalHeader().setDefaultSectionSize(32)
-        self.points_table.setMinimumHeight(150)
+        self.points_table.verticalHeader().setDefaultSectionSize(28)
+        self.points_table.setMinimumHeight(120)
         layout.addWidget(self.points_table, 1)
 
         entry_frame = QFrame()
-        entry_frame.setObjectName("quietSurface")
+        entry_frame.setObjectName("flatPanel")
         entry_layout = QGridLayout(entry_frame)
-        entry_layout.setContentsMargins(12, 10, 12, 10)
-        entry_layout.setHorizontalSpacing(10)
-        entry_layout.setVerticalSpacing(5)
+        entry_layout.setContentsMargins(0, 7, 0, 0)
+        entry_layout.setHorizontalSpacing(8)
+        entry_layout.setVerticalSpacing(4)
         self.selected_point_label = QLabel("Point 1 · zéro")
         self.selected_point_label.setObjectName("sectionTitle")
         self.reference_spin = QDoubleSpinBox()
         self.reference_spin.setRange(-1_000_000.0, 1_000_000.0)
         self.reference_spin.setDecimals(6)
-        self.reference_spin.setMinimumWidth(150)
+        self.reference_spin.setMinimumWidth(110)
         self.measured_voltage_spin = QDoubleSpinBox()
         self.measured_voltage_spin.setRange(-100.0, 100.0)
         self.measured_voltage_spin.setDecimals(8)
         self.measured_voltage_spin.setSuffix(" V")
-        self.measured_voltage_spin.setMinimumWidth(150)
+        self.measured_voltage_spin.setMinimumWidth(110)
         reference_label = QLabel("VALEUR DE RÉFÉRENCE")
         reference_label.setObjectName("metricLabel")
         voltage_label = QLabel("TENSION MESURÉE")
@@ -330,9 +333,7 @@ class CalibrationView(QWidget):
         self._save_active_metadata()
         self.channel_count = requested_count
         self._channel_points = {
-            channel: points
-            for channel, points in self._channel_points.items()
-            if channel < requested_count
+            channel: points for channel, points in self._channel_points.items() if channel < requested_count
         }
         self._channel_metadata = {
             channel: metadata
@@ -340,9 +341,7 @@ class CalibrationView(QWidget):
             if channel < requested_count
         }
         self._channel_records = {
-            channel: record
-            for channel, record in self._channel_records.items()
-            if channel < requested_count
+            channel: record for channel, record in self._channel_records.items() if channel < requested_count
         }
 
         self.channel_combo.blockSignals(True)

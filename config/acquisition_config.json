@@ -1,0 +1,112 @@
+{
+  "schema_version": "1.0",
+  "project_name": "Acquisition_Maritime",
+  "hardware": {
+    "hardware_driver_id": "mcc.universal_library.usb1608fs",
+    "hardware_device_id": "0",
+    "hardware_vendor": "Measurement Computing",
+    "hardware_model": "USB-1608FS",
+    "hardware_serial_number": "14C86D6",
+    "hardware_transport": "USB",
+    "hardware_display_name": "MCC USB-1608FS · carte 0"
+  },
+  "scientific_context": {
+    "water_depth_m": null
+  },
+  "acquisition": {
+    "sample_rate_hz": 1000.0,
+    "duration_seconds": 60.0,
+    "continuous": false,
+    "buffer_samples": 10000
+  },
+  "channels": [
+    {
+      "channel": 0,
+      "enabled": false,
+      "sensor_type": "wave_height",
+      "label": "Canal 0",
+      "range": "±10V",
+      "sensitivity_v_per_unit": 1.0,
+      "physical_unit": "V",
+      "probe_position_m": null,
+      "calibration_record": null
+    },
+    {
+      "channel": 1,
+      "enabled": false,
+      "sensor_type": "pressure",
+      "label": "Canal 1",
+      "range": "±10V",
+      "sensitivity_v_per_unit": 1.0,
+      "physical_unit": "V",
+      "probe_position_m": null,
+      "calibration_record": null
+    },
+    {
+      "channel": 2,
+      "enabled": false,
+      "sensor_type": "accelerometer",
+      "label": "Canal 2",
+      "range": "±10V",
+      "sensitivity_v_per_unit": 1.0,
+      "physical_unit": "V",
+      "probe_position_m": null,
+      "calibration_record": null
+    },
+    {
+      "channel": 3,
+      "enabled": false,
+      "sensor_type": "temperature",
+      "label": "Canal 3",
+      "range": "±10V",
+      "sensitivity_v_per_unit": 1.0,
+      "physical_unit": "V",
+      "probe_position_m": null,
+      "calibration_record": null
+    },
+    {
+      "channel": 4,
+      "enabled": false,
+      "sensor_type": "flow_velocity",
+      "label": "Canal 4",
+      "range": "±10V",
+      "sensitivity_v_per_unit": 1.0,
+      "physical_unit": "V",
+      "probe_position_m": null,
+      "calibration_record": null
+    },
+    {
+      "channel": 5,
+      "enabled": false,
+      "sensor_type": "force",
+      "label": "Canal 5",
+      "range": "±10V",
+      "sensitivity_v_per_unit": 1.0,
+      "physical_unit": "V",
+      "probe_position_m": null,
+      "calibration_record": null
+    },
+    {
+      "channel": 6,
+      "enabled": false,
+      "sensor_type": "displacement",
+      "label": "Canal 6",
+      "range": "±10V",
+      "sensitivity_v_per_unit": 1.0,
+      "physical_unit": "V",
+      "probe_position_m": null,
+      "calibration_record": null
+    },
+    {
+      "channel": 7,
+      "enabled": false,
+      "sensor_type": "strain",
+      "label": "Canal 7",
+      "range": "±10V",
+      "sensitivity_v_per_unit": 1.0,
+      "physical_unit": "V",
+      "probe_position_m": null,
+      "calibration_record": null
+    }
+  ]
+}
