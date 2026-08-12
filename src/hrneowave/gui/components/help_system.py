@@ -162,7 +162,7 @@ class ContextualHelp:
             if context_help and 'tips' in context_help:
                 relevant_tips = [tip for tip in context_help['tips'] if widget_name.split('_')[-1] in tip.lower()]
                 if relevant_tips:
-                    base_tooltip += f"\n\n💡 Conseil: {relevant_tips[0]}"
+                    base_tooltip += f"\n\nConseil : {relevant_tips[0]}"
         
         return base_tooltip
 
@@ -296,7 +296,7 @@ class HelpPanel(QWidget):
         # Conseils
         tips = help_data.get('tips', [])
         if tips:
-            tips_title = QLabel("💡 Conseils")
+            tips_title = QLabel("Conseils techniques")
             tips_font = QFont()
             tips_font.setBold(True)
             tips_title.setFont(tips_font)

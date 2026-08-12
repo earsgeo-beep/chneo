@@ -4,7 +4,7 @@
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtCore import QSize, Qt, Signal, Slot
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -23,7 +23,9 @@ from hrneowave.core.project_manager import get_project_manager
 from .components.help_system import HelpPanel, install_help_on_widget
 from .components.notification_system import show_error, show_info, show_success
 from .components.status_indicators import StatusLevel, SystemStatusWidget
+from .icons import brand_icon, svg_icon
 from .preferences import get_user_preferences
+from .styles.theme_manager import ThemeManager
 from .view_manager import ViewManager
 from .views import VIEWS_CONFIG, DashboardViewMaritime, WelcomeView
 from .widgets.main_sidebar import MainSidebar
@@ -35,6 +37,7 @@ class ApplicationHeader(QFrame):
     """Stable page context bar; navigation remains solely in the sidebar."""
 
     sidebar_toggle_requested = Signal()
+    theme_toggle_requested = Signal()
 
     PAGE_CONTEXT = {
         "welcome": (
@@ -73,15 +76,17 @@ class ApplicationHeader(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("applicationHeader")
-        self.setFixedHeight(66)
+        self._theme = "light"
+        self.setFixedHeight(60)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(18, 7, 18, 7)
-        layout.setSpacing(12)
+        layout.setContentsMargins(14, 6, 14, 6)
+        layout.setSpacing(10)
 
-        self.sidebar_toggle_button = QPushButton("←")
+        self.sidebar_toggle_button = QPushButton()
         self.sidebar_toggle_button.setObjectName("sidebarToggleButton")
         self.sidebar_toggle_button.setFixedSize(32, 32)
+        self.sidebar_toggle_button.setIconSize(QSize(18, 18))
         self.sidebar_toggle_button.setToolTip("Replier la navigation (F9)")
         self.sidebar_toggle_button.clicked.connect(self.sidebar_toggle_requested.emit)
         layout.addWidget(self.sidebar_toggle_button, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -99,9 +104,19 @@ class ApplicationHeader(QFrame):
         title_stack.addWidget(self.subtitle)
 
         layout.addLayout(title_stack, 1)
-        self.mode_badge = QLabel("TRAITEMENT LOCAL")
+        self.hardware_badge = QLabel("MATÉRIEL —")
+        self.hardware_badge.setObjectName("hardwareBadge")
+        self.mode_badge = QLabel("LOCAL")
         self.mode_badge.setObjectName("offlineBadge")
+        self.theme_toggle_button = QPushButton()
+        self.theme_toggle_button.setObjectName("themeToggleButton")
+        self.theme_toggle_button.setFixedSize(32, 32)
+        self.theme_toggle_button.setIconSize(QSize(17, 17))
+        self.theme_toggle_button.clicked.connect(self.theme_toggle_requested.emit)
+        layout.addWidget(self.hardware_badge, 0, Qt.AlignmentFlag.AlignVCenter)
         layout.addWidget(self.mode_badge, 0, Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(self.theme_toggle_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.set_theme("light")
         self.set_view("welcome")
 
     def set_view(self, view_name: str) -> None:
@@ -113,6 +128,28 @@ class ApplicationHeader(QFrame):
         self.title.setText(title)
         self.subtitle.setText(subtitle)
 
+    def set_theme(self, theme: str) -> None:
+        self._theme = "dark" if theme == "dark" else "light"
+        color = "#B9C9D1" if self._theme == "dark" else "#405965"
+        self.sidebar_toggle_button.setIcon(svg_icon("collapse", color, 18))
+        next_icon = "sun" if self._theme == "dark" else "moon"
+        self.theme_toggle_button.setIcon(svg_icon(next_icon, color, 17))
+        target = "clair" if self._theme == "dark" else "sombre"
+        self.theme_toggle_button.setToolTip(f"Passer au thème {target}")
+
+    def set_sidebar_collapsed(self, collapsed: bool) -> None:
+        color = "#B9C9D1" if self._theme == "dark" else "#405965"
+        self.sidebar_toggle_button.setIcon(svg_icon("expand" if collapsed else "collapse", color, 18))
+        self.sidebar_toggle_button.setToolTip(
+            "Ouvrir la navigation (F9)" if collapsed else "Replier la navigation (F9)"
+        )
+
+    def set_hardware_state(self, connected: bool) -> None:
+        self.hardware_badge.setText("MATÉRIEL CONNECTÉ" if connected else "MATÉRIEL —")
+        self.hardware_badge.setProperty("connected", "true" if connected else "false")
+        self.hardware_badge.style().unpolish(self.hardware_badge)
+        self.hardware_badge.style().polish(self.hardware_badge)
+
 
 class MainWindow(QMainWindow):
     """Fenetre principale de l'application."""
@@ -122,6 +159,7 @@ class MainWindow(QMainWindow):
     def __init__(self, config=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("CHNeoWave")
+        self.setWindowIcon(brand_icon())
         self.setMinimumSize(1060, 680)
 
         self.config = config or {}
@@ -139,8 +177,11 @@ class MainWindow(QMainWindow):
 
         self.sidebar.navigation_requested.connect(self._on_navigation_requested)
         self.application_header.sidebar_toggle_requested.connect(self._toggle_sidebar)
+        self.application_header.theme_toggle_requested.connect(self.theme_manager.toggle_theme)
+        self.theme_manager.theme_changed.connect(self._apply_theme_to_workspace)
         self.sidebar_shortcut = QShortcut(QKeySequence("F9"), self)
         self.sidebar_shortcut.activated.connect(self._toggle_sidebar)
+        self._apply_theme_to_workspace(self.theme_manager.get_current_theme())
 
         self.show()
         self.raise_()
@@ -149,6 +190,13 @@ class MainWindow(QMainWindow):
         logger.info("MainWindow initialisee")
 
     def _build_ui(self) -> None:
+        app = QApplication.instance()
+        self.theme_manager = getattr(app, "theme_manager", None)
+        if self.theme_manager is None and app is not None:
+            self.theme_manager = ThemeManager(app)
+            app.theme_manager = self.theme_manager
+            self.theme_manager.apply_theme()
+
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
@@ -232,6 +280,9 @@ class MainWindow(QMainWindow):
             )
         if acquisition_view and hasattr(acquisition_view, "hardware_state_changed"):
             acquisition_view.hardware_state_changed.connect(self.sidebar.update_connection_status)
+            acquisition_view.hardware_state_changed.connect(
+                lambda connected, _message="": self.application_header.set_hardware_state(connected)
+            )
         if (
             acquisition_view
             and calibration_view
@@ -296,10 +347,19 @@ class MainWindow(QMainWindow):
     def _toggle_sidebar(self) -> None:
         collapsed = not self.sidebar.is_collapsed
         self.sidebar.collapse_sidebar(collapsed)
-        self.application_header.sidebar_toggle_button.setText("☰" if collapsed else "←")
-        self.application_header.sidebar_toggle_button.setToolTip(
-            "Ouvrir la navigation (F9)" if collapsed else "Replier la navigation (F9)"
-        )
+        self.application_header.set_sidebar_collapsed(collapsed)
+
+    @Slot(str)
+    def _apply_theme_to_workspace(self, theme: str) -> None:
+        self.sidebar.set_theme(theme)
+        self.application_header.set_theme(theme)
+        self.application_header.set_sidebar_collapsed(self.sidebar.is_collapsed)
+        for view in self.view_manager.views.values():
+            if hasattr(view, "set_theme"):
+                try:
+                    view.set_theme(theme == "dark")
+                except TypeError:
+                    view.set_theme(theme)
 
     def _handle_project_creation(self, project_metadata=None) -> None:
         metadata = dict(project_metadata or {})

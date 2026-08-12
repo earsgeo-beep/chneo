@@ -24,6 +24,7 @@ Le depot ne doit plus etre lu comme un prototype web ni comme une release autono
    data_analysis
    scientific_processing_v2
    scientific_analysis_workspace
+   instrument_interface
    interface_design
    laboratory_platform_architecture_2026-08-09
 
@@ -50,7 +51,7 @@ Demarrage rapide
 Points a retenir
 ----------------
 
-- ``PySide6`` est requis dans l'etat actuel du depot
+- Python 3.12 ou plus recent et ``PySide6`` 6.11 sont requis
 - ``pandas`` est necessaire pour certains flux CSV
 - ``h5py`` est necessaire pour le support HDF5
 - le premier pilote livre cible la MCC USB-1608FS

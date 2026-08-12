@@ -24,9 +24,11 @@ The operator can select:
 * logarithmic or linear PSD scale, approximate 95 percent confidence band and
   cumulative spectral energy.
 
-The Matplotlib navigation toolbar is present on every scientific figure. Home,
-back, forward, pan, zoom, subplot adjustment and figure export therefore work
-without modifying the source record.
+Interactive time, PSD and incident/reflected plots use PyQtGraph 0.14. They
+provide native wheel zoom, drag navigation, high-volume peak downsampling,
+crosshair readout, automatic range, selectable analysis interval and PNG
+export without modifying the source record. Matplotlib remains the static
+publication backend used by the reproducible scientific report.
 
 Scientific results
 ------------------

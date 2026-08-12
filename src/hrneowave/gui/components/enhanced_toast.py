@@ -20,6 +20,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QFont, QPainter, QPainterPath, QColor
 
 from .material.theme import MaterialTheme, MaterialColor
+from ..icons import svg_icon
 
 
 class ToastLevel(Enum):
@@ -34,11 +35,11 @@ class ToastLevel(Enum):
 class ToastIcon:
     """Icônes Material Design pour les toasts"""
     ICONS = {
-        ToastLevel.SUCCESS: "✓",  # Check circle
-        ToastLevel.INFO: "ⓘ",     # Info circle
-        ToastLevel.WARNING: "⚠",   # Warning triangle
-        ToastLevel.ERROR: "✕",     # Error circle
-        ToastLevel.CRITICAL: "⚡"   # Critical bolt
+        ToastLevel.SUCCESS: "check",
+        ToastLevel.INFO: "info",
+        ToastLevel.WARNING: "warning",
+        ToastLevel.ERROR: "error",
+        ToastLevel.CRITICAL: "error",
     }
     
     @classmethod
@@ -124,7 +125,6 @@ class EnhancedToast(QWidget):
         
         # Icône
         self.icon_label = QLabel()
-        self.icon_label.setText(ToastIcon.get_icon(self.level))
         self.icon_label.setAlignment(Qt.AlignCenter)
         self.icon_label.setFixedSize(24, 24)
         
@@ -186,6 +186,9 @@ class EnhancedToast(QWidget):
         }
         
         colors = color_schemes.get(self.level, color_schemes[ToastLevel.INFO])
+        self.icon_label.setPixmap(
+            svg_icon(ToastIcon.get_icon(self.level), colors["icon"], 20).pixmap(20, 20)
+        )
         
         # Style du container
         container_style = f"""

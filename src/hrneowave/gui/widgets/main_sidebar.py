@@ -1,60 +1,71 @@
-"""Primary application navigation for CHNeoWave."""
+"""Primary instrument navigation for CHNeoWave."""
 
-from PySide6.QtCore import Qt, Signal
+from __future__ import annotations
+
+from PySide6.QtCore import QSize, Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+
+from ..icons import BrandMark, svg_icon
 
 
 class NavigationButton(QPushButton):
-    """Compact navigation row whose state is controlled by the global QSS."""
+    """Compact navigation row with a stable vector symbol."""
 
-    def __init__(self, index: str, text: str, parent=None):
-        self.index = index
+    def __init__(self, icon_name: str, text: str, parent=None):
+        self.icon_name = icon_name
         self.label = text
-        super().__init__(self._expanded_text(), parent)
+        self._collapsed = False
+        self._active = False
+        super().__init__(text, parent)
         self.setObjectName("navButton")
         self.setCheckable(True)
         self.setProperty("active", "false")
         self.setToolTip(text)
-
-    def _expanded_text(self) -> str:
-        return f"{self.index}    {self.label}" if self.index else self.label
+        self.setIconSize(QSize(18, 18))
+        self._update_icon()
 
     def set_collapsed(self, collapsed: bool) -> None:
-        self.setText(self.index or "S")
-        self.setProperty("collapsed", "true" if collapsed else "false")
-        if not collapsed:
-            self.setText(self._expanded_text())
+        self._collapsed = bool(collapsed)
+        self.setText("" if self._collapsed else self.label)
+        self.setProperty("collapsed", "true" if self._collapsed else "false")
         self.style().unpolish(self)
         self.style().polish(self)
 
     def set_active(self, active: bool) -> None:
-        self.setChecked(active)
-        self.setProperty("active", "true" if active else "false")
+        self._active = bool(active)
+        self.setChecked(self._active)
+        self.setProperty("active", "true" if self._active else "false")
+        self._update_icon()
         self.style().unpolish(self)
         self.style().polish(self)
         self.update()
 
+    def _update_icon(self) -> None:
+        color = "#E9FBFD" if self._active else "#8EA6B2"
+        self.setIcon(svg_icon(self.icon_name, color, 18))
+
 
 class MainSidebar(QFrame):
-    """Single, restrained navigation rail for the laboratory workflow."""
+    """Collapsible navigation rail for the laboratory workflow."""
 
     navigation_requested = Signal(str)
 
     NAVIGATION = (
-        ("welcome", "01", "Projets"),
-        ("dashboard", "02", "Vue système"),
-        ("calibration", "03", "Calibration"),
-        ("acquisition", "04", "Acquisition"),
-        ("analysis", "05", "Analyse"),
-        ("export", "06", "Rapport"),
+        ("welcome", "project", "Projets"),
+        ("dashboard", "system", "Vue système"),
+        ("calibration", "calibration", "Calibration"),
+        ("acquisition", "acquisition", "Acquisition"),
+        ("analysis", "analysis", "Traitement"),
+        ("export", "report", "Rapport"),
     )
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("main_sidebar")
         self.current_view = "welcome"
-        self.navigation_buttons = {}
+        self.navigation_buttons: dict[str, NavigationButton] = {}
         self.is_collapsed = False
+        self._theme = "light"
         self._build_ui()
         self.collapse_sidebar(False)
         self.set_active_view("welcome")
@@ -66,78 +77,72 @@ class MainSidebar(QFrame):
 
         header = QFrame()
         header.setObjectName("sidebar_header")
-        header.setFixedHeight(66)
+        header.setFixedHeight(60)
         self.header_layout = QHBoxLayout(header)
-        self.header_layout.setContentsMargins(18, 10, 14, 10)
-        header_layout = self.header_layout
-        header_layout.setSpacing(11)
+        self.header_layout.setContentsMargins(14, 8, 12, 8)
+        self.header_layout.setSpacing(10)
 
-        mark = QLabel("CN")
-        mark.setObjectName("brandMark")
-        mark.setFixedSize(36, 36)
-        mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
+        self.mark = BrandMark(size=34)
         brand_layout = QVBoxLayout()
-        brand_layout.setSpacing(1)
+        brand_layout.setSpacing(0)
         self.brand = QLabel("CHNeoWave")
         self.brand.setObjectName("brandName")
-        self.descriptor = QLabel("MARITIME LAB")
+        self.descriptor = QLabel("MARITIME INSTRUMENTS")
         self.descriptor.setObjectName("brandDescriptor")
         brand_layout.addWidget(self.brand)
         brand_layout.addWidget(self.descriptor)
 
-        header_layout.addWidget(mark)
-        header_layout.addLayout(brand_layout)
-        header_layout.addStretch()
+        self.header_layout.addWidget(self.mark)
+        self.header_layout.addLayout(brand_layout)
+        self.header_layout.addStretch()
         root.addWidget(header)
 
         nav_container = QFrame()
         nav_layout = QVBoxLayout(nav_container)
-        nav_layout.setContentsMargins(0, 14, 0, 10)
+        nav_layout.setContentsMargins(0, 12, 0, 8)
         nav_layout.setSpacing(2)
 
-        self.workflow_section = QLabel("FLUX DE TRAVAIL")
+        self.workflow_section = QLabel("CHAÎNE DE MESURE")
         self.workflow_section.setObjectName("navSection")
-        self.workflow_section.setContentsMargins(18, 0, 0, 8)
+        self.workflow_section.setContentsMargins(14, 0, 0, 7)
         nav_layout.addWidget(self.workflow_section)
 
-        for name, index, label in self.NAVIGATION:
-            button = NavigationButton(index, label)
+        for name, icon_name, label in self.NAVIGATION:
+            button = NavigationButton(icon_name, label)
             button.clicked.connect(lambda checked=False, view_name=name: self.navigate_to(view_name))
             self.navigation_buttons[name] = button
             nav_layout.addWidget(button)
 
-        nav_layout.addSpacing(16)
+        nav_layout.addStretch()
         self.support_section = QLabel("SYSTÈME")
         self.support_section.setObjectName("navSection")
-        self.support_section.setContentsMargins(18, 0, 0, 8)
+        self.support_section.setContentsMargins(14, 0, 0, 7)
         nav_layout.addWidget(self.support_section)
 
-        settings = NavigationButton("", "Paramètres")
+        settings = NavigationButton("settings", "Paramètres")
         settings.clicked.connect(lambda: self.navigate_to("settings"))
         self.navigation_buttons["settings"] = settings
         nav_layout.addWidget(settings)
-        nav_layout.addStretch()
         root.addWidget(nav_container, 1)
 
         footer = QFrame()
         footer.setObjectName("sidebar_footer")
-        footer.setFixedHeight(54)
+        footer.setFixedHeight(48)
         self.footer_layout = QHBoxLayout(footer)
-        self.footer_layout.setContentsMargins(18, 10, 14, 10)
-        footer_layout = self.footer_layout
-        footer_layout.setSpacing(8)
-        self.status_dot = QLabel("●")
+        self.footer_layout.setContentsMargins(15, 8, 12, 8)
+        self.footer_layout.setSpacing(9)
+        self.status_dot = QFrame()
         self.status_dot.setObjectName("sidebarStatusDot")
         self.status_dot.setProperty("connected", "false")
-        self.status_text = QLabel("Système prêt · hors ligne")
+        self.status_dot.setFixedSize(8, 8)
+        self.status_text = QLabel("Local · matériel non connecté")
         self.status_text.setObjectName("sidebarStatus")
         self.version = QLabel("v1.1")
         self.version.setObjectName("sidebarVersion")
-        footer_layout.addWidget(self.status_dot)
-        footer_layout.addWidget(self.status_text)
-        footer_layout.addStretch()
-        footer_layout.addWidget(self.version)
+        self.footer_layout.addWidget(self.status_dot)
+        self.footer_layout.addWidget(self.status_text)
+        self.footer_layout.addStretch()
+        self.footer_layout.addWidget(self.version)
         root.addWidget(footer)
 
     def navigate_to(self, view_name: str) -> None:
@@ -152,21 +157,22 @@ class MainSidebar(QFrame):
         self.current_view = view_name
 
     def set_active_view(self, view_name: str) -> None:
-        """Synchronise l'état visuel sans réémettre une navigation."""
-
         if view_name in self.navigation_buttons:
             self._apply_active_state(view_name)
 
     def get_active_view(self) -> str:
         return self.current_view
 
-    def set_theme(self, is_dark: bool) -> None:
-        del is_dark
+    def set_theme(self, theme: str | bool) -> None:
+        self._theme = "dark" if theme is True or theme == "dark" else "light"
+        self.mark.set_theme(self._theme)
+        for button in self.navigation_buttons.values():
+            button._update_icon()
 
     def collapse_sidebar(self, collapsed: bool) -> None:
         self.is_collapsed = bool(collapsed)
         self.setProperty("collapsed", "true" if self.is_collapsed else "false")
-        self.setFixedWidth(72 if self.is_collapsed else 248)
+        self.setFixedWidth(58 if self.is_collapsed else 224)
 
         self.brand.setVisible(not self.is_collapsed)
         self.descriptor.setVisible(not self.is_collapsed)
@@ -175,13 +181,13 @@ class MainSidebar(QFrame):
         self.status_text.setVisible(not self.is_collapsed)
         self.version.setVisible(not self.is_collapsed)
 
-        self.header_layout.setContentsMargins(18, 10, 14 if not self.is_collapsed else 18, 10)
-        self.header_layout.setSpacing(0 if self.is_collapsed else 11)
+        self.header_layout.setContentsMargins(12 if self.is_collapsed else 14, 8, 12, 8)
+        self.header_layout.setSpacing(0 if self.is_collapsed else 10)
         self.footer_layout.setContentsMargins(
-            18 if not self.is_collapsed else 28,
-            10,
-            14 if not self.is_collapsed else 28,
-            10,
+            25 if self.is_collapsed else 15,
+            8,
+            25 if self.is_collapsed else 12,
+            8,
         )
         for button in self.navigation_buttons.values():
             button.set_collapsed(self.is_collapsed)
@@ -196,5 +202,5 @@ class MainSidebar(QFrame):
         if message:
             self.status_text.setText(message)
         else:
-            state = "connecté" if connected else "hors ligne"
-            self.status_text.setText(f"Système prêt · {state}")
+            state = "matériel connecté" if connected else "matériel non connecté"
+            self.status_text.setText(f"Local · {state}")

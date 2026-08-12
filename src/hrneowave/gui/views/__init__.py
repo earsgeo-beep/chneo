@@ -74,48 +74,48 @@ __version__ = '2.0.0'
 VIEWS_CONFIG = {
     'welcome': {
         'class': 'WelcomeView',
-        'title': '👋 Bienvenue',
-        'icon': '👋',
+        'title': 'Projets',
+        'icon': 'project',
         'description': 'Écran d\'accueil et création de projet'
     },
     'dashboard': {
         'class': 'DashboardViewMaritime',
-        'title': '🏠 Tableau de Bord',
-        'icon': '🏠',
+        'title': 'Vue système',
+        'icon': 'system',
         'description': 'Vue d\'ensemble du système et monitoring'
     },
     'calibration': {
         'class': 'CalibrationView', 
-        'title': '⚖️ Calibration',
-        'icon': '⚖️',
+        'title': 'Calibration',
+        'icon': 'calibration',
         'description': 'Calibration unifiée des capteurs',
         'loader': get_calibration_view
     },
     'acquisition': {
         'class': 'AcquisitionConfigView',
-        'title': '📊 Acquisition',
-        'icon': '📊', 
+        'title': 'Acquisition',
+        'icon': 'acquisition',
         'description': 'Acquisition de données en temps réel',
         'loader': get_acquisition_view
     },
     'analysis': {
         'class': 'AnalysisView',
-        'title': '🔬 Analyse',
-        'icon': '🔬',
+        'title': 'Traitement',
+        'icon': 'analysis',
         'description': 'Analyse et traitement des données',
         'loader': get_analysis_view
     },
     'export': {
         'class': 'ExportView',
-        'title': '📋 Export',
-        'icon': '📋',
+        'title': 'Rapport',
+        'icon': 'report',
         'description': 'Export et génération de rapports',
         'loader': get_export_view
     },
     'settings': {
         'class': 'SettingsView',
-        'title': '⚙️ Paramètres',
-        'icon': '⚙️',
+        'title': 'Paramètres',
+        'icon': 'settings',
         'description': 'Configuration du système',
         'loader': get_settings_view
     }

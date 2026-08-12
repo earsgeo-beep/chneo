@@ -7,18 +7,19 @@ name = "chneowave"
 dynamic = ["version"]
 description = "Plateforme de laboratoire pour l'acquisition et l'analyse de donnees maritimes"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 authors = [
   { name = "Laboratoire d'Etudes Maritimes" },
 ]
 dependencies = [
-  "PySide6>=6.5,<7",
-  "numpy>=1.24,<3",
-  "pandas>=2,<3",
-  "h5py>=3.9,<4",
-  "scipy>=1.10,<2",
-  "matplotlib>=3.7,<4",
-  "reportlab>=4,<5",
+  "PySide6>=6.11,<7",
+  "numpy>=2.5,<3",
+  "pandas>=3,<4",
+  "h5py>=3.16,<4",
+  "scipy>=1.18,<2",
+  "matplotlib>=3.11,<4",
+  "pyqtgraph>=0.14,<0.15",
+  "reportlab>=4.5,<5",
 ]
 
 [project.optional-dependencies]
@@ -48,7 +49,7 @@ testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py312"
 line-length = 110
 
 [tool.ruff.lint]

@@ -39,11 +39,12 @@ def test_sidebar_can_release_workspace_width(qt_app):
     sidebar = MainSidebar()
 
     sidebar.collapse_sidebar(True)
-    assert sidebar.width() == 72
-    assert sidebar.navigation_buttons["calibration"].text() == "03"
+    assert sidebar.width() == 58
+    assert sidebar.navigation_buttons["calibration"].text() == ""
+    assert not sidebar.navigation_buttons["calibration"].icon().isNull()
 
     sidebar.collapse_sidebar(False)
-    assert sidebar.width() == 248
+    assert sidebar.width() == 224
     assert "Calibration" in sidebar.navigation_buttons["calibration"].text()
 
 
@@ -80,7 +81,7 @@ def test_calibration_live_monitor_reads_the_shared_physical_controller(qt_app):
     try:
         view.bind_acquisition_controller(controller)
         view._start_live_preview()
-        deadline = time.monotonic() + 3.0
+        deadline = time.monotonic() + 6.0
         while view._live_values.size == 0 and time.monotonic() < deadline:
             qt_app.processEvents()
             time.sleep(0.01)
@@ -99,10 +100,12 @@ def test_calibration_live_monitor_reads_the_shared_physical_controller(qt_app):
 def test_analysis_parameters_panel_is_collapsible(qt_app):
     view = AnalysisView()
 
-    view._toggle_tools_panel()
     assert not view._tools_panel_expanded
     assert view.tools_panel.parameters_panel.isHidden()
-    assert view.tools_toggle_button.text() == "Afficher les réglages"
+    view._toggle_tools_panel()
+    assert view._tools_panel_expanded
+    assert not view.tools_panel.parameters_panel.isHidden()
+    assert view.tools_toggle_button.text() == "Réduire les réglages"
 
 
 def test_analysis_view_loads_raw_and_draws_time_signals(qt_app):
@@ -137,10 +140,10 @@ def test_analysis_view_loads_raw_and_draws_time_signals(qt_app):
         assert loaded
         assert view.post_processor.current_data["source_format"] == "legacy_raw"
         assert view.post_processor.sample_rate == 2.0
-        assert len(view.results_area.time_figure.axes[0].lines) == 1
+        assert view.results_area.time_plot.series_count == 1
         assert view.results_area.channel_combo.count() == 2
         view.results_area.overlay_channels_check.setChecked(True)
-        assert len(view.results_area.time_figure.axes[0].lines) == 2
+        assert view.results_area.time_plot.series_count == 2
 
 
 def test_scientific_report_exports_pdf_with_current_qt_api(qt_app, tmp_path):

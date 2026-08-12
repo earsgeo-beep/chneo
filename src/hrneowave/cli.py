@@ -126,7 +126,8 @@ def run_gui(debug: bool = False) -> int:
     logger.info("Qt binding chargé: %s", binding_name)
 
     theme_manager = ThemeManager(app)
-    theme_manager.apply_theme("laboratory")
+    app.theme_manager = theme_manager
+    theme_manager.apply_theme()
 
     logger.info("Creating MainWindow...")
     window = MainWindow()

@@ -27,6 +27,7 @@ from PySide6.QtGui import QFont, QPixmap, QIcon, QPainter, QPen, QBrush, QColor
 
 from .material_components import MaterialButton, MaterialCard
 from .status_indicators import StatusLevel
+from ..icons import svg_icon
 
 
 class NotificationType(Enum):
@@ -171,15 +172,15 @@ class ToastNotification(QWidget):
     def _set_icon(self):
         """Définit l'icône selon le type de notification"""
         icons = {
-            NotificationType.INFO: "ℹ️",
-            NotificationType.SUCCESS: "✅",
-            NotificationType.WARNING: "⚠️",
-            NotificationType.ERROR: "❌",
-            NotificationType.CRITICAL: "🚨"
+            NotificationType.INFO: ("info", "#137E92"),
+            NotificationType.SUCCESS: ("check", "#126A56"),
+            NotificationType.WARNING: ("warning", "#C47B18"),
+            NotificationType.ERROR: ("error", "#A23F45"),
+            NotificationType.CRITICAL: ("error", "#A23F45"),
         }
-        
-        icon_text = icons.get(self.notification.type, "ℹ️")
-        self.icon_label.setText(icon_text)
+
+        icon_name, color = icons.get(self.notification.type, icons[NotificationType.INFO])
+        self.icon_label.setPixmap(svg_icon(icon_name, color, 20).pixmap(20, 20))
         self.icon_label.setAlignment(Qt.AlignCenter)
     
     def _apply_style(self):

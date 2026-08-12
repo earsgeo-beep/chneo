@@ -3,10 +3,7 @@
 from pathlib import Path
 
 import numpy as np
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
-from matplotlib.figure import Figure
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QSize, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -39,6 +36,19 @@ from ...core.legacy_raw import (
 )
 from ...core.post_processor import PostProcessor
 from ...core.scientific_report import build_scientific_report_text
+from ..icons import svg_icon
+from ..widgets.scientific_plot import PLOT_PALETTES, PlotSeries, ScientificPlotWidget
+
+CHANNEL_COLORS = (
+    "#22A7BC",
+    "#E59B35",
+    "#6EA86B",
+    "#A178C2",
+    "#D66C78",
+    "#4F86C6",
+    "#8A9EA8",
+    "#B78A55",
+)
 
 
 class LegacyRawImportDialog(QDialog):
@@ -179,6 +189,7 @@ class AnalysisToolsPanel(QFrame):
         source_row.addWidget(self.load_button)
         source_row.addWidget(self.refresh_button)
         source_row.addWidget(self.parameters_toggle_button)
+        source_row.addWidget(self.run_button)
         layout.addLayout(source_row)
 
         self.parameters_panel = QFrame()
@@ -275,7 +286,6 @@ class AnalysisToolsPanel(QFrame):
         actions_row.addWidget(self.export_format_combo)
         actions_row.addWidget(self.export_button)
         actions_row.addStretch()
-        actions_row.addWidget(self.run_button)
         parameters_layout.addLayout(actions_row)
         layout.addWidget(self.parameters_panel)
 
@@ -366,8 +376,6 @@ class AnalysisResultsArea(QFrame):
         self.quality_table.horizontalHeader().setStretchLastSection(True)
         self.tab_widget.addTab(self.quality_table, "Diagnostic qualité")
 
-        self.time_figure = Figure(figsize=(7, 4), tight_layout=True)
-        self.time_canvas = FigureCanvas(self.time_figure)
         time_page = QWidget()
         time_layout = QVBoxLayout(time_page)
         time_layout.setContentsMargins(4, 4, 4, 4)
@@ -382,6 +390,14 @@ class AnalysisResultsArea(QFrame):
         self.std_guides_check = QCheckBox("Repères ±σ")
         self.time_cursor_label = QLabel("Curseur : —")
         self.time_cursor_label.setObjectName("mutedText")
+        self.time_fit_button = self._plot_button("fit", "Ajuster le signal à la fenêtre")
+        self.time_cursor_button = self._plot_button(
+            "cursor", "Activer le curseur de mesure", checkable=True, checked=True
+        )
+        self.time_region_button = self._plot_button(
+            "region", "Sélectionner l'intervalle analysé", checkable=True
+        )
+        self.time_export_button = self._plot_button("image", "Exporter le graphe en PNG")
         time_controls.addWidget(QLabel("CANAL"))
         time_controls.addWidget(self.channel_combo)
         time_controls.addWidget(self.overlay_channels_check)
@@ -390,13 +406,20 @@ class AnalysisResultsArea(QFrame):
         time_controls.addWidget(self.std_guides_check)
         time_controls.addStretch()
         time_controls.addWidget(self.time_cursor_label)
+        time_controls.addWidget(self.time_cursor_button)
+        time_controls.addWidget(self.time_region_button)
+        time_controls.addWidget(self.time_fit_button)
+        time_controls.addWidget(self.time_export_button)
         time_layout.addLayout(time_controls)
-        time_layout.addWidget(NavigationToolbar(self.time_canvas, time_page))
-        time_layout.addWidget(self.time_canvas, 1)
+        self.time_plot = ScientificPlotWidget(
+            x_label="Temps",
+            x_unit="s",
+            y_label="Amplitude",
+        )
+        self.time_canvas = self.time_plot
+        time_layout.addWidget(self.time_plot, 1)
         self.tab_widget.addTab(time_page, "Signal temporel")
 
-        self.spectrum_figure = Figure(figsize=(7, 4), tight_layout=True)
-        self.spectrum_canvas = FigureCanvas(self.spectrum_figure)
         spectrum_page = QWidget()
         spectrum_layout = QVBoxLayout(spectrum_page)
         spectrum_layout.setContentsMargins(4, 4, 4, 4)
@@ -410,30 +433,86 @@ class AnalysisResultsArea(QFrame):
         self.cumulative_energy_check = QCheckBox("Énergie cumulée")
         self.spectrum_readout_label = QLabel("Pic : —")
         self.spectrum_readout_label.setObjectName("mutedText")
+        self.spectrum_fit_button = self._plot_button("fit", "Ajuster le spectre à la fenêtre")
+        self.spectrum_export_button = self._plot_button("image", "Exporter le spectre en PNG")
         spectrum_controls.addWidget(self.spectrum_scale_combo)
         spectrum_controls.addWidget(self.confidence_interval_check)
         spectrum_controls.addWidget(self.cumulative_energy_check)
         spectrum_controls.addStretch()
         spectrum_controls.addWidget(self.spectrum_readout_label)
+        spectrum_controls.addWidget(self.spectrum_fit_button)
+        spectrum_controls.addWidget(self.spectrum_export_button)
         spectrum_layout.addLayout(spectrum_controls)
-        spectrum_layout.addWidget(NavigationToolbar(self.spectrum_canvas, spectrum_page))
-        spectrum_layout.addWidget(self.spectrum_canvas, 1)
+        self.spectrum_plot = ScientificPlotWidget(
+            x_label="Fréquence",
+            x_unit="Hz",
+            y_label="Densité spectrale",
+        )
+        self.spectrum_canvas = self.spectrum_plot
+        spectrum_layout.addWidget(self.spectrum_plot, 1)
         self.tab_widget.addTab(spectrum_page, "Spectre / PSD")
 
-        self.separation_figure = Figure(figsize=(7, 4), tight_layout=True)
-        self.separation_canvas = FigureCanvas(self.separation_figure)
         separation_page = QWidget()
         separation_layout = QVBoxLayout(separation_page)
         separation_layout.setContentsMargins(4, 4, 4, 4)
-        separation_layout.addWidget(NavigationToolbar(self.separation_canvas, separation_page))
-        separation_layout.addWidget(self.separation_canvas, 1)
+        separation_header = QHBoxLayout()
+        self.separation_readout_label = QLabel("Séparation incidente / réfléchie non calculée")
+        self.separation_readout_label.setObjectName("mutedText")
+        self.separation_fit_button = self._plot_button("fit", "Ajuster les spectres à la fenêtre")
+        self.separation_export_button = self._plot_button("image", "Exporter le graphe en PNG")
+        separation_header.addWidget(self.separation_readout_label)
+        separation_header.addStretch()
+        separation_header.addWidget(self.separation_fit_button)
+        separation_header.addWidget(self.separation_export_button)
+        separation_layout.addLayout(separation_header)
+        self.separation_plot = ScientificPlotWidget(
+            x_label="Fréquence",
+            x_unit="Hz",
+            y_label="Densité spectrale",
+        )
+        self.separation_canvas = self.separation_plot
+        separation_layout.addWidget(self.separation_plot, 1)
         self.tab_widget.addTab(separation_page, "Incidente / réfléchie")
 
         self.report_text = QTextEdit()
         self.report_text.setReadOnly(True)
         self.tab_widget.addTab(self.report_text, "Rapport")
+        self.tab_widget.setCurrentWidget(time_page)
 
         layout.addWidget(self.tab_widget)
+
+    @staticmethod
+    def _plot_button(
+        icon_name: str,
+        tooltip: str,
+        *,
+        checkable: bool = False,
+        checked: bool = False,
+    ) -> QPushButton:
+        button = QPushButton()
+        button.setProperty("kind", "icon")
+        button.setIcon(svg_icon(icon_name, "#667C88", 17))
+        button.setIconSize(QSize(17, 17))
+        button.setToolTip(tooltip)
+        button.setCheckable(checkable)
+        button.setChecked(checked)
+        return button
+
+    def set_theme(self, theme: str) -> None:
+        for plot in (self.time_plot, self.spectrum_plot, self.separation_plot):
+            plot.set_theme(theme)
+        color = "#B9C9D1" if theme == "dark" else "#667C88"
+        for button, icon_name in (
+            (self.time_fit_button, "fit"),
+            (self.time_cursor_button, "cursor"),
+            (self.time_region_button, "region"),
+            (self.time_export_button, "image"),
+            (self.spectrum_fit_button, "fit"),
+            (self.spectrum_export_button, "image"),
+            (self.separation_fit_button, "fit"),
+            (self.separation_export_button, "image"),
+        ):
+            button.setIcon(svg_icon(icon_name, color, 17))
 
     @staticmethod
     def _metric_card(label: str, value: str) -> QFrame:
@@ -479,10 +558,11 @@ class AnalysisView(QWidget):
         self.current_project_metadata: dict[str, object] = {}
         self.current_data_file: str | None = None
         self.current_analysis_result: dict[str, object] | None = None
-        self._tools_panel_expanded = True
+        self._tools_panel_expanded = False
 
         self._build_ui()
         self._setup_connections()
+        self._set_tools_panel_expanded(False)
 
     def _build_ui(self) -> None:
         self.setObjectName("analysis_view")
@@ -508,12 +588,25 @@ class AnalysisView(QWidget):
         self.results_area.raw_signal_check.toggled.connect(self._update_time_plot)
         self.results_area.center_signal_check.toggled.connect(self._update_time_plot)
         self.results_area.std_guides_check.toggled.connect(self._update_time_plot)
-        self.results_area.spectrum_scale_combo.currentIndexChanged.connect(
-            self._update_spectrum_plot
-        )
+        self.results_area.spectrum_scale_combo.currentIndexChanged.connect(self._update_spectrum_plot)
         self.results_area.confidence_interval_check.toggled.connect(self._update_spectrum_plot)
         self.results_area.cumulative_energy_check.toggled.connect(self._update_spectrum_plot)
-        self.results_area.time_canvas.mpl_connect("motion_notify_event", self._on_time_cursor_moved)
+        self.results_area.time_plot.cursor_moved.connect(self._on_time_cursor_moved)
+        self.results_area.time_plot.region_changed.connect(self._on_time_region_changed)
+        self.results_area.time_cursor_button.toggled.connect(self.results_area.time_plot.set_cursor_enabled)
+        self.results_area.time_region_button.toggled.connect(self.results_area.time_plot.set_region_enabled)
+        self.results_area.time_fit_button.clicked.connect(self.results_area.time_plot.auto_range)
+        self.results_area.spectrum_fit_button.clicked.connect(self.results_area.spectrum_plot.auto_range)
+        self.results_area.separation_fit_button.clicked.connect(self.results_area.separation_plot.auto_range)
+        self.results_area.time_export_button.clicked.connect(
+            lambda: self._export_plot_png(self.results_area.time_plot, "signal-temporel")
+        )
+        self.results_area.spectrum_export_button.clicked.connect(
+            lambda: self._export_plot_png(self.results_area.spectrum_plot, "spectre-psd")
+        )
+        self.results_area.separation_export_button.clicked.connect(
+            lambda: self._export_plot_png(self.results_area.separation_plot, "incidente-reflechie")
+        )
 
     def _toggle_tools_panel(self) -> None:
         self._set_tools_panel_expanded(not self._tools_panel_expanded)
@@ -638,9 +731,7 @@ class AnalysisView(QWidget):
         channel_warning_count = sum(len(item.get("warnings", [])) for item in quality.values())
         processing_warning_count = len(self.current_analysis_result.get("metadata", {}).get("warnings", []))
         warning_count = channel_warning_count + processing_warning_count
-        rejected_count = sum(
-            1 for item in quality.values() if item.get("status") == "rejected"
-        )
+        rejected_count = sum(1 for item in quality.values() if item.get("status") == "rejected")
         quality_text = (
             "Validée"
             if warning_count == 0
@@ -705,8 +796,13 @@ class AnalysisView(QWidget):
             QMessageBox.warning(self, "Export", "L'export des resultats a echoue.")
 
     def set_theme(self, is_dark: bool) -> None:
-        # Le thème de production est centralisé au niveau de l'application.
         self.is_dark_mode = is_dark
+        self.results_area.set_theme("dark" if is_dark else "light")
+        if self.post_processor.current_data is not None:
+            self._update_time_plot()
+        if self.current_analysis_result is not None:
+            self._update_spectrum_plot()
+            self._update_separation_plot()
 
     def get_analysis_results(self) -> dict:
         return {
@@ -725,12 +821,9 @@ class AnalysisView(QWidget):
         self.results_area.wave_table.setRowCount(0)
         self.results_area.quality_table.clearContents()
         self.results_area.quality_table.setRowCount(0)
-        self.results_area.time_figure.clear()
-        self.results_area.time_canvas.draw_idle()
-        self.results_area.spectrum_figure.clear()
-        self.results_area.spectrum_canvas.draw_idle()
-        self.results_area.separation_figure.clear()
-        self.results_area.separation_canvas.draw_idle()
+        self.results_area.time_plot.clear_data()
+        self.results_area.spectrum_plot.clear_data()
+        self.results_area.separation_plot.clear_data()
         self.results_area.report_text.clear()
         self.results_area.update_analysis_status("Pret", 0)
 
@@ -784,12 +877,23 @@ class AnalysisView(QWidget):
         self._update_time_plot()
         self._update_spectrum_plot()
 
-    def _on_time_cursor_moved(self, event) -> None:
-        if event.inaxes is None or event.xdata is None or event.ydata is None:
-            return
-        self.results_area.time_cursor_label.setText(
-            f"Curseur : t={event.xdata:.3f} s · y={event.ydata:.6g}"
+    def _on_time_cursor_moved(self, x_value: float, y_value: float) -> None:
+        self.results_area.time_cursor_label.setText(f"t={x_value:.3f} s · y={y_value:.6g}")
+
+    def _on_time_region_changed(self, start: float, end: float) -> None:
+        self.tools_panel.start_time_spin.setValue(max(0.0, start))
+        self.tools_panel.end_time_spin.setValue(max(start, end))
+
+    def _export_plot_png(self, plot: ScientificPlotWidget, stem: str) -> None:
+        target = self._get_default_export_directory() / f"{stem}.png"
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Exporter le graphe",
+            str(target),
+            "Image PNG (*.png)",
         )
+        if file_path and not plot.export_png(file_path):
+            QMessageBox.warning(self, "Export", "Le graphe n'a pas pu être exporté.")
 
     def _channel_metadata(self, channel: str) -> dict:
         data = self.post_processor.current_data or {}
@@ -801,10 +905,7 @@ class AnalysisView(QWidget):
     def _channel_unit(self, channel: str) -> str:
         metadata = self._channel_metadata(channel)
         return str(
-            metadata.get("physical_unit")
-            or metadata.get("physical_units")
-            or metadata.get("unit")
-            or "unité"
+            metadata.get("physical_unit") or metadata.get("physical_units") or metadata.get("unit") or "unité"
         )
 
     @staticmethod
@@ -848,8 +949,19 @@ class AnalysisView(QWidget):
 
         spectral = results.get("spectral_analysis", {})
         spectral_headers = [
-            "Canal", "Verdict", "Hm0", "H1/3", "fpic (Hz)", "Tp (s)", "Tm01 (s)",
-            "Tm02 (s)", "Te (s)", "m0", "Δf (Hz)", "Segments", "DDL ≈",
+            "Canal",
+            "Verdict",
+            "Hm0",
+            "H1/3",
+            "fpic (Hz)",
+            "Tp (s)",
+            "Tm01 (s)",
+            "Tm02 (s)",
+            "Te (s)",
+            "m0",
+            "Δf (Hz)",
+            "Segments",
+            "DDL ≈",
         ]
         self.results_area.spectral_table.clearContents()
         self.results_area.spectral_table.setColumnCount(len(spectral_headers))
@@ -883,8 +995,15 @@ class AnalysisView(QWidget):
                 self.results_area.spectral_table.setItem(row, column, QTableWidgetItem(str(value)))
 
         quality_headers = [
-            "Canal", "Verdict", "Alertes", "Var. PSD/temps", "Stationnarité",
-            "Cycles au pic", "Éch./période", "Plate (%)", "Dérive /s",
+            "Canal",
+            "Verdict",
+            "Alertes",
+            "Var. PSD/temps",
+            "Stationnarité",
+            "Cycles au pic",
+            "Éch./période",
+            "Plate (%)",
+            "Dérive /s",
         ]
         quality_results = results.get("quality", {})
         self.results_area.quality_table.clearContents()
@@ -916,11 +1035,7 @@ class AnalysisView(QWidget):
         self.results_area.report_text.setPlainText(self._build_report_text())
 
     def _update_time_plot(self, *_args) -> None:
-        figure = self.results_area.time_figure
-        figure.clear()
-        axis = figure.add_subplot(111)
-        figure.set_facecolor("#FFFFFF")
-        axis.set_facecolor("#FFFFFF")
+        plot = self.results_area.time_plot
         data = self.post_processor.current_data or {}
         channel_keys = list(data.get("channel_keys", []))
         selected = self.results_area.channel_combo.currentText()
@@ -930,68 +1045,55 @@ class AnalysisView(QWidget):
         plotted_channels = [channel for channel in plotted_channels if channel in channel_keys]
         raw_channels = data.get("raw_channels", {})
         use_raw = self.results_area.raw_signal_check.isChecked() and bool(raw_channels)
-        if plotted_channels:
-            for channel in plotted_channels[:24]:
-                sampled_time, values = self.post_processor.load_channel_preview(
-                    channel,
-                    raw=use_raw,
+        series: list[PlotSeries] = []
+        selected_values: np.ndarray | None = None
+        sampled_time = np.asarray([], dtype=float)
+        for index, channel in enumerate(plotted_channels[:24]):
+            sampled_time, values = self.post_processor.load_channel_preview(channel, raw=use_raw)
+            values = np.asarray(values, dtype=float)
+            if self.results_area.center_signal_check.isChecked() and values.size:
+                values = values - float(np.mean(values))
+            if channel == selected:
+                selected_values = values
+            series.append(
+                PlotSeries(
+                    name=channel,
+                    x=np.asarray(sampled_time, dtype=float),
+                    y=values,
+                    color=CHANNEL_COLORS[index % len(CHANNEL_COLORS)],
+                    width=1.35 if channel == selected else 1.0,
                 )
-                if self.results_area.center_signal_check.isChecked():
-                    values = values - float(np.mean(values))
-                axis.plot(sampled_time, values, linewidth=0.8, label=channel)
-                if channel == selected and self.results_area.std_guides_check.isChecked():
-                    mean = float(np.mean(values))
-                    standard_deviation = float(np.std(values))
-                    axis.axhline(mean, color="#405965", linewidth=0.8, alpha=0.7)
-                    axis.axhline(
-                        mean + standard_deviation,
-                        color="#C47B18",
-                        linewidth=0.8,
-                        linestyle="--",
-                    )
-                    axis.axhline(
-                        mean - standard_deviation,
-                        color="#C47B18",
-                        linewidth=0.8,
-                        linestyle="--",
-                    )
+            )
+
+        plot.set_series(series)
+        plot.plot_item.setTitle("" if series else "Aucun aperçu temporel disponible")
+        unit = "V" if use_raw else self._channel_unit(selected)
+        plot.set_axis_labels(x_label="Temps", x_unit="s", y_label="Amplitude", y_unit=unit)
+
+        if (
+            selected_values is not None
+            and selected_values.size
+            and self.results_area.std_guides_check.isChecked()
+        ):
+            palette = PLOT_PALETTES["dark" if self.is_dark_mode else "light"]
+            mean = float(np.mean(selected_values))
+            standard_deviation = float(np.std(selected_values))
+            plot.add_horizontal_guide(mean, color=palette["foreground"])
+            plot.add_horizontal_guide(mean + standard_deviation, color=palette["warning"], dashed=True)
+            plot.add_horizontal_guide(mean - standard_deviation, color=palette["warning"], dashed=True)
+
+        if sampled_time.size:
+            start = float(sampled_time[0])
+            end = float(sampled_time[-1])
             if self.current_analysis_result:
                 metadata = self.current_analysis_result.get("metadata", {})
-                axis.axvspan(
-                    float(metadata.get("analysis_start_s", sampled_time[0])),
-                    float(metadata.get("analysis_end_s", sampled_time[-1])),
-                    color="#1A7188",
-                    alpha=0.06,
-                    label="Intervalle analysé",
-                )
-            axis.set_xlabel("Temps (s)", color="#405965")
-            unit = "V" if use_raw else self._channel_unit(selected)
-            axis.set_ylabel(unit, color="#405965")
-            if plotted_channels:
-                axis.legend(loc="best", frameon=False, fontsize=7, ncol=2)
-        else:
-            axis.text(
-                0.5,
-                0.5,
-                "APERÇU TEMPOREL NON CHARGÉ POUR CE FORMAT",
-                ha="center",
-                va="center",
-                transform=axis.transAxes,
-                color="#667C88",
-            )
-        axis.tick_params(colors="#667C88", labelsize=9)
-        axis.grid(True, color="#DCE5EA", linewidth=0.7, alpha=0.8)
-        axis.spines["top"].set_visible(False)
-        axis.spines["right"].set_visible(False)
-        self.results_area.time_canvas.draw_idle()
+                start = float(metadata.get("analysis_start_s", start))
+                end = float(metadata.get("analysis_end_s", end))
+            plot.set_region(start, end, bounds=(float(sampled_time[0]), float(sampled_time[-1])))
 
     def _update_spectrum_plot(self, *_args) -> None:
         spectral = (self.current_analysis_result or {}).get("spectral_analysis", {})
-        figure = self.results_area.spectrum_figure
-        figure.clear()
-        axis = figure.add_subplot(111)
-        figure.set_facecolor("#FFFFFF")
-        axis.set_facecolor("#FFFFFF")
+        plot = self.results_area.spectrum_plot
         selected = self.results_area.channel_combo.currentText()
         plotted_channels = (
             list(spectral)
@@ -999,79 +1101,81 @@ class AnalysisView(QWidget):
             else ([selected] if selected in spectral else [])
         )
         scale = str(self.results_area.spectrum_scale_combo.currentData())
-        for channel in plotted_channels:
+        series: list[PlotSeries] = []
+        selected_payload: tuple[np.ndarray, np.ndarray, dict] | None = None
+        for index, channel in enumerate(plotted_channels):
             values = spectral[channel]
             frequencies = np.asarray(values.get("frequencies", []), dtype=float)
             density = np.asarray(values.get("psd", []), dtype=float)
-            valid = (frequencies > 0) & np.isfinite(density)
-            if scale == "log":
-                valid &= density > 0
-            if np.any(valid):
-                axis.plot(frequencies[valid], density[valid], label=channel, linewidth=1.35)
-                if channel == selected:
-                    peak_frequency = float(values.get("peak_frequency", 0.0))
-                    peak_psd = float(values.get("peak_psd", 0.0))
-                    axis.plot([peak_frequency], [peak_psd], marker="o", color="#D46A1F", markersize=5)
-                    if self.results_area.confidence_interval_check.isChecked():
-                        factors = values.get("psd_confidence_interval_95_factors_approx", [])
-                        if len(factors) == 2:
-                            axis.fill_between(
-                                frequencies[valid],
-                                density[valid] * float(factors[0]),
-                                density[valid] * float(factors[1]),
-                                color="#1A7188",
-                                alpha=0.13,
-                                label="IC 95 % approx.",
-                            )
-                    quality = (self.current_analysis_result or {}).get("quality", {}).get(channel, {})
-                    peak_period = float(values.get("peak_period", 0.0))
-                    tp_text = (
-                        f"Tp={peak_period:.4g} s"
-                        if quality.get("peak_period_reliable")
-                        else "Tp non fiable"
-                    )
-                    self.results_area.spectrum_readout_label.setText(
-                        f"Pic : {peak_frequency:.5g} Hz · {tp_text} · "
-                        f"Δf={values.get('frequency_resolution', 0):.5g} Hz"
-                    )
-                    if self.results_area.cumulative_energy_check.isChecked():
-                        energy_axis = axis.twinx()
-                        frequency_step = float(values.get("frequency_resolution", 0.0))
-                        cumulative = np.cumsum(np.maximum(density, 0.0)) * frequency_step
-                        if cumulative.size and cumulative[-1] > 0:
-                            energy_axis.plot(
-                                frequencies,
-                                100.0 * cumulative / cumulative[-1],
-                                color="#C47B18",
-                                linewidth=1.0,
-                                linestyle="--",
-                            )
-                            energy_axis.set_ylabel("Énergie cumulée (%)", color="#C47B18")
-                            energy_axis.set_ylim(0, 105)
-                            energy_axis.tick_params(colors="#C47B18", labelsize=8)
-        axis.set_yscale(scale)
-        axis.set_xlabel("Fréquence (Hz)", color="#405965")
-        axis.set_ylabel("Densité spectrale", color="#405965")
-        axis.tick_params(colors="#667C88", labelsize=9)
-        axis.grid(True, which="both", color="#DCE5EA", linewidth=0.7, alpha=0.8)
-        axis.spines["top"].set_visible(False)
-        axis.spines["right"].set_visible(False)
-        axis.spines["bottom"].set_color("#B7C6CD")
-        axis.spines["left"].set_color("#B7C6CD")
-        if plotted_channels:
-            axis.legend(loc="best", frameon=False, fontsize=8)
-        self.results_area.spectrum_canvas.draw_idle()
+            series.append(
+                PlotSeries(
+                    name=channel,
+                    x=frequencies,
+                    y=density,
+                    color=CHANNEL_COLORS[index % len(CHANNEL_COLORS)],
+                    width=1.5 if channel == selected else 1.05,
+                )
+            )
+            if channel == selected:
+                selected_payload = frequencies, density, values
+
+        plot.set_series(series, y_log=scale == "log")
+        plot.plot_item.setTitle("" if series else "Lancez l'analyse pour calculer la PSD")
+        unit = self._channel_unit(selected)
+        plot.set_axis_labels(
+            x_label="Fréquence",
+            x_unit="Hz",
+            y_label="Densité spectrale",
+            y_unit=f"{unit}²/Hz",
+        )
+        self.results_area.spectrum_readout_label.setText("Pic : —")
+        if selected_payload is None:
+            return
+
+        frequencies, density, values = selected_payload
+        valid = (frequencies > 0) & np.isfinite(density)
+        if scale == "log":
+            valid &= density > 0
+        peak_frequency = float(values.get("peak_frequency", 0.0))
+        peak_psd = float(values.get("peak_psd", 0.0))
+        if peak_frequency > 0 and peak_psd > 0:
+            plot.add_target(peak_frequency, peak_psd)
+        if self.results_area.confidence_interval_check.isChecked():
+            factors = values.get("psd_confidence_interval_95_factors_approx", [])
+            if len(factors) == 2 and np.any(valid):
+                palette = PLOT_PALETTES["dark" if self.is_dark_mode else "light"]
+                plot.add_confidence_band(
+                    frequencies[valid],
+                    density[valid] * float(factors[0]),
+                    density[valid] * float(factors[1]),
+                    color=palette["accent"],
+                )
+        quality = (self.current_analysis_result or {}).get("quality", {}).get(selected, {})
+        peak_period = float(values.get("peak_period", 0.0))
+        tp_text = f"Tp={peak_period:.4g} s" if quality.get("peak_period_reliable") else "Tp non fiable"
+        self.results_area.spectrum_readout_label.setText(
+            f"fp={peak_frequency:.5g} Hz · {tp_text} · Δf={values.get('frequency_resolution', 0):.5g} Hz"
+        )
+        if self.results_area.cumulative_energy_check.isChecked():
+            frequency_step = float(values.get("frequency_resolution", 0.0))
+            cumulative = np.cumsum(np.maximum(density, 0.0)) * frequency_step
+            if cumulative.size and cumulative[-1] > 0:
+                palette = PLOT_PALETTES["dark" if self.is_dark_mode else "light"]
+                plot.set_secondary_series(
+                    frequencies,
+                    100.0 * cumulative / cumulative[-1],
+                    label="Énergie cumulée",
+                    unit="%",
+                    color=palette["warning"],
+                )
 
     def _update_separation_plot(self) -> None:
         separation = (self.current_analysis_result or {}).get(
             "incident_reflected_analysis",
             {},
         )
-        figure = self.results_area.separation_figure
-        figure.clear()
-        axis = figure.add_subplot(111)
-        figure.set_facecolor("#FFFFFF")
-        axis.set_facecolor("#FFFFFF")
+        plot = self.results_area.separation_plot
+        series: list[PlotSeries] = []
         if separation.get("status") == "complete":
             frequencies = np.asarray(separation.get("frequencies", []), dtype=float)
             incident = np.asarray(separation.get("incident_psd", []), dtype=float)
@@ -1081,50 +1185,26 @@ class AnalysisView(QWidget):
                 dtype=bool,
             )
             if len(valid) == len(frequencies):
-                axis.semilogy(
-                    frequencies[valid],
-                    incident[valid],
-                    color="#1A7188",
-                    linewidth=1.5,
-                    label="Incidente",
-                )
-                axis.semilogy(
-                    frequencies[valid],
-                    reflected[valid],
-                    color="#C47B18",
-                    linewidth=1.5,
-                    label="Réfléchie",
-                )
-                axis.legend(frameon=False, loc="best")
-            axis.set_title(
-                "Coefficient de réflexion énergétique "
-                f"Kr = {separation.get('energy_reflection_coefficient', 0):.4f}",
-                color="#203843",
+                series = [
+                    PlotSeries("Incidente", frequencies[valid], incident[valid], "#22A7BC", 1.5),
+                    PlotSeries("Réfléchie", frequencies[valid], reflected[valid], "#E59B35", 1.5),
+                ]
+            self.results_area.separation_readout_label.setText(
+                f"Kr énergétique = {separation.get('energy_reflection_coefficient', 0):.4f}"
             )
         else:
-            axis.text(
-                0.5,
-                0.5,
-                separation.get(
-                    "reason",
-                    "Configurez au moins trois sondes, leurs positions et la profondeur d'eau.",
-                ),
-                ha="center",
-                va="center",
-                wrap=True,
-                color="#667C88",
-                transform=axis.transAxes,
+            self.results_area.separation_readout_label.setText(
+                separation.get("reason", "Configuration multi-sondes requise")
             )
-        axis.set_xlabel("Fréquence (Hz)", color="#405965")
+        plot.set_series(series, y_log=True)
+        plot.plot_item.setTitle("" if series else "Séparation multi-sondes non disponible")
         physical_unit = separation.get("physical_unit", "unité")
-        axis.set_ylabel(f"Densité spectrale ({physical_unit}²/Hz)", color="#405965")
-        axis.tick_params(colors="#667C88", labelsize=9)
-        axis.grid(True, which="both", color="#DCE5EA", linewidth=0.7, alpha=0.8)
-        axis.spines["top"].set_visible(False)
-        axis.spines["right"].set_visible(False)
-        axis.spines["bottom"].set_color("#B7C6CD")
-        axis.spines["left"].set_color("#B7C6CD")
-        self.results_area.separation_canvas.draw_idle()
+        plot.set_axis_labels(
+            x_label="Fréquence",
+            x_unit="Hz",
+            y_label="Densité spectrale",
+            y_unit=f"{physical_unit}²/Hz",
+        )
 
     def _build_report_text(self) -> str:
         return build_scientific_report_text(
