@@ -1,13 +1,18 @@
-"""Vue de generation de rapports CHNeoWave."""
+"""Vue de rapport scientifique et traçable CHNeoWave."""
 
-import html
+import base64
+import io
 import json
+import math
 from pathlib import Path
 
+import numpy as np
+from matplotlib.figure import Figure
 from PySide6.QtCore import QDate, Qt, Signal
 from PySide6.QtGui import QTextDocument
 from PySide6.QtPrintSupport import QPrinter
 from PySide6.QtWidgets import (
+    QCheckBox,
     QDateEdit,
     QFileDialog,
     QFormLayout,
@@ -23,6 +28,11 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
+)
+
+from ...core.scientific_report import (
+    build_scientific_report_html,
+    build_scientific_report_text,
 )
 
 
@@ -44,29 +54,44 @@ class ReportConfigPanel(QFrame):
         layout.setContentsMargins(18, 16, 18, 16)
         layout.setSpacing(14)
 
-        title = QLabel("Composition du rapport")
+        title = QLabel("Rapport scientifique")
         title.setObjectName("sectionTitle")
         layout.addWidget(title)
 
-        metadata_group = QGroupBox("Metadonnees")
+        metadata_group = QGroupBox("Identification de l'essai")
         metadata_layout = QFormLayout(metadata_group)
-        self.template_edit = QLineEdit("Rapport technique")
-        self.title_edit = QLineEdit("Rapport CHNeoWave")
+        self.template_edit = QLineEdit("scientific")
+        self.template_edit.setVisible(False)
+        self.title_edit = QLineEdit("Rapport scientifique CHNeoWave")
+        self.test_id_edit = QLineEdit("")
         self.author_edit = QLineEdit("")
         self.version_edit = QLineEdit("1.0")
+        self.version_edit.setVisible(False)
         self.date_edit = QDateEdit(QDate.currentDate())
         self.description_edit = QTextEdit()
-        self.description_edit.setMaximumHeight(120)
+        self.description_edit.setMaximumHeight(90)
 
-        metadata_layout.addRow("Template:", self.template_edit)
-        metadata_layout.addRow("Titre:", self.title_edit)
-        metadata_layout.addRow("Auteur:", self.author_edit)
-        metadata_layout.addRow("Version:", self.version_edit)
-        metadata_layout.addRow("Date:", self.date_edit)
-        metadata_layout.addRow("Description:", self.description_edit)
+        metadata_layout.addRow("Titre", self.title_edit)
+        metadata_layout.addRow("Essai / référence", self.test_id_edit)
+        metadata_layout.addRow("Opérateur / analyste", self.author_edit)
+        metadata_layout.addRow("Date", self.date_edit)
+        metadata_layout.addRow("Notes scientifiques", self.description_edit)
         layout.addWidget(metadata_group)
 
-        actions_group = QGroupBox("Generation et export")
+        sections_group = QGroupBox("Contenu scientifique")
+        sections_layout = QVBoxLayout(sections_group)
+        self.include_graphs_check = QCheckBox("Figures spectrales")
+        self.include_graphs_check.setChecked(True)
+        self.include_quality_check = QCheckBox("Diagnostics et limites d'interprétation")
+        self.include_quality_check.setChecked(True)
+        self.include_traceability_check = QCheckBox("Méthode, configuration et empreinte SHA-256")
+        self.include_traceability_check.setChecked(True)
+        sections_layout.addWidget(self.include_graphs_check)
+        sections_layout.addWidget(self.include_quality_check)
+        sections_layout.addWidget(self.include_traceability_check)
+        layout.addWidget(sections_group)
+
+        actions_group = QGroupBox("Génération et export")
         actions_layout = QVBoxLayout(actions_group)
         self.generate_button = QPushButton("Générer le rapport")
         self.generate_button.setProperty("kind", "primaryLarge")
@@ -97,10 +122,14 @@ class ReportConfigPanel(QFrame):
         return {
             "template": self.template_edit.text().strip(),
             "title": self.title_edit.text().strip(),
+            "test_id": self.test_id_edit.text().strip(),
             "author": self.author_edit.text().strip(),
             "date": self.date_edit.date().toString("yyyy-MM-dd"),
             "version": self.version_edit.text().strip(),
             "description": self.description_edit.toPlainText().strip(),
+            "include_graphs": self.include_graphs_check.isChecked(),
+            "include_quality": self.include_quality_check.isChecked(),
+            "include_traceability": self.include_traceability_check.isChecked(),
         }
 
     def generate_report(self) -> None:
@@ -263,7 +292,10 @@ class ReportView(QWidget):
             printer = QPrinter()
             printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
             printer.setOutputFileName(str(output_path))
-            document.print(printer)
+            print_method = getattr(document, "print_", None) or getattr(document, "print", None)
+            if print_method is None:
+                raise RuntimeError("Cette version de Qt ne fournit pas l'impression PDF")
+            print_method(printer)
         else:
             QMessageBox.warning(self, "Export", f"Format non supporte: {export_type}")
             return
@@ -297,129 +329,57 @@ class ReportView(QWidget):
 
     def _build_report_html(self, config: dict) -> str:
         analysis_results = self.current_analysis_payload.get("analysis_results", {})
-        source_file = self.current_analysis_payload.get("source_file") or "Non defini"
-        basic_stats = analysis_results.get("basic_stats", {})
-        wave_parameters = analysis_results.get("wave_parameters", {})
-        quality = analysis_results.get("quality", {})
-
-        project_name = self.current_project_metadata.get("name", "CHNeoWave")
-        title = config.get("title") or f"Rapport {project_name}"
-        author = config.get("author") or self.current_project_metadata.get("manager", "")
-        description = config.get("description") or self.current_project_metadata.get("description", "")
-
-        rows = []
-        for channel, stats in basic_stats.items():
-            rows.append(
-                "<tr>"
-                f"<td>{html.escape(channel)}</td>"
-                f"<td>{stats.get('mean', 0):.6f}</td>"
-                f"<td>{stats.get('std', 0):.6f}</td>"
-                f"<td>{stats.get('min', 0):.6f}</td>"
-                f"<td>{stats.get('max', 0):.6f}</td>"
-                "</tr>"
-            )
-
-        wave_items = []
-        for channel, metrics in wave_parameters.items():
-            wave_items.append(
-                f"<li><strong>{html.escape(channel)}</strong> - "
-                f"H1/3={metrics.get('H1_3', 0):.6f}, "
-                f"Hm0={metrics.get('Hm0', 0):.6f}, "
-                f"Tp={metrics.get('Tp', 0):.6f}, "
-                f"Tm02={metrics.get('Tm02', 0):.6f}, "
-                f"Hmax={metrics.get('H_max', 0):.6f}</li>"
-            )
-
-        quality_items = []
-        for channel, indicators in quality.items():
-            warnings = indicators.get("warnings", [])
-            state = "Valide" if not warnings else "; ".join(map(str, warnings))
-            quality_items.append(f"<li><strong>{html.escape(channel)}</strong> - {html.escape(state)}</li>")
-
-        section_style = (
-            "font-size: 16px; color: #203843; border-bottom: 1px solid #DCE5EA; padding-bottom: 6px"
+        source_file = self.current_analysis_payload.get("source_file")
+        plot = self._spectral_plot_data_uri(analysis_results) if config.get("include_graphs", True) else ""
+        return build_scientific_report_html(
+            analysis_results,
+            source_file,
+            self.current_project_metadata,
+            config,
+            plot,
         )
-        spaced_section_style = f"{section_style}; margin-top: 24px"
-        table_style = "border-collapse: collapse; width: 100%; border: 1px solid #DCE5EA"
-        config_style = "background-color: #F5F8F9; border: 1px solid #DCE5EA; padding: 12px"
-        config_text = html.escape(json.dumps(config, indent=2, ensure_ascii=False))
-
-        return f"""
-<html>
-  <body style="font-family: 'Segoe UI', Arial, sans-serif; color: #172B35; line-height: 1.45; margin: 32px;">
-    <div style="border-bottom: 3px solid #1A7188; padding-bottom: 14px; margin-bottom: 20px;">
-      <p style="color: #1A7188; font-size: 10px; font-weight: 700; letter-spacing: 1px; margin: 0;">
-        CHNEOWAVE · RAPPORT TECHNIQUE
-      </p>
-      <h1 style="font-size: 25px; font-weight: 650; margin: 5px 0 8px 0;">{html.escape(title)}</h1>
-      <p style="color: #667C88; margin: 0;">{html.escape(str(description))}</p>
-    </div>
-    <table cellspacing="0" cellpadding="5" style="width: 100%; color: #405965; margin-bottom: 22px;">
-      <tr><td><strong>Projet</strong></td><td>{html.escape(str(project_name))}</td></tr>
-      <tr><td><strong>Auteur</strong></td><td>{html.escape(str(author))}</td></tr>
-      <tr><td><strong>Source</strong></td><td>{html.escape(str(source_file))}</td></tr>
-      <tr><td><strong>Date</strong></td><td>{html.escape(str(config.get("date", "")))}</td></tr>
-    </table>
-    <h2 style="{section_style};">Statistiques</h2>
-    <table cellspacing="0" cellpadding="7" style="{table_style};">
-      <tr style="background-color: #EEF3F5; color: #304A56;">
-        <th>Canal</th><th>Moyenne</th><th>Écart-type</th><th>Min</th><th>Max</th>
-      </tr>
-      {"".join(rows) if rows else '<tr><td colspan="5">Aucune statistique disponible</td></tr>'}
-    </table>
-    <h2 style="{spaced_section_style};">Paramètres de houle</h2>
-    <ul>{"".join(wave_items) if wave_items else "<li>Aucun paramètre disponible</li>"}</ul>
-    <h2 style="{spaced_section_style};">Qualité de l'analyse</h2>
-    <ul>{"".join(quality_items) if quality_items else "<li>Aucun indicateur disponible</li>"}</ul>
-    <h2 style="{spaced_section_style};">Configuration scientifique</h2>
-    <pre style="{config_style}; color: #405965;">{config_text}</pre>
-  </body>
-</html>
-"""
 
     def _build_report_text(self) -> str:
-        analysis_results = self.current_analysis_payload.get("analysis_results", {})
-        source_file = self.current_analysis_payload.get("source_file") or "Non defini"
-        basic_stats = analysis_results.get("basic_stats", {})
-        wave_parameters = analysis_results.get("wave_parameters", {})
-        quality = analysis_results.get("quality", {})
+        return build_scientific_report_text(
+            self.current_analysis_payload.get("analysis_results", {}),
+            self.current_analysis_payload.get("source_file"),
+            self.current_project_metadata,
+            self.current_report_config,
+        )
 
-        lines = [
-            "Rapport CHNeoWave",
-            f"Projet: {self.current_project_metadata.get('name', 'CHNeoWave')}",
-            f"Source: {source_file}",
-            "",
-            "Statistiques",
-        ]
-
-        for channel, stats in basic_stats.items():
-            lines.append(f"- {channel}")
-            lines.append(f"  moyenne: {stats.get('mean', 0):.6f}")
-            lines.append(f"  ecart-type: {stats.get('std', 0):.6f}")
-            lines.append(f"  min/max: {stats.get('min', 0):.6f} / {stats.get('max', 0):.6f}")
-
-        lines.append("")
-        lines.append("Parametres de houle")
-        for channel, metrics in wave_parameters.items():
-            lines.append(
-                f"- {channel}: H1/3={metrics.get('H1_3', 0):.6f}, "
-                f"Hm0={metrics.get('Hm0', 0):.6f}, "
-                f"Tp={metrics.get('Tp', 0):.6f}, "
-                f"Tm02={metrics.get('Tm02', 0):.6f}, "
-                f"Hmax={metrics.get('H_max', 0):.6f}"
-            )
-
-        lines.append("")
-        lines.append("Qualite de l'analyse")
-        for channel, indicators in quality.items():
-            warnings = indicators.get("warnings", [])
-            state = "Valide" if not warnings else "; ".join(map(str, warnings))
-            lines.append(f"- {channel}: {state}")
-
-        return "\n".join(lines).strip()
+    @staticmethod
+    def _spectral_plot_data_uri(analysis_results: dict) -> str:
+        spectra = analysis_results.get("spectral_analysis", {})
+        if not spectra:
+            return ""
+        figure = Figure(figsize=(9, 4.8), tight_layout=True)
+        axis = figure.add_subplot(111)
+        for channel, spectrum in spectra.items():
+            frequencies = np.asarray(spectrum.get("frequencies", []), dtype=float)
+            density = np.asarray(spectrum.get("psd", []), dtype=float)
+            valid = (frequencies > 0) & np.isfinite(density) & (density > 0)
+            if np.any(valid):
+                axis.semilogy(frequencies[valid], density[valid], linewidth=1.1, label=channel)
+        axis.set_xlabel("Fréquence (Hz)")
+        axis.set_ylabel("Densité spectrale")
+        axis.grid(True, which="both", color="#DCE5EA", linewidth=0.6)
+        axis.legend(loc="best", fontsize=7, frameon=False, ncol=2)
+        buffer = io.BytesIO()
+        figure.savefig(buffer, format="png", dpi=140, facecolor="white")
+        encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+        return f"data:image/png;base64,{encoded}"
 
     def _estimate_page_count(self) -> int:
-        return max(1, (len(self.current_report_text.splitlines()) // 40) + 1)
+        results = self.current_analysis_payload.get("analysis_results", {})
+        channel_count = len(results.get("basic_stats", {}))
+        page_count = 1 + math.ceil(max(0, channel_count - 1) / 4)
+        if results.get("cross_spectral_analysis") or results.get("incident_reflected_analysis"):
+            page_count += 1
+        if self.current_report_config.get("include_graphs", True) and results.get(
+            "spectral_analysis"
+        ):
+            page_count += 1
+        return max(1, page_count)
 
     def _json_ready(self, value):
         if isinstance(value, dict):

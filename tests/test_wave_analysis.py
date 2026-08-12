@@ -124,6 +124,12 @@ class WaveAnalyzerTests(unittest.TestCase):
         self.assertLessEqual(spectrum["peak_frequency"], band_maximum)
         quality = analyzer.analyze_channel(low_frequency_signal, sample_rate, "cm")["quality"]
         self.assertTrue(quality["peak_at_analysis_band_boundary"])
+        self.assertFalse(quality["peak_period_reliable"])
+        self.assertFalse(
+            analyzer.analyze_channel(low_frequency_signal, sample_rate, "cm")["wave_parameters"][
+                "Tp_reliable"
+            ]
+        )
         self.assertTrue(any("limite de bande" in warning for warning in quality["warnings"]))
 
         with patch.object(WaveAnalyzer, "_interpolated_peak", return_value=0.0):
@@ -132,6 +138,28 @@ class WaveAnalyzerTests(unittest.TestCase):
 
 
 class PostProcessorSpectralTests(unittest.TestCase):
+    def test_operator_can_analyze_a_selected_time_interval(self):
+        sample_rate = 20.0
+        time = np.arange(2000) / sample_rate
+        values = np.sin(2 * np.pi * 0.5 * time)
+        payload = {
+            "metadata": {"sample_rate_hz": sample_rate},
+            "time": time.tolist(),
+            "channels": {"channel_00": values.tolist()},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "windowed.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            processor = PostProcessor()
+            self.assertTrue(processor.load_data_file(str(path)))
+            processor.config["analysis"].update({"start_time_s": 10.0, "end_time_s": 40.0})
+            self.assertTrue(processor.run_analysis())
+            metadata = processor.current_analysis["metadata"]
+            self.assertEqual(metadata["n_samples"], 600)
+            self.assertEqual(metadata["analysis_start_s"], 10.0)
+            self.assertEqual(metadata["analysis_end_s"], 40.0)
+            self.assertEqual(metadata["source_n_samples"], 2000)
+
     def test_json_rejects_unsynchronised_channel_lengths(self):
         payload = {
             "metadata": {"sample_rate_hz": 10.0},
@@ -224,6 +252,12 @@ class PostProcessorSpectralTests(unittest.TestCase):
                 processor.current_data["channel_keys"],
                 ["channel_00", "channel_01"],
             )
+            preview_time, preview_values = processor.load_channel_preview(
+                "channel_00",
+                maximum_points=100,
+            )
+            self.assertEqual(len(preview_time), 100)
+            self.assertEqual(len(preview_values), 100)
             self.assertTrue(processor.run_analysis())
             analysis_path = Path(directory) / "analysis.h5"
             self.assertTrue(processor.export_results(str(analysis_path), "hdf5"))

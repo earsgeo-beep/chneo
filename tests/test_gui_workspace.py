@@ -23,6 +23,7 @@ from hrneowave.core.legacy_raw import LegacyRawImportOptions
 from hrneowave.gui.views.acquisition_config_view import AcquisitionConfigView
 from hrneowave.gui.views.analysis_view import AnalysisView
 from hrneowave.gui.views.calibration_view import CalibrationView
+from hrneowave.gui.views.report_view import ReportView
 from hrneowave.gui.widgets.main_sidebar import MainSidebar
 from hrneowave.gui.widgets.qualification_workspace import QualificationWorkspace
 from tests.hardware_test_doubles import DeterministicPhysicalBackend, physical_test_device
@@ -136,7 +137,32 @@ def test_analysis_view_loads_raw_and_draws_time_signals(qt_app):
         assert loaded
         assert view.post_processor.current_data["source_format"] == "legacy_raw"
         assert view.post_processor.sample_rate == 2.0
+        assert len(view.results_area.time_figure.axes[0].lines) == 1
+        assert view.results_area.channel_combo.count() == 2
+        view.results_area.overlay_channels_check.setChecked(True)
         assert len(view.results_area.time_figure.axes[0].lines) == 2
+
+
+def test_scientific_report_exports_pdf_with_current_qt_api(qt_app, tmp_path):
+    view = ReportView()
+    view.set_analysis_context(
+        "laboratory.raw",
+        {
+            "sample_rate": 32.0,
+            "metadata": {"sample_rate_hz": 32.0, "n_samples": 1024, "duration_s": 32.0},
+            "analysis_configuration": {"method": "Welch PSD + zero-upcrossing"},
+            "basic_stats": {},
+            "spectral_analysis": {},
+            "wave_parameters": {},
+            "quality": {},
+        },
+    )
+    output_path = tmp_path / "scientific-report.pdf"
+
+    view.on_export_requested("pdf", str(output_path))
+
+    assert output_path.is_file()
+    assert output_path.stat().st_size > 0
 
 
 def test_hardware_panel_uses_one_connected_state(qt_app):

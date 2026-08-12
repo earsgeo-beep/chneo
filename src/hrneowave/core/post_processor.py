@@ -73,6 +73,8 @@ class PostProcessor(QObject):
                 "min_frequency": 0.0,
                 "max_frequency": None,
                 "minimum_samples": 32,
+                "start_time_s": 0.0,
+                "end_time_s": None,
             },
             "export": {"formats": ["csv", "json", "hdf5"], "precision": 6},
         }
@@ -510,6 +512,111 @@ class PostProcessor(QObject):
                 return np.asarray(handle[f"acquisition_data/{channel}"][:], dtype=np.float64)
             return np.asarray(handle[channel][:], dtype=np.float64)
 
+    def _channel_sample_count(self, channel: str) -> int:
+        if self.current_data is None:
+            raise WaveAnalysisError("Aucune donnée chargée")
+        if self.current_data.get("source_format") != "hdf5":
+            return int(len(self.current_data["channels"][channel]))
+
+        import h5py
+
+        with h5py.File(self.current_data["source_path"], "r") as handle:
+            dataset_path = (
+                f"acquisition_data/{channel}"
+                if f"acquisition_data/{channel}" in handle
+                else channel
+            )
+            return int(handle[dataset_path].shape[0])
+
+    def load_channel_preview(
+        self,
+        channel: str,
+        maximum_points: int = 8000,
+        *,
+        raw: bool = False,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Load a bounded plot preview while preserving the original time coordinates."""
+
+        if self.current_data is None:
+            raise WaveAnalysisError("Aucune donnée chargée")
+        sample_count = self._channel_sample_count(channel)
+        indices = np.unique(
+            np.linspace(0, sample_count - 1, min(sample_count, maximum_points), dtype=int)
+        )
+        if self.current_data.get("source_format") == "hdf5":
+            import h5py
+
+            with h5py.File(self.current_data["source_path"], "r") as handle:
+                dataset_path = (
+                    f"acquisition_data/{channel}"
+                    if f"acquisition_data/{channel}" in handle
+                    else channel
+                )
+                values = np.asarray(handle[dataset_path][indices], dtype=np.float64)
+                if "acquisition_data/time" in handle:
+                    time_values = np.asarray(
+                        handle["acquisition_data/time"][indices],
+                        dtype=np.float64,
+                    )
+                else:
+                    time_values = indices.astype(np.float64) / self.sample_rate
+            return time_values, values
+
+        source = (
+            self.current_data.get("raw_channels", {})
+            if raw
+            else self.current_data.get("channels", {})
+        )
+        if channel not in source:
+            raise WaveAnalysisError(f"Aperçu indisponible pour {channel}")
+        values = np.asarray(source[channel], dtype=np.float64)[indices]
+        full_time = np.asarray(self.current_data.get("time", []), dtype=np.float64)
+        time_values = (
+            full_time[indices]
+            if len(full_time) == sample_count
+            else indices.astype(np.float64) / self.sample_rate
+        )
+        return time_values, values
+
+    def _analysis_sample_bounds(self, sample_count: int) -> tuple[int, int]:
+        """Return a validated half-open sample interval selected by the operator."""
+
+        analysis = self.config["analysis"]
+        start_time = float(analysis.get("start_time_s", 0.0) or 0.0)
+        end_value = analysis.get("end_time_s")
+        end_time = float(end_value) if end_value is not None else sample_count / self.sample_rate
+        if start_time < 0 or end_time <= start_time:
+            raise WaveAnalysisError("L'intervalle temporel d'analyse est invalide")
+        start_index = max(0, int(np.ceil(start_time * self.sample_rate)))
+        stop_index = min(sample_count, int(np.ceil(end_time * self.sample_rate)))
+        minimum_samples = int(analysis.get("minimum_samples", 32))
+        if stop_index - start_index < minimum_samples:
+            raise WaveAnalysisError(
+                f"L'intervalle sélectionné contient moins de {minimum_samples} échantillons"
+            )
+        return start_index, stop_index
+
+    def _analysis_channel_values(
+        self,
+        channel: str,
+        sample_bounds: tuple[int, int],
+    ) -> np.ndarray:
+        start_index, stop_index = sample_bounds
+        if self.current_data and self.current_data.get("source_format") == "hdf5":
+            import h5py
+
+            with h5py.File(self.current_data["source_path"], "r") as handle:
+                dataset_path = (
+                    f"acquisition_data/{channel}"
+                    if f"acquisition_data/{channel}" in handle
+                    else channel
+                )
+                return np.asarray(
+                    handle[dataset_path][start_index:stop_index],
+                    dtype=np.float64,
+                )
+        return self._load_channel_values(channel)[start_index:stop_index]
+
     @staticmethod
     def _channel_metadata_map(
         channel_keys: list[str],
@@ -535,6 +642,7 @@ class PostProcessor(QObject):
         self,
         channel_keys: list[str],
         channel_metadata_map: dict[str, dict[str, Any]],
+        sample_bounds: tuple[int, int] | None = None,
     ) -> dict[str, Any]:
         """Run optional multi-probe separation when geometry is explicit."""
 
@@ -635,9 +743,14 @@ class PostProcessor(QObject):
             }
 
         analysis_config = self._wave_config()
+        first_values = (
+            self._analysis_channel_values(wave_channels[0], sample_bounds)
+            if sample_bounds is not None
+            else self._load_channel_values(wave_channels[0])
+        )
         segment_length = min(
             analysis_config.segment_length,
-            len(self._load_channel_values(wave_channels[0])),
+            len(first_values),
         )
         minimum_frequency = max(
             analysis_config.min_frequency,
@@ -656,7 +769,14 @@ class PostProcessor(QObject):
                     window=analysis_config.window,
                 )
             )
-            values = np.vstack([self._load_channel_values(channel) for channel in wave_channels])
+            values = np.vstack(
+                [
+                    self._analysis_channel_values(channel, sample_bounds)
+                    if sample_bounds is not None
+                    else self._load_channel_values(channel)
+                    for channel in wave_channels
+                ]
+            )
             result = separator.analyze(values, self.sample_rate)
             result["channel_keys"] = wave_channels
             result["physical_unit"] = physical_unit
@@ -755,7 +875,9 @@ class PostProcessor(QObject):
                 self.current_data.get("channel_metadata", {}),
             )
             reference_channel = channel_keys[0]
-            reference_values = self._load_channel_values(reference_channel)
+            source_sample_count = self._channel_sample_count(reference_channel)
+            sample_bounds = self._analysis_sample_bounds(source_sample_count)
+            reference_values = self._analysis_channel_values(reference_channel, sample_bounds)
             results: dict[str, Any] = {
                 "basic_stats": {},
                 "spectral_analysis": {},
@@ -769,13 +891,18 @@ class PostProcessor(QObject):
                 "sample_rate": self.sample_rate,
                 "reference_channel": reference_channel,
                 "channel_metadata": deepcopy(self.current_data.get("channel_metadata", {})),
-                "source_metadata": deepcopy(self.current_data.get("metadata", {})),
+                "source_metadata": {
+                    **deepcopy(self.current_data.get("metadata", {})),
+                    "source_format": self.current_data.get("source_format", "unknown"),
+                },
                 "timestamp": np.datetime64("now").astype(str),
             }
 
             for channel in channel_keys:
                 values = (
-                    reference_values if channel == reference_channel else self._load_channel_values(channel)
+                    reference_values
+                    if channel == reference_channel
+                    else self._analysis_channel_values(channel, sample_bounds)
                 )
                 channel_info = channel_metadata_map.get(channel, {})
                 unit = str(
@@ -819,6 +946,8 @@ class PostProcessor(QObject):
                         warning = "Calibration valide requise pour interpreter Hm0 et H1/3 physiquement"
                     channel_results["quality"]["warnings"].append(warning)
                     channel_results["quality"]["valid"] = False
+                    if channel_results["quality"].get("status") == "valid":
+                        channel_results["quality"]["status"] = "warning"
                 results["basic_stats"][channel] = channel_results["basic_stats"]
                 results["spectral_analysis"][channel] = channel_results["spectral"]
                 results["wave_parameters"][channel] = channel_results["wave_parameters"]
@@ -839,9 +968,11 @@ class PostProcessor(QObject):
             results["incident_reflected_analysis"] = self._compute_incident_reflected_analysis(
                 channel_keys,
                 channel_metadata_map,
+                sample_bounds,
             )
             spectra = list(results["spectral_analysis"].values())
             sample_count = int(len(reference_values))
+            start_index, stop_index = sample_bounds
             processing_warnings: list[str] = list(self.current_data.get("integrity_warnings", []))
             separation_status = results["incident_reflected_analysis"].get("status")
             if separation_status in {"blocked", "failed"}:
@@ -864,6 +995,12 @@ class PostProcessor(QObject):
                 "dt_seconds": 1.0 / float(self.sample_rate),
                 "n_samples": sample_count,
                 "duration_s": sample_count / float(self.sample_rate),
+                "source_n_samples": source_sample_count,
+                "source_duration_s": source_sample_count / float(self.sample_rate),
+                "analysis_start_s": start_index / float(self.sample_rate),
+                "analysis_end_s": stop_index / float(self.sample_rate),
+                "analysis_start_sample": start_index,
+                "analysis_stop_sample_exclusive": stop_index,
                 "processing_method": "post_processor.run_analysis",
                 "psd_method": "welch",
                 "window": str(self.config["analysis"].get("window", "hann")),
@@ -948,19 +1085,50 @@ class PostProcessor(QObject):
             for metric in (
                 "peak_frequency",
                 "peak_period",
+                "peak_psd",
                 "Hm0",
                 "Tm01",
                 "Tm02",
                 "Te",
+                "total_energy",
+                "spectral_bandwidth_epsilon",
                 "frequency_resolution",
+                "analysis_band_hz",
+                "nyquist_frequency",
                 "segment_count",
+                "equivalent_degrees_of_freedom_approx",
+                "psd_confidence_interval_95_factors_approx",
             ):
+                value = spectrum.get(metric)
+                if isinstance(value, (dict, list)):
+                    value = json.dumps(self._prepare_json_data(value), ensure_ascii=False)
                 rows.append(
                     {
                         "channel": channel,
                         "category": "spectral_analysis",
                         "metric": metric,
-                        "value": spectrum.get(metric),
+                        "value": value,
+                    }
+                )
+            for moment, value in spectrum.get("spectral_moments", {}).items():
+                rows.append(
+                    {
+                        "channel": channel,
+                        "category": "spectral_moments",
+                        "metric": moment,
+                        "value": value,
+                    }
+                )
+        for category in ("analysis_configuration", "metadata"):
+            for metric, value in self.current_analysis.get(category, {}).items():
+                if isinstance(value, (dict, list)):
+                    value = json.dumps(self._prepare_json_data(value), ensure_ascii=False)
+                rows.append(
+                    {
+                        "channel": "global",
+                        "category": category,
+                        "metric": metric,
+                        "value": value,
                     }
                 )
         separation = self.current_analysis.get("incident_reflected_analysis", {})

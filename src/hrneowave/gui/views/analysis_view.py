@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
@@ -37,6 +38,7 @@ from ...core.legacy_raw import (
     read_legacy_raw_header,
 )
 from ...core.post_processor import PostProcessor
+from ...core.scientific_report import build_scientific_report_text
 
 
 class LegacyRawImportDialog(QDialog):
@@ -208,6 +210,23 @@ class AnalysisToolsPanel(QFrame):
         self.max_frequency_spin.setSpecialValueText("Nyquist")
         self.max_frequency_spin.setSuffix(" Hz")
         self.max_frequency_spin.setMinimumWidth(120)
+        self.window_combo = QComboBox()
+        for label, value in (
+            ("Hann (recommandée)", "hann"),
+            ("Hamming", "hamming"),
+            ("Blackman", "blackman"),
+            ("Rectangulaire", "boxcar"),
+        ):
+            self.window_combo.addItem(label, value)
+        self.start_time_spin = QDoubleSpinBox()
+        self.start_time_spin.setRange(0.0, 10_000_000.0)
+        self.start_time_spin.setDecimals(3)
+        self.start_time_spin.setSuffix(" s")
+        self.end_time_spin = QDoubleSpinBox()
+        self.end_time_spin.setRange(0.0, 10_000_000.0)
+        self.end_time_spin.setDecimals(3)
+        self.end_time_spin.setSpecialValueText("Fin")
+        self.end_time_spin.setSuffix(" s")
         self.detrend_check = QCheckBox("Retirer moyenne et dérive linéaire")
         self.detrend_check.setChecked(True)
         fields = (
@@ -223,6 +242,16 @@ class AnalysisToolsPanel(QFrame):
             method_layout.addWidget(widget, 1, column)
         method_layout.addWidget(self.detrend_check, 1, len(fields))
         method_layout.setColumnStretch(len(fields), 1)
+        secondary_fields = (
+            ("FENÊTRE", self.window_combo),
+            ("DÉBUT INTERVALLE", self.start_time_spin),
+            ("FIN INTERVALLE", self.end_time_spin),
+        )
+        for column, (label, widget) in enumerate(secondary_fields):
+            label_widget = QLabel(label)
+            label_widget.setObjectName("metricLabel")
+            method_layout.addWidget(label_widget, 2, column)
+            method_layout.addWidget(widget, 3, column)
         parameters_layout.addLayout(method_layout)
 
         actions_row = QHBoxLayout()
@@ -260,8 +289,17 @@ class AnalysisToolsPanel(QFrame):
                 "min_frequency": self.min_frequency_spin.value(),
                 "max_frequency": max_frequency if max_frequency > 0 else None,
                 "detrend": self.detrend_check.isChecked(),
+                "window": str(self.window_combo.currentData()),
+                "start_time_s": self.start_time_spin.value(),
+                "end_time_s": self.end_time_spin.value() or None,
             },
         )
+
+    def set_record_duration(self, duration_s: float) -> None:
+        duration = max(0.0, float(duration_s))
+        self.start_time_spin.setMaximum(duration)
+        self.end_time_spin.setMaximum(duration)
+        self.end_time_spin.setValue(0.0)
 
 
 class AnalysisResultsArea(QFrame):
@@ -311,28 +349,85 @@ class AnalysisResultsArea(QFrame):
 
         self.stats_table = QTableWidget()
         self.stats_table.verticalHeader().setVisible(False)
-        self.stats_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.tab_widget.addTab(self.stats_table, "Statistiques")
+        self.stats_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.stats_table.horizontalHeader().setStretchLastSection(True)
+        self.tab_widget.addTab(self.stats_table, "Synthèse temporelle")
 
-        self.wave_table = QTableWidget()
-        self.wave_table.verticalHeader().setVisible(False)
-        self.wave_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.tab_widget.addTab(self.wave_table, "Parametres de houle")
+        self.spectral_table = QTableWidget()
+        self.spectral_table.verticalHeader().setVisible(False)
+        self.spectral_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.spectral_table.horizontalHeader().setStretchLastSection(True)
+        self.wave_table = self.spectral_table
+        self.tab_widget.addTab(self.spectral_table, "Paramètres spectraux")
+
+        self.quality_table = QTableWidget()
+        self.quality_table.verticalHeader().setVisible(False)
+        self.quality_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.quality_table.horizontalHeader().setStretchLastSection(True)
+        self.tab_widget.addTab(self.quality_table, "Diagnostic qualité")
 
         self.time_figure = Figure(figsize=(7, 4), tight_layout=True)
         self.time_canvas = FigureCanvas(self.time_figure)
-        self.tab_widget.addTab(self.time_canvas, "Signaux temporels")
+        time_page = QWidget()
+        time_layout = QVBoxLayout(time_page)
+        time_layout.setContentsMargins(4, 4, 4, 4)
+        time_layout.setSpacing(4)
+        time_controls = QHBoxLayout()
+        self.channel_combo = QComboBox()
+        self.channel_combo.setMinimumWidth(160)
+        self.overlay_channels_check = QCheckBox("Superposer tous les canaux")
+        self.raw_signal_check = QCheckBox("Afficher la tension brute")
+        self.raw_signal_check.setVisible(False)
+        self.center_signal_check = QCheckBox("Centrer")
+        self.std_guides_check = QCheckBox("Repères ±σ")
+        self.time_cursor_label = QLabel("Curseur : —")
+        self.time_cursor_label.setObjectName("mutedText")
+        time_controls.addWidget(QLabel("CANAL"))
+        time_controls.addWidget(self.channel_combo)
+        time_controls.addWidget(self.overlay_channels_check)
+        time_controls.addWidget(self.raw_signal_check)
+        time_controls.addWidget(self.center_signal_check)
+        time_controls.addWidget(self.std_guides_check)
+        time_controls.addStretch()
+        time_controls.addWidget(self.time_cursor_label)
+        time_layout.addLayout(time_controls)
+        time_layout.addWidget(NavigationToolbar(self.time_canvas, time_page))
+        time_layout.addWidget(self.time_canvas, 1)
+        self.tab_widget.addTab(time_page, "Signal temporel")
 
         self.spectrum_figure = Figure(figsize=(7, 4), tight_layout=True)
         self.spectrum_canvas = FigureCanvas(self.spectrum_figure)
-        self.tab_widget.addTab(self.spectrum_canvas, "Spectres")
+        spectrum_page = QWidget()
+        spectrum_layout = QVBoxLayout(spectrum_page)
+        spectrum_layout.setContentsMargins(4, 4, 4, 4)
+        spectrum_layout.setSpacing(4)
+        spectrum_controls = QHBoxLayout()
+        self.spectrum_scale_combo = QComboBox()
+        self.spectrum_scale_combo.addItem("Échelle logarithmique", "log")
+        self.spectrum_scale_combo.addItem("Échelle linéaire", "linear")
+        self.confidence_interval_check = QCheckBox("Intervalle de confiance 95 %")
+        self.confidence_interval_check.setChecked(True)
+        self.cumulative_energy_check = QCheckBox("Énergie cumulée")
+        self.spectrum_readout_label = QLabel("Pic : —")
+        self.spectrum_readout_label.setObjectName("mutedText")
+        spectrum_controls.addWidget(self.spectrum_scale_combo)
+        spectrum_controls.addWidget(self.confidence_interval_check)
+        spectrum_controls.addWidget(self.cumulative_energy_check)
+        spectrum_controls.addStretch()
+        spectrum_controls.addWidget(self.spectrum_readout_label)
+        spectrum_layout.addLayout(spectrum_controls)
+        spectrum_layout.addWidget(NavigationToolbar(self.spectrum_canvas, spectrum_page))
+        spectrum_layout.addWidget(self.spectrum_canvas, 1)
+        self.tab_widget.addTab(spectrum_page, "Spectre / PSD")
 
         self.separation_figure = Figure(figsize=(7, 4), tight_layout=True)
         self.separation_canvas = FigureCanvas(self.separation_figure)
-        self.tab_widget.addTab(
-            self.separation_canvas,
-            "Incidente / réfléchie",
-        )
+        separation_page = QWidget()
+        separation_layout = QVBoxLayout(separation_page)
+        separation_layout.setContentsMargins(4, 4, 4, 4)
+        separation_layout.addWidget(NavigationToolbar(self.separation_canvas, separation_page))
+        separation_layout.addWidget(self.separation_canvas, 1)
+        self.tab_widget.addTab(separation_page, "Incidente / réfléchie")
 
         self.report_text = QTextEdit()
         self.report_text.setReadOnly(True)
@@ -408,6 +503,17 @@ class AnalysisView(QWidget):
         self.tools_panel.refresh_button.clicked.connect(self.refresh_project_files)
         self.tools_panel.data_combo.activated.connect(self._load_selected_from_combo)
         self.tools_panel.parameters_toggle_requested.connect(self._toggle_tools_panel)
+        self.results_area.channel_combo.currentTextChanged.connect(self._on_plot_controls_changed)
+        self.results_area.overlay_channels_check.toggled.connect(self._on_plot_controls_changed)
+        self.results_area.raw_signal_check.toggled.connect(self._update_time_plot)
+        self.results_area.center_signal_check.toggled.connect(self._update_time_plot)
+        self.results_area.std_guides_check.toggled.connect(self._update_time_plot)
+        self.results_area.spectrum_scale_combo.currentIndexChanged.connect(
+            self._update_spectrum_plot
+        )
+        self.results_area.confidence_interval_check.toggled.connect(self._update_spectrum_plot)
+        self.results_area.cumulative_energy_check.toggled.connect(self._update_spectrum_plot)
+        self.results_area.time_canvas.mpl_connect("motion_notify_event", self._on_time_cursor_moved)
 
     def _toggle_tools_panel(self) -> None:
         self._set_tools_panel_expanded(not self._tools_panel_expanded)
@@ -499,6 +605,12 @@ class AnalysisView(QWidget):
             self.results_area.rate_metric,
             f"{self.post_processor.sample_rate:g} Hz",
         )
+        data = self.post_processor.current_data or {}
+        sample_count = int(data.get("metadata", {}).get("n_samples", 0) or 0)
+        if not sample_count and data.get("channel_keys"):
+            sample_count = self.post_processor._channel_sample_count(data["channel_keys"][0])
+        self.tools_panel.set_record_duration(sample_count / self.post_processor.sample_rate)
+        self._refresh_channel_selector()
         self._update_time_plot()
         self.results_area.update_analysis_status("DONNÉES CHARGÉES", self.analysis_count)
         return True
@@ -526,7 +638,16 @@ class AnalysisView(QWidget):
         channel_warning_count = sum(len(item.get("warnings", [])) for item in quality.values())
         processing_warning_count = len(self.current_analysis_result.get("metadata", {}).get("warnings", []))
         warning_count = channel_warning_count + processing_warning_count
-        quality_text = "Validée" if warning_count == 0 else f"{warning_count} alerte(s)"
+        rejected_count = sum(
+            1 for item in quality.values() if item.get("status") == "rejected"
+        )
+        quality_text = (
+            "Validée"
+            if warning_count == 0
+            else f"{rejected_count} rejeté(s) · {warning_count} alerte(s)"
+            if rejected_count
+            else f"{warning_count} alerte(s)"
+        )
         self.results_area._set_metric(self.results_area.quality_metric, quality_text)
         self.results_area.analysis_status_label.setProperty(
             "state", "success" if warning_count == 0 else "warning"
@@ -602,6 +723,8 @@ class AnalysisView(QWidget):
         self.results_area.stats_table.setRowCount(0)
         self.results_area.wave_table.clearContents()
         self.results_area.wave_table.setRowCount(0)
+        self.results_area.quality_table.clearContents()
+        self.results_area.quality_table.setRowCount(0)
         self.results_area.time_figure.clear()
         self.results_area.time_canvas.draw_idle()
         self.results_area.spectrum_figure.clear()
@@ -645,87 +768,206 @@ class AnalysisView(QWidget):
         if select:
             self.tools_panel.data_combo.setCurrentIndex(index)
 
+    def _refresh_channel_selector(self) -> None:
+        data = self.post_processor.current_data or {}
+        channels = list(data.get("channel_keys", []))
+        current = self.results_area.channel_combo.currentText()
+        self.results_area.channel_combo.blockSignals(True)
+        self.results_area.channel_combo.clear()
+        self.results_area.channel_combo.addItems(channels)
+        if current in channels:
+            self.results_area.channel_combo.setCurrentText(current)
+        self.results_area.channel_combo.blockSignals(False)
+        self.results_area.raw_signal_check.setVisible(bool(data.get("raw_channels")))
+
+    def _on_plot_controls_changed(self, *_args) -> None:
+        self._update_time_plot()
+        self._update_spectrum_plot()
+
+    def _on_time_cursor_moved(self, event) -> None:
+        if event.inaxes is None or event.xdata is None or event.ydata is None:
+            return
+        self.results_area.time_cursor_label.setText(
+            f"Curseur : t={event.xdata:.3f} s · y={event.ydata:.6g}"
+        )
+
+    def _channel_metadata(self, channel: str) -> dict:
+        data = self.post_processor.current_data or {}
+        return self.post_processor._channel_metadata_map(
+            list(data.get("channel_keys", [])),
+            data.get("channel_metadata", {}),
+        ).get(channel, {})
+
+    def _channel_unit(self, channel: str) -> str:
+        metadata = self._channel_metadata(channel)
+        return str(
+            metadata.get("physical_unit")
+            or metadata.get("physical_units")
+            or metadata.get("unit")
+            or "unité"
+        )
+
+    @staticmethod
+    def _quality_label(indicators: dict) -> str:
+        return {
+            "valid": "VALIDE",
+            "warning": "À VÉRIFIER",
+            "rejected": "REJETÉ",
+        }.get(str(indicators.get("status", "")), "VALIDE" if not indicators.get("warnings") else "À VÉRIFIER")
+
     def _update_results_views(self) -> None:
         results = self.current_analysis_result or {}
         basic_stats = results.get("basic_stats", {})
         wave_parameters = results.get("wave_parameters", {})
         channels = list(basic_stats.keys())
-        metrics = (
-            ("mean", "Moyenne"),
-            ("std", "Écart-type"),
-            ("min", "Minimum"),
-            ("max", "Maximum"),
-            ("rms", "Valeur RMS"),
-            ("skewness", "Asymétrie"),
-            ("kurtosis", "Aplatissement"),
-        )
-
         self.results_area.stats_table.clearContents()
-        self.results_area.stats_table.setColumnCount(len(channels) + 1)
-        self.results_area.stats_table.setHorizontalHeaderLabels(["Parametre"] + channels)
-        self.results_area.stats_table.setRowCount(len(metrics))
-
-        for row, (metric, metric_label) in enumerate(metrics):
-            self.results_area.stats_table.setItem(row, 0, QTableWidgetItem(metric_label))
-            for col, channel in enumerate(channels, start=1):
-                value = basic_stats.get(channel, {}).get(metric, "")
-                if isinstance(value, float):
-                    value = f"{value:.6f}"
-                self.results_area.stats_table.setItem(row, col, QTableWidgetItem(str(value)))
-
-        wave_metrics = (
-            ("H1_3", "H1/3 temporel"),
-            ("Hm0", "Hm0 spectral"),
-            ("H_max", "Hauteur maximale"),
-            ("Tp", "Période de pic Tp (s)"),
-            ("Tm01", "Période Tm01 (s)"),
-            ("Tm02", "Période Tm02 (s)"),
-            ("T_mean", "Période moyenne (s)"),
-            ("n_waves", "Vagues détectées"),
+        stat_columns = (
+            ("Canal", None),
+            ("Unité", None),
+            ("N", "sample_count"),
+            ("Moyenne", "mean"),
+            ("Écart-type", "std"),
+            ("RMS", "rms"),
+            ("Minimum", "min"),
+            ("Maximum", "max"),
+            ("Asymétrie", "skewness"),
+            ("Aplatissement", "kurtosis"),
         )
-        self.results_area.wave_table.clearContents()
-        self.results_area.wave_table.setColumnCount(len(channels) + 1)
-        self.results_area.wave_table.setHorizontalHeaderLabels(["Parametre"] + channels)
-        self.results_area.wave_table.setRowCount(len(wave_metrics))
-        for row, (metric, metric_label) in enumerate(wave_metrics):
-            self.results_area.wave_table.setItem(row, 0, QTableWidgetItem(metric_label))
-            for col, channel in enumerate(channels, start=1):
-                value = wave_parameters.get(channel, {}).get(metric, "")
+        self.results_area.stats_table.setColumnCount(len(stat_columns))
+        self.results_area.stats_table.setHorizontalHeaderLabels([item[0] for item in stat_columns])
+        self.results_area.stats_table.setRowCount(len(channels))
+        for row, channel in enumerate(channels):
+            stats = basic_stats.get(channel, {})
+            values = [channel, self._channel_unit(channel)] + [
+                stats.get(metric, "") for _, metric in stat_columns[2:]
+            ]
+            for column, value in enumerate(values):
                 if isinstance(value, float):
-                    value = f"{value:.6f}"
-                self.results_area.wave_table.setItem(row, col, QTableWidgetItem(str(value)))
+                    value = f"{value:.6g}"
+                self.results_area.stats_table.setItem(row, column, QTableWidgetItem(str(value)))
+
+        spectral = results.get("spectral_analysis", {})
+        spectral_headers = [
+            "Canal", "Verdict", "Hm0", "H1/3", "fpic (Hz)", "Tp (s)", "Tm01 (s)",
+            "Tm02 (s)", "Te (s)", "m0", "Δf (Hz)", "Segments", "DDL ≈",
+        ]
+        self.results_area.spectral_table.clearContents()
+        self.results_area.spectral_table.setColumnCount(len(spectral_headers))
+        self.results_area.spectral_table.setHorizontalHeaderLabels(spectral_headers)
+        self.results_area.spectral_table.setRowCount(len(channels))
+        for row, channel in enumerate(channels):
+            spectrum = spectral.get(channel, {})
+            waves = wave_parameters.get(channel, {})
+            quality = results.get("quality", {}).get(channel, {})
+            moments = spectrum.get("spectral_moments", {})
+            tp_value = waves.get("Tp", 0.0)
+            tp_text = f"{tp_value:.6g}" if quality.get("peak_period_reliable", False) else "NON FIABLE"
+            values = (
+                channel,
+                self._quality_label(quality),
+                spectrum.get("Hm0", 0.0),
+                waves.get("H1_3", 0.0),
+                spectrum.get("peak_frequency", 0.0),
+                tp_text,
+                spectrum.get("Tm01", 0.0),
+                spectrum.get("Tm02", 0.0),
+                spectrum.get("Te", 0.0),
+                moments.get("m0", 0.0),
+                spectrum.get("frequency_resolution", 0.0),
+                spectrum.get("segment_count", 0),
+                spectrum.get("equivalent_degrees_of_freedom_approx", 0),
+            )
+            for column, value in enumerate(values):
+                if isinstance(value, float):
+                    value = f"{value:.6g}"
+                self.results_area.spectral_table.setItem(row, column, QTableWidgetItem(str(value)))
+
+        quality_headers = [
+            "Canal", "Verdict", "Alertes", "Var. PSD/temps", "Stationnarité",
+            "Cycles au pic", "Éch./période", "Plate (%)", "Dérive /s",
+        ]
+        quality_results = results.get("quality", {})
+        self.results_area.quality_table.clearContents()
+        self.results_area.quality_table.setColumnCount(len(quality_headers))
+        self.results_area.quality_table.setHorizontalHeaderLabels(quality_headers)
+        self.results_area.quality_table.setRowCount(len(channels))
+        for row, channel in enumerate(channels):
+            indicators = quality_results.get(channel, {})
+            values = (
+                channel,
+                self._quality_label(indicators),
+                "\n".join(map(str, indicators.get("warnings", []))) or "Aucune",
+                indicators.get("spectral_to_time_variance_ratio", 0.0),
+                indicators.get("block_variance_ratio", 0.0),
+                indicators.get("record_cycles_at_peak", 0.0),
+                indicators.get("samples_per_peak_period", 0.0),
+                100.0 * indicators.get("longest_flat_run_fraction", 0.0),
+                indicators.get("linear_trend_per_second", 0.0),
+            )
+            for column, value in enumerate(values):
+                if isinstance(value, float):
+                    value = f"{value:.6g}"
+                self.results_area.quality_table.setItem(row, column, QTableWidgetItem(str(value)))
+        self.results_area.quality_table.resizeRowsToContents()
 
         self._update_spectrum_plot()
         self._update_separation_plot()
 
         self.results_area.report_text.setPlainText(self._build_report_text())
 
-    def _update_time_plot(self) -> None:
+    def _update_time_plot(self, *_args) -> None:
         figure = self.results_area.time_figure
         figure.clear()
         axis = figure.add_subplot(111)
         figure.set_facecolor("#FFFFFF")
         axis.set_facecolor("#FFFFFF")
         data = self.post_processor.current_data or {}
-        time_values = np.asarray(data.get("time", []), dtype=np.float64)
-        channels = data.get("channels", {})
         channel_keys = list(data.get("channel_keys", []))
-        if time_values.size and channels:
-            stride = max(1, int(np.ceil(time_values.size / 8000)))
-            sampled_time = time_values[::stride]
-            for channel in channel_keys[:16]:
-                values = np.asarray(channels.get(channel, []), dtype=np.float64)
-                if values.size == time_values.size:
-                    axis.plot(sampled_time, values[::stride], linewidth=0.8, label=channel)
+        selected = self.results_area.channel_combo.currentText()
+        plotted_channels = (
+            channel_keys if self.results_area.overlay_channels_check.isChecked() else [selected]
+        )
+        plotted_channels = [channel for channel in plotted_channels if channel in channel_keys]
+        raw_channels = data.get("raw_channels", {})
+        use_raw = self.results_area.raw_signal_check.isChecked() and bool(raw_channels)
+        if plotted_channels:
+            for channel in plotted_channels[:24]:
+                sampled_time, values = self.post_processor.load_channel_preview(
+                    channel,
+                    raw=use_raw,
+                )
+                if self.results_area.center_signal_check.isChecked():
+                    values = values - float(np.mean(values))
+                axis.plot(sampled_time, values, linewidth=0.8, label=channel)
+                if channel == selected and self.results_area.std_guides_check.isChecked():
+                    mean = float(np.mean(values))
+                    standard_deviation = float(np.std(values))
+                    axis.axhline(mean, color="#405965", linewidth=0.8, alpha=0.7)
+                    axis.axhline(
+                        mean + standard_deviation,
+                        color="#C47B18",
+                        linewidth=0.8,
+                        linestyle="--",
+                    )
+                    axis.axhline(
+                        mean - standard_deviation,
+                        color="#C47B18",
+                        linewidth=0.8,
+                        linestyle="--",
+                    )
+            if self.current_analysis_result:
+                metadata = self.current_analysis_result.get("metadata", {})
+                axis.axvspan(
+                    float(metadata.get("analysis_start_s", sampled_time[0])),
+                    float(metadata.get("analysis_end_s", sampled_time[-1])),
+                    color="#1A7188",
+                    alpha=0.06,
+                    label="Intervalle analysé",
+                )
             axis.set_xlabel("Temps (s)", color="#405965")
-            units = {
-                str(item.get("physical_unit", "")).strip()
-                for item in data.get("channel_metadata", [])
-                if isinstance(item, dict) and item.get("physical_unit")
-            }
-            unit = next(iter(units)) if len(units) == 1 else "unité physique"
+            unit = "V" if use_raw else self._channel_unit(selected)
             axis.set_ylabel(unit, color="#405965")
-            if channel_keys:
+            if plotted_channels:
                 axis.legend(loc="best", frameon=False, fontsize=7, ncol=2)
         else:
             axis.text(
@@ -743,24 +985,71 @@ class AnalysisView(QWidget):
         axis.spines["right"].set_visible(False)
         self.results_area.time_canvas.draw_idle()
 
-    def _update_spectrum_plot(self) -> None:
+    def _update_spectrum_plot(self, *_args) -> None:
         spectral = (self.current_analysis_result or {}).get("spectral_analysis", {})
         figure = self.results_area.spectrum_figure
         figure.clear()
         axis = figure.add_subplot(111)
         figure.set_facecolor("#FFFFFF")
         axis.set_facecolor("#FFFFFF")
-        for channel, values in spectral.items():
+        selected = self.results_area.channel_combo.currentText()
+        plotted_channels = (
+            list(spectral)
+            if self.results_area.overlay_channels_check.isChecked()
+            else ([selected] if selected in spectral else [])
+        )
+        scale = str(self.results_area.spectrum_scale_combo.currentData())
+        for channel in plotted_channels:
+            values = spectral[channel]
             frequencies = np.asarray(values.get("frequencies", []), dtype=float)
             density = np.asarray(values.get("psd", []), dtype=float)
-            valid = (frequencies > 0) & np.isfinite(density) & (density > 0)
+            valid = (frequencies > 0) & np.isfinite(density)
+            if scale == "log":
+                valid &= density > 0
             if np.any(valid):
-                axis.semilogy(
-                    frequencies[valid],
-                    density[valid],
-                    label=channel,
-                    linewidth=1.35,
-                )
+                axis.plot(frequencies[valid], density[valid], label=channel, linewidth=1.35)
+                if channel == selected:
+                    peak_frequency = float(values.get("peak_frequency", 0.0))
+                    peak_psd = float(values.get("peak_psd", 0.0))
+                    axis.plot([peak_frequency], [peak_psd], marker="o", color="#D46A1F", markersize=5)
+                    if self.results_area.confidence_interval_check.isChecked():
+                        factors = values.get("psd_confidence_interval_95_factors_approx", [])
+                        if len(factors) == 2:
+                            axis.fill_between(
+                                frequencies[valid],
+                                density[valid] * float(factors[0]),
+                                density[valid] * float(factors[1]),
+                                color="#1A7188",
+                                alpha=0.13,
+                                label="IC 95 % approx.",
+                            )
+                    quality = (self.current_analysis_result or {}).get("quality", {}).get(channel, {})
+                    peak_period = float(values.get("peak_period", 0.0))
+                    tp_text = (
+                        f"Tp={peak_period:.4g} s"
+                        if quality.get("peak_period_reliable")
+                        else "Tp non fiable"
+                    )
+                    self.results_area.spectrum_readout_label.setText(
+                        f"Pic : {peak_frequency:.5g} Hz · {tp_text} · "
+                        f"Δf={values.get('frequency_resolution', 0):.5g} Hz"
+                    )
+                    if self.results_area.cumulative_energy_check.isChecked():
+                        energy_axis = axis.twinx()
+                        frequency_step = float(values.get("frequency_resolution", 0.0))
+                        cumulative = np.cumsum(np.maximum(density, 0.0)) * frequency_step
+                        if cumulative.size and cumulative[-1] > 0:
+                            energy_axis.plot(
+                                frequencies,
+                                100.0 * cumulative / cumulative[-1],
+                                color="#C47B18",
+                                linewidth=1.0,
+                                linestyle="--",
+                            )
+                            energy_axis.set_ylabel("Énergie cumulée (%)", color="#C47B18")
+                            energy_axis.set_ylim(0, 105)
+                            energy_axis.tick_params(colors="#C47B18", labelsize=8)
+        axis.set_yscale(scale)
         axis.set_xlabel("Fréquence (Hz)", color="#405965")
         axis.set_ylabel("Densité spectrale", color="#405965")
         axis.tick_params(colors="#667C88", labelsize=9)
@@ -769,7 +1058,7 @@ class AnalysisView(QWidget):
         axis.spines["right"].set_visible(False)
         axis.spines["bottom"].set_color("#B7C6CD")
         axis.spines["left"].set_color("#B7C6CD")
-        if spectral:
+        if plotted_channels:
             axis.legend(loc="best", frameon=False, fontsize=8)
         self.results_area.spectrum_canvas.draw_idle()
 
@@ -838,63 +1127,9 @@ class AnalysisView(QWidget):
         self.results_area.separation_canvas.draw_idle()
 
     def _build_report_text(self) -> str:
-        results = self.current_analysis_result or {}
-        basic_stats = results.get("basic_stats", {})
-        spectral = results.get("spectral_analysis", {})
-        waves = results.get("wave_parameters", {})
-        quality = results.get("quality", {})
-        cross_spectral = results.get("cross_spectral_analysis", {})
-        separation = results.get("incident_reflected_analysis", {})
-
-        lines = ["Rapport d'analyse CHNeoWave"]
-        if self.current_data_file:
-            lines.append(f"Fichier: {self.current_data_file}")
-        lines.append(f"Frequence d'echantillonnage: {self.post_processor.sample_rate} Hz")
-        lines.append("")
-
-        for channel, stats in basic_stats.items():
-            lines.append(f"[{channel}]")
-            lines.append(f"  moyenne: {stats.get('mean', 0):.6f}")
-            lines.append(f"  ecart-type: {stats.get('std', 0):.6f}")
-            lines.append(f"  min/max: {stats.get('min', 0):.6f} / {stats.get('max', 0):.6f}")
-            if channel in spectral:
-                lines.append(f"  frequence pic: {spectral[channel].get('peak_frequency', 0):.6f} Hz")
-                lines.append(f"  resolution: {spectral[channel].get('frequency_resolution', 0):.6f} Hz")
-            if channel in waves:
-                lines.append(f"  H1/3 temporel: {waves[channel].get('H1_3', 0):.6f}")
-                lines.append(f"  Hm0 spectral: {waves[channel].get('Hm0', 0):.6f}")
-                lines.append(f"  Hmax: {waves[channel].get('H_max', 0):.6f}")
-                lines.append(f"  Tp: {waves[channel].get('Tp', 0):.6f} s")
-                tm01 = waves[channel].get("Tm01", 0)
-                tm02 = waves[channel].get("Tm02", 0)
-                lines.append(f"  Tm01/Tm02: {tm01:.6f} / {tm02:.6f} s")
-                lines.append(f"  vagues detectees: {waves[channel].get('n_waves', 0)}")
-            channel_warnings = quality.get(channel, {}).get("warnings", [])
-            for warning in channel_warnings:
-                lines.append(f"  ATTENTION: {warning}")
-            lines.append("")
-
-        if cross_spectral:
-            lines.append("Analyse croisee par rapport au canal de reference")
-            for pair, metrics in cross_spectral.items():
-                lines.append(
-                    f"  {pair}: coherence={metrics.get('coherence_at_reference_peak', 0):.4f}, "
-                    f"phase={metrics.get('phase_at_reference_peak_degrees', 0):.2f} deg"
-                )
-
-        if separation.get("status") == "complete":
-            separation_unit = separation.get("physical_unit", "unité")
-            lines.extend(
-                [
-                    "",
-                    "Separation multi-sondes incidente/reflechie",
-                    f"  sondes: {separation.get('probe_count', 0)}",
-                    f"  profondeur: {separation.get('configuration', {}).get('water_depth_m', 0):.6g} m",
-                    f"  Hm0 incident: {separation.get('incident_Hm0', 0):.6f} {separation_unit}",
-                    f"  Hm0 reflechi: {separation.get('reflected_Hm0', 0):.6f} {separation_unit}",
-                    "  coefficient de reflexion energetique Kr: "
-                    f"{separation.get('energy_reflection_coefficient', 0):.6f}",
-                ]
-            )
-
-        return "\n".join(lines).strip()
+        return build_scientific_report_text(
+            self.current_analysis_result or {},
+            self.current_data_file,
+            self.current_project_metadata,
+            {"title": "Rapport scientifique CHNeoWave"},
+        )

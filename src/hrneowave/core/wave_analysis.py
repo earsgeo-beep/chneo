@@ -52,7 +52,7 @@ class WaveAnalysisConfig:
 class WaveAnalyzer:
     """Calcule statistiques, spectre, moments et vagues individuelles."""
 
-    METHOD_VERSION = "1.2"
+    METHOD_VERSION = "1.3"
 
     def __init__(self, config: WaveAnalysisConfig | None = None):
         self.config = config or WaveAnalysisConfig()
@@ -86,6 +86,7 @@ class WaveAnalyzer:
         )
         temporal = self._zero_upcrossing_analysis(processed, sample_rate, unit)
         quality = self._quality_indicators(series, processed, spectral, sample_rate)
+        peak_period_reliable = bool(quality["peak_period_reliable"])
 
         return {
             "basic_stats": self._basic_statistics(series, sample_rate, unit),
@@ -94,6 +95,7 @@ class WaveAnalyzer:
                 **temporal,
                 "Hm0": spectral["Hm0"],
                 "Tp": spectral["peak_period"],
+                "Tp_reliable": peak_period_reliable,
                 "Tm01": spectral["Tm01"],
                 "Tm02": spectral["Tm02"],
                 "Te": spectral["Te"],
@@ -405,8 +407,21 @@ class WaveAnalyzer:
 
         time_axis = np.arange(len(original), dtype=np.float64) / sample_rate
         trend_slope = float(np.polyfit(time_axis, original, 1)[0]) if len(original) > 1 else 0.0
+        peak_period_reliable = bool(
+            peak_frequency > 0
+            and not peak_at_band_boundary
+            and samples_per_peak_period >= 10.0
+            and record_cycles_at_peak >= 10.0
+        )
+        rejected = bool(
+            np.ptp(original) == 0
+            or stationarity_ratio > 4.0
+            or flat_run_fraction >= 0.05
+        )
+        status = "rejected" if rejected else ("warning" if warnings else "valid")
         return {
             "valid": not warnings,
+            "status": status,
             "warnings": warnings,
             "sample_count": int(len(original)),
             "duration_seconds": float(len(original) / sample_rate),
@@ -421,6 +436,7 @@ class WaveAnalyzer:
             "record_cycles_at_peak": record_cycles_at_peak,
             "peak_frequency_resolution_ratio": peak_resolution_ratio,
             "peak_at_analysis_band_boundary": peak_at_band_boundary,
+            "peak_period_reliable": peak_period_reliable,
             "linear_trend_per_second": trend_slope,
         }
 
