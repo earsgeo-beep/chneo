@@ -1,13 +1,20 @@
-/* CHNeoWave — scientific workstation interface, rebuilt from first principles. */
+/* CHNeoWave v6 — one restrained design language for the laboratory workstation. */
 
-QMainWindow, QDialog, QWidget {
+QMainWindow, QDialog {
     background: @BG@;
+    color: @TEXT@;
+}
+QWidget {
+    background: transparent;
     color: @TEXT@;
     font-family: "Segoe UI", "Inter", sans-serif;
     font-size: 12px;
 }
-QWidget#mainContent, QWidget#contentCanvas, QScrollArea#pageScroll,
-QScrollArea#pageScroll > QWidget > QWidget { background: @BG@; }
+QLabel { background: transparent; border: none; }
+QWidget#mainContent, QWidget#contentCanvas, QWidget#analysisWorkspace,
+QScrollArea#pageScroll, QScrollArea#pageScroll > QWidget > QWidget {
+    background: @BG@;
+}
 QToolTip {
     background: @TOOLTIP@;
     color: @TEXT_STRONG@;
@@ -15,104 +22,97 @@ QToolTip {
     padding: 5px 7px;
 }
 
-/* Desktop menu */
+/* Native desktop chrome: 24 px menu + 48 px command bar. */
 QMenuBar#desktopMenuBar {
-    background: #0B151B;
-    color: #B9C7CD;
+    background: @CHROME@;
+    color: @CHROME_TEXT@;
     border: none;
-    border-bottom: 1px solid #24343C;
-    padding: 1px 8px;
+    border-bottom: 1px solid @CHROME_BORDER@;
+    padding: 0 8px;
     min-height: 22px;
 }
-QMenuBar#desktopMenuBar::item { padding: 4px 10px; background: transparent; }
-QMenuBar#desktopMenuBar::item:selected { background: #22333C; color: #FFFFFF; }
+QMenuBar#desktopMenuBar::item { padding: 2px 9px; background: transparent; color: @CHROME_TEXT@; }
+QMenuBar#desktopMenuBar::item:selected { background: @CHROME_ACTIVE@; color: #FFFFFF; }
 QMenu {
     background: @PANEL@;
     color: @TEXT@;
     border: 1px solid @BORDER_STRONG@;
-    padding: 5px;
+    padding: 4px;
 }
 QMenu::item { min-width: 220px; padding: 7px 24px 7px 10px; }
 QMenu::item:selected { background: @ACCENT_SOFT@; color: @TEXT_STRONG@; }
 QMenu::separator { height: 1px; background: @BORDER@; margin: 4px 6px; }
 
-/* Horizontal application shell */
 QFrame#topNavigation {
-    background: #101D24;
+    background: @CHROME@;
     border: none;
-    border-bottom: 1px solid #30434C;
+    border-bottom: 1px solid @CHROME_BORDER@;
 }
 QFrame#horizontalBrand { background: transparent; border: none; }
 QLabel#horizontalBrandMark { background: transparent; }
-QLabel#horizontalBrandCopy {
-    background: transparent;
-    color: #F1F5F6;
-    font-size: 10px;
-    font-weight: 700;
-    line-height: 1.25;
-}
+QLabel#horizontalBrandCopy { color: #F4F8F9; font-size: 13px; font-weight: 700; }
 QPushButton#workspaceNavButton {
     background: transparent;
-    color: #A6B7BE;
+    color: @CHROME_MUTED@;
     border: none;
-    border-bottom: 3px solid transparent;
+    border-bottom: 2px solid transparent;
     border-radius: 0;
-    padding: 0 10px;
+    padding: 0 8px;
     font-size: 11px;
     font-weight: 600;
 }
-QPushButton#workspaceNavButton:hover { background: #1B2C34; color: #FFFFFF; }
+QPushButton#workspaceNavButton:hover { background: @CHROME_HOVER@; color: #FFFFFF; }
 QPushButton#workspaceNavButton[active="true"] {
-    background: #172B35;
+    background: @CHROME_ACTIVE@;
     color: #FFFFFF;
-    border-bottom-color: #23A8C3;
+    border-bottom-color: @MEASURE@;
 }
 QLabel#navigationContext, QLabel#navigationHardware {
-    background: transparent;
-    color: #90A5AE;
-    border-left: 1px solid #2A3A42;
-    min-width: 94px;
-    max-width: 142px;
+    color: @CHROME_MUTED@;
+    border-left: 1px solid @CHROME_BORDER@;
+    min-width: 112px;
+    max-width: 210px;
     padding: 0 10px;
     font-size: 9px;
-    font-weight: 600;
+    font-weight: 650;
 }
-QLabel#navigationHardware { color: #D39A43; }
-QLabel#navigationHardware[connected="true"] { color: #55C59B; }
+QLabel#navigationHardware { color: @WARNING@; }
+QLabel#navigationHardware[connected="true"] { color: @SUCCESS@; }
 QPushButton#navigationTheme {
     background: transparent;
     border: 1px solid transparent;
     border-radius: 3px;
     padding: 0;
 }
-QPushButton#navigationTheme:hover { background: #22343D; border-color: #3B5059; }
+QPushButton#navigationTheme:hover { background: @CHROME_HOVER@; border-color: @CHROME_BORDER@; }
 
-/* Analysis command surface */
-QWidget#analysisWorkspace { background: @BG@; }
+/* Analysis command strip: two compact rows, never a page header. */
 QFrame#sourceChannelBar {
     background: @PANEL@;
     border: none;
     border-bottom: 1px solid @BORDER_STRONG@;
 }
-QLabel#commandCaption {
+QLabel#commandCaption, QLabel#inspectorSectionTitle {
     color: @MUTED@;
-    font-size: 10px;
-    font-weight: 750;
-    letter-spacing: .4px;
+    font-size: 9px;
+    font-weight: 700;
 }
-QLabel#commandHint { color: @MUTED@; font-size: 10px; }
-QLabel#sourceMeta, QLabel#channelVisibleCount {
+QLabel#sourceMeta, QLabel#channelVisibleCount, QLabel#technicalValue {
     color: @MUTED@;
     font-family: "Cascadia Mono", "Consolas", monospace;
     font-size: 10px;
 }
-QComboBox#sourceCombo { min-height: 28px; }
-QPushButton#commandButton, QPushButton#channelCommand {
-    min-height: 27px;
-    max-height: 27px;
-    padding: 0 9px;
+QComboBox#sourceCombo { min-height: 25px; max-height: 25px; }
+QPushButton#commandButton { min-height: 25px; max-height: 25px; }
+QPushButton#channelCommand {
+    min-height: 22px;
+    max-height: 22px;
+    padding: 0 6px;
+    background: transparent;
+    border-color: transparent;
+    color: @ACCENT@;
+    font-size: 10px;
 }
-QPushButton#channelCommand { background: transparent; border-color: transparent; color: @ACCENT@; }
 QPushButton#channelCommand:hover { background: @HOVER@; border-color: @BORDER@; }
 QListView#channelRibbon {
     background: @PANEL_ALT@;
@@ -123,27 +123,54 @@ QListView#channelRibbon {
     padding: 1px;
 }
 QListView#channelRibbon::item { border-right: 1px solid @BORDER@; }
-QSplitter#analysisHorizontalSplitter::handle { background: @BORDER_STRONG@; width: 3px; }
+QSplitter#analysisHorizontalSplitter::handle { background: @BORDER_STRONG@; width: 2px; }
 
-/* Scientific results workbench */
+/* One scientific scene; the mode selector replaces stacked plots. */
 QFrame#analysisWorkbench { background: @CANVAS@; border: none; }
-QFrame#workbenchStatus, QFrame#plotHeader {
+QFrame#workbenchStatus {
     background: @HEADER@;
     border: none;
-    border-bottom: 1px solid @BORDER@;
-    min-height: 33px;
-    max-height: 33px;
+    border-bottom: 1px solid @BORDER_STRONG@;
+    min-height: 34px;
+    max-height: 34px;
 }
-QLabel#plotTitle, QLabel#paneTitle {
-    color: @TEXT_STRONG@;
+QPushButton#plotModeButton {
+    background: transparent;
+    color: @MUTED@;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    min-height: 28px;
+    max-height: 28px;
+    padding: 0 14px;
     font-size: 10px;
-    font-weight: 750;
-    letter-spacing: .35px;
+    font-weight: 650;
 }
-QLabel#plotMeta { color: @MUTED@; font-size: 10px; }
-QLabel#analysisState { color: @ACCENT@; font-size: 10px; font-weight: 750; }
-QSplitter#plotSplitter::handle { background: @BORDER_STRONG@; height: 3px; }
+QPushButton#plotModeButton:hover { color: @TEXT_STRONG@; background: @HOVER@; }
+QPushButton#plotModeButton:checked { color: @TEXT_STRONG@; border-bottom-color: @ACCENT@; }
+QPushButton#inspectorToggle {
+    background: transparent;
+    color: @MUTED@;
+    border: 1px solid @BORDER@;
+    border-radius: 2px;
+    min-height: 22px;
+    max-height: 22px;
+    padding: 0 7px;
+    font-size: 9px;
+}
+QPushButton#inspectorToggle:checked { color: @ACCENT@; border-color: @ACCENT@; }
+QStackedWidget#plotSceneStack { background: @CANVAS@; border: none; }
 QFrame#scientificPlot { background: @CANVAS@; border: none; }
+QFrame#plotHeader {
+    background: @CANVAS@;
+    border: none;
+    border-bottom: 1px solid @BORDER@;
+    min-height: 31px;
+    max-height: 31px;
+}
+QLabel#plotTitle, QLabel#paneTitle { color: @TEXT_STRONG@; font-size: 10px; font-weight: 700; }
+QLabel#plotMeta { color: @MUTED@; font-size: 10px; }
+QLabel#analysisState { color: @ACCENT@; font-size: 10px; font-weight: 700; }
 QWidget#plotCanvas { border: none; }
 QPushButton#plotTool, QPushButton#iconTool {
     background: transparent;
@@ -154,13 +181,17 @@ QPushButton#plotTool, QPushButton#iconTool {
 QPushButton#plotTool:hover, QPushButton#iconTool:hover { background: @HOVER@; border-color: @BORDER@; }
 QPushButton#plotTool:checked { background: @ACCENT_SOFT@; border-color: @ACCENT@; }
 
-/* Analysis parameters — single inspector, no nested cards */
+/* Contextual inspector: continuous dock, no card-in-card composition. */
 QFrame#scientificInspector { background: @PANEL@; border: none; border-left: 1px solid @BORDER_STRONG@; }
-QFrame#paneHeader { background: @HEADER@; border: none; border-bottom: 1px solid @BORDER@; min-height: 33px; max-height: 33px; }
+QFrame#paneHeader {
+    background: @HEADER@;
+    border: none;
+    border-bottom: 1px solid @BORDER@;
+    min-height: 34px;
+    max-height: 34px;
+}
 QScrollArea#inspectorScroll, QScrollArea#inspectorScroll > QWidget > QWidget { background: @PANEL@; border: none; }
 QFrame#inspectorSection { background: @PANEL@; border: none; border-bottom: 1px solid @BORDER@; }
-QLabel#inspectorSectionTitle { color: @MUTED@; font-size: 10px; font-weight: 750; }
-QLabel#technicalValue { color: @TEXT_STRONG@; font-family: "Cascadia Mono", "Consolas", monospace; font-size: 11px; }
 QFrame#inspectorActions { background: @PANEL_ALT@; border: none; border-top: 1px solid @BORDER_STRONG@; }
 QPushButton#runAnalysis {
     min-height: 34px;
@@ -169,13 +200,19 @@ QPushButton#runAnalysis {
     color: @ACCENT_TEXT@;
     border: 1px solid @ACCENT@;
     border-radius: 2px;
-    font-weight: 750;
+    font-weight: 700;
 }
 QPushButton#runAnalysis:hover { background: @ACCENT_HOVER@; }
 
-/* Numerical readouts */
-QFrame#metricStrip { background: @TOPBAR@; border: none; border-top: 1px solid @BORDER_STRONG@; min-height: 68px; max-height: 68px; }
-QFrame#resultReadout { background: transparent; border: none; border-right: 1px solid @BORDER@; border-radius: 0; }
+/* Numerical evidence rail and detailed tables. */
+QFrame#metricStrip {
+    background: @TOPBAR@;
+    border: none;
+    border-top: 1px solid @BORDER_STRONG@;
+    min-height: 68px;
+    max-height: 68px;
+}
+QFrame#resultReadout { background: transparent; border: none; border-right: 1px solid @BORDER@; }
 QFrame#resultReadout[state="warning"] { border-top: 2px solid @WARNING@; }
 QFrame#resultReadout[state="danger"] { border-top: 2px solid @DANGER@; }
 QFrame#resultReadout[state="success"] { border-top: 2px solid @SUCCESS@; }
@@ -183,7 +220,7 @@ QFrame#settingsReadout { background: @PANEL_ALT@; border: 1px solid @BORDER@; bo
 QFrame#settingsReadout[status="warning"] { border-top-color: @WARNING@; }
 QFrame#settingsReadout[status="critical"], QFrame#settingsReadout[status="error"] { border-top-color: @DANGER@; }
 QFrame#settingsReadout[status="success"] { border-top-color: @SUCCESS@; }
-QLabel#readoutCaption { color: @MUTED@; font-size: 9px; font-weight: 750; }
+QLabel#readoutCaption { color: @MUTED@; font-size: 9px; font-weight: 700; }
 QLabel#readoutValue { color: @TEXT_STRONG@; font-family: "Cascadia Mono", "Consolas", monospace; font-size: 16px; font-weight: 650; }
 QLabel#readoutUnit, QLabel#readoutDetail { color: @MUTED@; font-size: 9px; }
 QFrame#detailsDrawer { background: @PANEL@; border: none; border-top: 1px solid @BORDER_STRONG@; }
@@ -202,28 +239,88 @@ QPushButton#drawerMode {
 QPushButton#drawerMode:checked { color: @TEXT_STRONG@; border-bottom-color: @ACCENT@; }
 QComboBox#engineerDecision { min-width: 132px; }
 
-/* Acquisition and report surfaces */
+/* Shared surfaces for Project, Acquisition, Calibration and Report. */
+QFrame#surface, QFrame#projectForm, QFrame#contextPanel, QFrame#metricCard,
+QFrame#workflowCard, QFrame#analysis_tools_panel, QFrame#analysis_results_area,
+QFrame#report_config_panel, QFrame#report_preview_area, QFrame#operationalHeader,
+QFrame#quietSurface, QFrame#contextBar, QFrame#settingsSection,
+QFrame#calibrationCommandBar, QFrame#calibrationSettingsPanel,
+QFrame#technicalSurface, QFrame#instrumentPanel {
+    background: @PANEL@;
+    border: 1px solid @BORDER@;
+    border-radius: 3px;
+}
+QWidget#calibrationWorkspace, QWidget#report_view { background: @BG@; }
+QFrame#calibrationCommandBar { background: @PANEL@; }
+QFrame#instrumentPanel { background: @PANEL@; }
+QFrame#calibrationResultStrip {
+    background: @TOPBAR@;
+    border: none;
+    border-top: 1px solid @BORDER_STRONG@;
+}
+QFrame#calibrationMetric { background: transparent; border: none; border-right: 1px solid @BORDER@; }
+QFrame#instrumentMetric { background: transparent; border: none; }
+QFrame#instrumentDivider { background: @BORDER@; min-height: 1px; max-height: 1px; }
+QLabel#technicalLabel, QLabel#instrumentRate { color: @MUTED@; font-size: 9px; font-weight: 650; }
+QLabel#calibrationMetricValue, QLabel#instrumentMetricValue, QLabel#liveVoltage {
+    color: @TEXT_STRONG@;
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 15px;
+    font-weight: 650;
+}
+QLabel#sensorIdentity { color: @TEXT_STRONG@; font-weight: 650; }
+QLabel[state="success"] { color: @SUCCESS@; font-weight: 700; }
+QLabel[state="warning"] { color: @WARNING@; font-weight: 700; }
+QLabel[state="danger"], QLabel[state="error"] { color: @DANGER@; font-weight: 700; }
 QFrame#acquisitionModeBar { background: @HEADER@; border: 1px solid @BORDER@; border-bottom: none; }
 QPushButton#acquisitionMode {
-    background: transparent; color: @MUTED@; border: none; border-bottom: 2px solid transparent;
-    border-radius: 0; min-height: 31px; padding: 0 14px; font-size: 10px; font-weight: 700;
+    background: transparent;
+    color: @MUTED@;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    min-height: 31px;
+    padding: 0 14px;
+    font-size: 10px;
+    font-weight: 700;
 }
 QPushButton#acquisitionMode:hover { color: @TEXT_STRONG@; background: @HOVER@; }
 QPushButton#acquisitionMode:checked { color: @TEXT_STRONG@; border-bottom-color: @ACCENT@; background: @PANEL@; }
 QFrame#acquisitionConfigActions { background: @PANEL_ALT@; border: 1px solid @BORDER@; border-top: none; }
 QFrame#reportEvidence { background: @PANEL_ALT@; border: 1px solid @BORDER@; border-left: 3px solid @ACCENT@; }
 QTextEdit#reportDocument { background: #FFFFFF; color: #182D36; border: 1px solid @BORDER_STRONG@; padding: 14px; }
-QFrame#settingsSection { background: @PANEL@; border: 1px solid @BORDER@; border-radius: 2px; }
 QFrame#settingsSectionHeader { background: @HEADER@; border: none; border-bottom: 1px solid @BORDER@; }
 QWidget#settingsSectionContent { background: @PANEL@; }
+QLabel#viewTitle { color: @TEXT_STRONG@; font-size: 18px; font-weight: 650; }
+QLabel#sectionTitle { color: @TEXT_STRONG@; font-size: 13px; font-weight: 650; }
+QLabel#metricLabel, QLabel#mutedText, QLabel[role="muted"], QLabel#pageSubtitle { color: @MUTED@; font-size: 11px; }
+QLabel#metricValue { color: @TEXT_STRONG@; font-family: "Cascadia Mono", "Consolas", monospace; font-size: 15px; font-weight: 650; }
 
-/* Native controls */
+QGroupBox {
+    background: @PANEL@;
+    border: 1px solid @BORDER@;
+    border-radius: 3px;
+    margin-top: 10px;
+    padding-top: 7px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 8px;
+    padding: 0 4px;
+    color: @MUTED@;
+    background: @PANEL@;
+    font-size: 10px;
+    font-weight: 650;
+}
+
+/* Native controls use the same geometry and semantic colors everywhere. */
 QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QTextEdit, QPlainTextEdit {
     background: @INPUT@;
     color: @TEXT@;
     border: 1px solid @BORDER_STRONG@;
     border-radius: 2px;
-    min-height: 28px;
+    min-height: 26px;
     padding: 0 7px;
     selection-background-color: @ACCENT@;
 }
@@ -232,7 +329,7 @@ QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus, QTextEdi
 QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled { background: @DISABLED@; color: @MUTED@; }
 QComboBox::drop-down { width: 20px; border-left: 1px solid @BORDER@; }
 QComboBox QAbstractItemView { background: @INPUT@; color: @TEXT@; border: 1px solid @BORDER_STRONG@; selection-background-color: @ACCENT_SOFT@; }
-QCheckBox { color: @TEXT@; spacing: 6px; min-height: 22px; }
+QCheckBox { color: @TEXT@; spacing: 6px; min-height: 20px; }
 QCheckBox::indicator { width: 13px; height: 13px; border: 1px solid @BORDER_STRONG@; border-radius: 1px; background: @INPUT@; }
 QCheckBox::indicator:checked { background: @ACCENT@; border-color: @ACCENT@; }
 QPushButton {
@@ -240,8 +337,8 @@ QPushButton {
     color: @TEXT@;
     border: 1px solid @BORDER_STRONG@;
     border-radius: 2px;
-    min-height: 29px;
-    padding: 0 11px;
+    min-height: 27px;
+    padding: 0 10px;
     font-weight: 550;
 }
 QPushButton:hover { background: @HOVER@; border-color: @ACCENT@; }
@@ -249,21 +346,9 @@ QPushButton:pressed { background: @ACCENT_SOFT@; }
 QPushButton[kind="primary"], QPushButton[kind="primaryLarge"] { background: @ACCENT@; color: @ACCENT_TEXT@; border-color: @ACCENT@; }
 QPushButton[kind="quiet"] { background: transparent; border-color: transparent; }
 
-/* Shared legacy view object names receive one coherent material system. */
-QFrame#surface, QFrame#projectForm, QFrame#contextPanel, QFrame#metricCard,
-QFrame#workflowCard, QFrame#analysis_tools_panel, QFrame#analysis_results_area,
-QFrame#report_config_panel, QFrame#report_preview_area, QFrame#operationalHeader,
-QFrame#quietSurface, QFrame#contextBar, QGroupBox {
-    background: @PANEL@;
-    border: 1px solid @BORDER@;
-    border-radius: 2px;
-}
-QLabel#viewTitle { color: @TEXT_STRONG@; font-size: 18px; font-weight: 650; }
-QLabel#sectionTitle { color: @TEXT_STRONG@; font-size: 13px; font-weight: 650; }
-QLabel#metricLabel, QLabel#mutedText, QLabel[role="muted"], QLabel#pageSubtitle { color: @MUTED@; font-size: 11px; }
-QLabel#metricValue { color: @TEXT_STRONG@; font-family: "Cascadia Mono", "Consolas", monospace; font-size: 15px; font-weight: 650; }
 QTabWidget::pane { background: @PANEL@; border: 1px solid @BORDER@; }
-QTabBar::tab { background: @HEADER@; color: @MUTED@; border: none; border-bottom: 2px solid transparent; padding: 7px 12px; }
+QTabBar::tab { background: transparent; color: @MUTED@; border: none; border-bottom: 2px solid transparent; padding: 7px 12px; }
+QTabBar::tab:hover { color: @TEXT_STRONG@; background: @HOVER@; }
 QTabBar::tab:selected { color: @TEXT_STRONG@; border-bottom-color: @ACCENT@; }
 QTableWidget, QTableView {
     background: @PANEL@;
@@ -283,6 +368,7 @@ QHeaderView::section {
     font-size: 10px;
     font-weight: 650;
 }
+QScrollArea { border: none; }
 QScrollBar:vertical { background: @PANEL@; width: 9px; margin: 0; }
 QScrollBar::handle:vertical { background: @BORDER_STRONG@; min-height: 28px; border-radius: 3px; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }

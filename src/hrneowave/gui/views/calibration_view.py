@@ -87,6 +87,7 @@ class CalibrationView(QWidget):
         self._live_sample_index = 0
         self._live_rate_hz = 0.0
         self._last_live_metrics: LiveSignalMetrics | None = None
+        self.is_dark_mode = False
 
         self._build_ui()
         self._setup_connections()
@@ -616,24 +617,25 @@ class CalibrationView(QWidget):
         self._initialize_live_plot()
 
     def _initialize_live_plot(self) -> None:
+        palette = self._plot_palette()
         self.signal_figure.clear()
-        self.signal_figure.set_facecolor("#081820")
+        self.signal_figure.set_facecolor(palette["background"])
         self.signal_axis = self.signal_figure.add_subplot(111)
-        self.signal_axis.set_facecolor("#081820")
-        (self.signal_line,) = self.signal_axis.plot([], [], color="#45D4E7", linewidth=1.25)
-        self.signal_axis.set_xlabel("Temps relatif (s)", color="#8FAAB5")
-        self.signal_axis.set_ylabel("Tension brute (V)", color="#8FAAB5")
-        self.signal_axis.tick_params(colors="#8FAAB5", labelsize=9)
-        self.signal_axis.grid(True, color="#21404C", linewidth=0.65, alpha=0.8)
+        self.signal_axis.set_facecolor(palette["background"])
+        (self.signal_line,) = self.signal_axis.plot([], [], color=palette["measure"], linewidth=1.25)
+        self.signal_axis.set_xlabel("Temps relatif (s)", color=palette["foreground"])
+        self.signal_axis.set_ylabel("Tension brute (V)", color=palette["foreground"])
+        self.signal_axis.tick_params(colors=palette["foreground"], labelsize=9)
+        self.signal_axis.grid(True, color=palette["grid"], linewidth=0.65, alpha=0.8)
         for spine in self.signal_axis.spines.values():
-            spine.set_color("#315563")
+            spine.set_color(palette["spine"])
         self.signal_axis.set_xlim(-self.LIVE_WINDOW_SECONDS, 0.0)
         self.signal_axis.set_ylim(-0.01, 0.01)
         self.signal_axis.text(
             0.5,
             0.5,
             "DÉMARREZ LA LECTURE MATÉRIELLE",
-            color="#6F8D99",
+            color=palette["muted"],
             ha="center",
             va="center",
             transform=self.signal_axis.transAxes,
@@ -979,6 +981,7 @@ class CalibrationView(QWidget):
         self._repolish(self.calibration_status_label)
 
     def _draw_empty_plot(self) -> None:
+        palette = self._plot_palette()
         self.figure.clear()
         axis = self.figure.add_subplot(111)
         self._style_calibration_axis(axis)
@@ -988,12 +991,13 @@ class CalibrationView(QWidget):
             "AUCUN POINT VALIDÉ",
             ha="center",
             va="center",
-            color="#6F8D99",
+            color=palette["muted"],
             transform=axis.transAxes,
         )
         self.canvas.draw_idle()
 
     def _draw_record(self, record: CalibrationRecord) -> None:
+        palette = self._plot_palette()
         references = np.asarray([point.reference_value for point in record.points], dtype=float)
         voltages = np.asarray([point.measured_voltage for point in record.points], dtype=float)
         fit_reference = np.linspace(float(references.min()), float(references.max()), 200)
@@ -1005,27 +1009,69 @@ class CalibrationView(QWidget):
             references,
             voltages,
             s=46,
-            color="#45D4E7",
-            edgecolor="#081820",
+            color=palette["measure"],
+            edgecolor=palette["background"],
             linewidth=1.0,
             zorder=3,
             label="Mesures",
         )
-        axis.plot(fit_reference, fit_voltage, color="#F2A93B", linewidth=1.8, label="m×x+b")
+        axis.plot(
+            fit_reference,
+            fit_voltage,
+            color=palette["reference"],
+            linewidth=1.8,
+            label="m×x+b",
+        )
         legend = axis.legend(frameon=False, loc="best")
         for text in legend.get_texts():
-            text.set_color("#AFC2CA")
+            text.set_color(palette["foreground"])
         self.canvas.draw_idle()
 
     def _style_calibration_axis(self, axis) -> None:
-        self.figure.set_facecolor("#081820")
-        axis.set_facecolor("#081820")
-        axis.set_xlabel(f"Référence ({self.unit_combo.currentText() or 'unité'})", color="#8FAAB5")
-        axis.set_ylabel("Tension mesurée (V)", color="#8FAAB5")
-        axis.tick_params(colors="#8FAAB5", labelsize=9)
-        axis.grid(True, color="#21404C", linewidth=0.65, alpha=0.8)
+        palette = self._plot_palette()
+        self.figure.set_facecolor(palette["background"])
+        axis.set_facecolor(palette["background"])
+        axis.set_xlabel(
+            f"Référence ({self.unit_combo.currentText() or 'unité'})",
+            color=palette["foreground"],
+        )
+        axis.set_ylabel("Tension mesurée (V)", color=palette["foreground"])
+        axis.tick_params(colors=palette["foreground"], labelsize=9)
+        axis.grid(True, color=palette["grid"], linewidth=0.65, alpha=0.8)
         for spine in axis.spines.values():
-            spine.set_color("#315563")
+            spine.set_color(palette["spine"])
+
+    def _plot_palette(self) -> dict[str, str]:
+        if self.is_dark_mode:
+            return {
+                "background": "#071820",
+                "foreground": "#9DB0B8",
+                "grid": "#203943",
+                "spine": "#38535E",
+                "measure": "#35BCD5",
+                "reference": "#E2A14B",
+                "muted": "#708B96",
+            }
+        return {
+            "background": "#FCFDFD",
+            "foreground": "#526A75",
+            "grid": "#D8E1E4",
+            "spine": "#B9C8CE",
+            "measure": "#087F99",
+            "reference": "#B87523",
+            "muted": "#71838B",
+        }
+
+    def set_theme(self, is_dark: bool) -> None:
+        """Keep calibration plots coherent with the application theme."""
+
+        self.is_dark_mode = bool(is_dark)
+        self._initialize_live_plot()
+        record = self._channel_records.get(self._active_channel)
+        if record is None:
+            self._draw_empty_plot()
+        else:
+            self._draw_record(record)
 
     @staticmethod
     def _set_combo_data(combo: QComboBox, value: float) -> None:

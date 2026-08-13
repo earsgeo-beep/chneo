@@ -165,17 +165,17 @@ class SourceChannelPane(QFrame):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 7, 10, 7)
-        layout.setSpacing(6)
+        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setSpacing(4)
 
         source_row = QHBoxLayout()
-        source_row.setSpacing(6)
+        source_row.setSpacing(5)
         source_label = QLabel("SOURCE")
         source_label.setObjectName("commandCaption")
         source_row.addWidget(source_label)
         self.data_combo = QComboBox()
         self.data_combo.setObjectName("sourceCombo")
-        self.data_combo.setMinimumWidth(240)
+        self.data_combo.setMinimumWidth(220)
         self.data_combo.addItem("Aucun fichier", None)
         source_row.addWidget(self.data_combo)
         self.load_button = QPushButton("Ouvrir…")
@@ -186,7 +186,7 @@ class SourceChannelPane(QFrame):
         source_row.addWidget(self.refresh_button)
         self.source_name = QLabel("AUCUNE SOURCE")
         self.source_name.hide()
-        self.source_meta = QLabel("— Hz  ·  — échantillons  ·  — s")
+        self.source_meta = QLabel("— Hz · — pts · — s")
         self.source_meta.setObjectName("sourceMeta")
         source_row.addWidget(self.source_meta)
         source_row.addStretch()
@@ -201,25 +201,19 @@ class SourceChannelPane(QFrame):
         layout.addLayout(source_row)
 
         channel_row = QHBoxLayout()
-        channel_row.setSpacing(6)
+        channel_row.setSpacing(4)
         label = QLabel("VOIES")
         label.setObjectName("commandCaption")
         channel_row.addWidget(label)
         self.channel_count = QLabel("0 / 0 visibles")
         self.channel_count.setObjectName("channelVisibleCount")
         channel_row.addWidget(self.channel_count)
-        self.show_all_button = QPushButton("Tout afficher")
-        self.hide_all_button = QPushButton("Tout masquer")
-        self.isolate_button = QPushButton("Isoler la voie active")
+        self.show_all_button = QPushButton("Toutes")
+        self.hide_all_button = QPushButton("Aucune")
+        self.isolate_button = QPushButton("Isoler")
         for button in (self.show_all_button, self.hide_all_button, self.isolate_button):
             button.setObjectName("channelCommand")
             channel_row.addWidget(button)
-        channel_row.addStretch()
-        hint = QLabel("Cochez plusieurs voies pour comparer les courbes")
-        hint.setObjectName("commandHint")
-        channel_row.addWidget(hint)
-        layout.addLayout(channel_row)
-
         self.channel_list = QListView()
         self.channel_list.setObjectName("channelRibbon")
         self.channel_list.setModel(self.channel_model)
@@ -229,8 +223,9 @@ class SourceChannelPane(QFrame):
         self.channel_list.setWrapping(False)
         self.channel_list.setHorizontalScrollMode(QListView.ScrollMode.ScrollPerPixel)
         self.channel_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.channel_list.setFixedHeight(48)
-        layout.addWidget(self.channel_list)
+        self.channel_list.setFixedHeight(38)
+        channel_row.addWidget(self.channel_list, 1)
+        layout.addLayout(channel_row)
 
         self.load_button.clicked.connect(self.file_open_requested.emit)
         self.refresh_button.clicked.connect(self.refresh_requested.emit)
@@ -276,7 +271,7 @@ class SourceChannelPane(QFrame):
     def set_source(self, name: str, rate: float, samples: int, duration: float) -> None:
         self.source_name.setText(name.upper())
         self.source_meta.setText(
-            f"{rate:g} Hz  ·  {samples:,} échantillons  ·  {duration:.3f} s".replace(",", " ")
+            f"{rate:g} Hz · {samples:,} pts · {duration:.3f} s".replace(",", " ")
         )
 
     def set_channels(self, channels: list[ChannelItem]) -> None:
@@ -536,7 +531,9 @@ class AnalysisDetailsDrawer(QFrame):
 
 
 class AnalysisResultsArea(QFrame):
-    """Two simultaneous plots, readouts and an optional evidence drawer."""
+    """One maximised scientific scene with switchable representations."""
+
+    inspector_visibility_requested = Signal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -552,6 +549,16 @@ class AnalysisResultsArea(QFrame):
         self.analysis_status_label.setObjectName("analysisState")
         self.analysis_count_label = QLabel("0 calcul")
         self.analysis_count_label.setObjectName("plotMeta")
+        self.plot_mode_buttons: dict[str, QPushButton] = {}
+        for mode, caption in (("time", "SIGNAL TEMPOREL"), ("spectrum", "SPECTRE PSD")):
+            button = QPushButton(caption)
+            button.setObjectName("plotModeButton")
+            button.setCheckable(True)
+            button.setAutoExclusive(True)
+            button.clicked.connect(
+                lambda _checked=False, selected_mode=mode: self.set_plot_mode(selected_mode)
+            )
+            self.plot_mode_buttons[mode] = button
         self.time_cursor_label = QLabel("t —   y —")
         self.time_cursor_label.setObjectName("plotMeta")
         self.spectrum_readout_label = QLabel("pic —   Δf —")
@@ -559,11 +566,19 @@ class AnalysisResultsArea(QFrame):
         row.addWidget(self.analysis_status_label)
         row.addWidget(self.analysis_count_label)
         row.addStretch()
+        for button in self.plot_mode_buttons.values():
+            row.addWidget(button)
+        self.inspector_toggle_button = QPushButton("PARAMÈTRES")
+        self.inspector_toggle_button.setObjectName("inspectorToggle")
+        self.inspector_toggle_button.setCheckable(True)
+        self.inspector_toggle_button.setChecked(True)
+        self.inspector_toggle_button.toggled.connect(self.inspector_visibility_requested.emit)
+        row.addWidget(self.inspector_toggle_button)
+        row.addSpacing(10)
         row.addWidget(self.time_cursor_label)
         row.addSpacing(12)
         row.addWidget(self.spectrum_readout_label)
         layout.addWidget(status)
-        self.plot_splitter = QSplitter(Qt.Orientation.Vertical)
         self.time_plot = ScientificPlotWidget("Signal temporel", "Temps (s)", "Amplitude")
         self.spectrum_plot = ScientificPlotWidget(
             "Densité spectrale de puissance",
@@ -571,10 +586,11 @@ class AnalysisResultsArea(QFrame):
             "PSD",
             logarithmic_y=True,
         )
-        self.plot_splitter.addWidget(self.time_plot)
-        self.plot_splitter.addWidget(self.spectrum_plot)
-        self.plot_splitter.setSizes([390, 280])
-        layout.addWidget(self.plot_splitter, 1)
+        self.plot_stack = QStackedWidget()
+        self.plot_stack.setObjectName("plotSceneStack")
+        self.plot_stack.addWidget(self.time_plot)
+        self.plot_stack.addWidget(self.spectrum_plot)
+        layout.addWidget(self.plot_stack, 1)
         self.metric_strip = MetricStrip()
         layout.addWidget(self.metric_strip)
         self.details_drawer = AnalysisDetailsDrawer()
@@ -586,6 +602,17 @@ class AnalysisResultsArea(QFrame):
         self.wave_table = self.spectral_table
         self.quality_table = self.details_drawer.quality_table
         self.report_text = self.details_drawer.report_text
+        self.set_plot_mode("time")
+
+    def set_plot_mode(self, mode: str) -> None:
+        """Switch the representation while preserving the whole plotting area."""
+
+        spectrum = mode == "spectrum"
+        self.plot_stack.setCurrentWidget(self.spectrum_plot if spectrum else self.time_plot)
+        self.plot_mode_buttons["spectrum"].setChecked(spectrum)
+        self.plot_mode_buttons["time"].setChecked(not spectrum)
+        self.time_cursor_label.setVisible(not spectrum)
+        self.spectrum_readout_label.setVisible(spectrum)
 
     def update_analysis_status(self, status: str, count: int = 0) -> None:
         self.analysis_status_label.setText(status.upper())
@@ -653,6 +680,7 @@ class AnalysisView(QWidget):
         self.results_area.time_plot.region_changed.connect(self._sync_controls_from_region)
         self.results_area.time_plot.cursor_moved.connect(self._on_time_cursor_moved)
         self.results_area.spectrum_plot.cursor_moved.connect(self._on_spectrum_cursor_moved)
+        self.results_area.inspector_visibility_requested.connect(self.inspector.setVisible)
 
     def _toggle_tools_panel(self) -> None:
         self._set_tools_panel_expanded(not self._tools_panel_expanded)
@@ -753,7 +781,7 @@ class AnalysisView(QWidget):
             channels.append(
                 ChannelItem(
                     key=key,
-                    name=f"{key}  {metadata.get('name', '')}".strip(),
+                    name=str(metadata.get("name") or f"S{index + 1:02d}"),
                     sensor=sensor_names.get(sensor, sensor.replace("_", " ").title()),
                     unit=self._channel_unit(key),
                     color=CHANNEL_COLORS[index % len(CHANNEL_COLORS)],
@@ -791,6 +819,7 @@ class AnalysisView(QWidget):
         self.current_analysis_result = self.post_processor.current_analysis
         self._attach_time_series_previews()
         self._update_results_views()
+        self.results_area.set_plot_mode("spectrum")
         self._set_tools_panel_expanded(False)
         quality = self.current_analysis_result.get("quality", {})
         warning_count = sum(len(item.get("warnings", [])) for item in quality.values())
@@ -946,6 +975,13 @@ class AnalysisView(QWidget):
                 return item.color
         return CHANNEL_COLORS[0]
 
+    def _display_name_for_channel(self, channel: str) -> str:
+        for row in range(self.source_pane.channel_model.rowCount()):
+            item = self.source_pane.channel_model.channel(row)
+            if item and item.key == channel:
+                return item.name
+        return channel
+
     def _update_time_plot(self, *_args) -> None:
         data = self.post_processor.current_data or {}
         available = list(data.get("channel_keys", []))
@@ -955,7 +991,11 @@ class AnalysisView(QWidget):
             time_values, values = self.post_processor.load_channel_preview(channel, raw=raw)
             if self.source_pane.center_signal_check.isChecked():
                 values = values - float(np.mean(values))
-            series[channel] = (time_values, values, self._color_for_channel(channel))
+            series[self._display_name_for_channel(channel)] = (
+                time_values,
+                values,
+                self._color_for_channel(channel),
+            )
         self.results_area.time_plot.set_series(series)
         unit = (
             "V"
@@ -975,7 +1015,7 @@ class AnalysisView(QWidget):
         series = {}
         for channel in self._visible_channels(list(spectral)):
             values = spectral[channel]
-            series[channel] = (
+            series[self._display_name_for_channel(channel)] = (
                 np.asarray(values.get("frequencies", []), dtype=float),
                 np.asarray(values.get("psd", []), dtype=float),
                 self._color_for_channel(channel),

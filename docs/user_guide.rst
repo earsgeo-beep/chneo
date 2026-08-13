@@ -6,7 +6,7 @@ Vue d'ensemble
 
 La navigation principale est horizontale. La barre de menus desktop fournit
 ``Fichier``, ``Outils``, ``Affichage`` et ``Aide``; le bandeau de travail donne
-un acces direct a Projets, Systeme, Calibration, Acquisition, Traitement et
+un acces direct a Projet, Systeme, Calibration, Acquisition, Analyse et
 Rapport.
 
 L'application active suit un enchainement simple:
@@ -69,9 +69,11 @@ Les analyses exposees dans l'interface sont:
 - coherence et phase de chaque canal par rapport au premier canal;
 - indicateurs de qualite et avertissements d'interpretation.
 
-Toutes les voies sont visibles par defaut. Les commandes ``Tout afficher``,
-``Tout masquer`` et ``Isoler la voie active`` permettent de construire une
-comparaison sans limiter le traitement au canal 0.
+Toutes les voies sont visibles par defaut. Les commandes ``Toutes``,
+``Aucune`` et ``Isoler`` permettent de construire une comparaison sans limiter
+le traitement au canal 0. Une seule scene graphique est affichee a la fois :
+``SIGNAL TEMPOREL`` ou ``SPECTRE PSD``. Le bouton ``PARAMETRES`` replie
+l'inspecteur pour donner toute la largeur au graphe.
 
 Dans les statistiques temporelles, ``N`` est le nombre d'echantillons analyses
 par voie, ``sigma`` est l'ecart-type autour de la moyenne et ``RMS`` est la

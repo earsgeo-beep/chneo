@@ -10,7 +10,7 @@ from .channel_model import ChannelListModel
 class ChannelDelegate(QStyledItemDelegate):
     def sizeHint(self, option, index):  # noqa: N802
         del option, index
-        return QSize(154, 42)
+        return QSize(122, 32)
 
     def paint(self, painter: QPainter, option, index) -> None:
         painter.save()
@@ -44,10 +44,10 @@ class ChannelDelegate(QStyledItemDelegate):
         color = QColor(str(index.data(ChannelListModel.ColorRole)))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(color)
-        painter.drawRect(QRect(option.rect.left() + 29, option.rect.top() + 9, 3, option.rect.height() - 18))
+        painter.drawRect(QRect(option.rect.left() + 29, option.rect.top() + 6, 3, option.rect.height() - 12))
 
-        primary = QRect(option.rect.left() + 38, option.rect.top() + 3, option.rect.width() - 70, 18)
-        secondary = QRect(option.rect.left() + 38, option.rect.top() + 20, option.rect.width() - 70, 17)
+        primary = QRect(option.rect.left() + 38, option.rect.top() + 1, option.rect.width() - 60, 16)
+        secondary = QRect(option.rect.left() + 38, option.rect.top() + 15, option.rect.width() - 60, 15)
         font = QFont(option.font)
         font.setPointSizeF(8.5)
         font.setWeight(QFont.Weight.DemiBold)
@@ -67,7 +67,7 @@ class ChannelDelegate(QStyledItemDelegate):
         unit = str(index.data(ChannelListModel.UnitRole))
         painter.setPen(QColor("#AFC0C7" if dark else "#435D68"))
         painter.drawText(
-            QRect(option.rect.right() - 48, option.rect.top() + 5, 34, 18),
+            QRect(option.rect.right() - 36, option.rect.top() + 2, 22, 16),
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
             unit,
         )

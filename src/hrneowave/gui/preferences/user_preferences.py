@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 CHNeoWave - User Preferences System
 Système de préférences utilisateur avec sauvegarde persistante
@@ -11,11 +10,10 @@ Version: 1.0.0
 
 import json
 import logging
-from pathlib import Path
-from typing import Dict, Any, Optional
 from enum import Enum
+from typing import Any
 
-from PySide6.QtCore import QObject, Signal, QSettings
+from PySide6.QtCore import QObject, QSettings, Signal
 from PySide6.QtWidgets import QApplication
 
 
@@ -55,12 +53,12 @@ class UserPreferences(QObject):
             "theme": {
                 "mode": ThemeMode.LIGHT.value,
                 "custom_colors": {
-                    "primary": "#6750A4",
-                    "secondary": "#625B71",
-                    "accent": "#7D5260"
+                    "primary": "#087F99",
+                    "secondary": "#25B3CD",
+                    "accent": "#A66B16"
                 },
-                "font_size": 14,
-                "font_family": "Roboto"
+                "font_size": 10,
+                "font_family": "Segoe UI"
             },
             "interface": {
                 "language": Language.FRENCH.value,
@@ -239,12 +237,12 @@ class UserPreferences(QObject):
     
     def set_language(self, language: str):
         """Définit la langue"""
-        if language in [l.value for l in Language]:
+        if language in [item.value for item in Language]:
             self.set_preference("interface", "language", language)
         else:
             self.logger.warning(f"Langue invalide: {language}")
     
-    def get_shortcuts(self) -> Dict[str, Dict[str, str]]:
+    def get_shortcuts(self) -> dict[str, dict[str, str]]:
         """Récupère tous les raccourcis clavier"""
         return self.preferences.get("shortcuts", {})
     
@@ -252,11 +250,11 @@ class UserPreferences(QObject):
         """Définit un raccourci clavier spécifique"""
         self.set_preference("shortcuts", category, {action: shortcut})
     
-    def get_window_state(self) -> Dict[str, Any]:
+    def get_window_state(self) -> dict[str, Any]:
         """Récupère l'état de la fenêtre"""
         return self.get_preference("interface", "window_state")
     
-    def set_window_state(self, state: Dict[str, Any]):
+    def set_window_state(self, state: dict[str, Any]):
         """Sauvegarde l'état de la fenêtre"""
         for key, value in state.items():
             self.set_preference("interface", "window_state", value, key)
@@ -282,7 +280,7 @@ class UserPreferences(QObject):
     def import_preferences(self, file_path: str) -> bool:
         """Importe les préférences depuis un fichier JSON"""
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, encoding='utf-8') as f:
                 imported_prefs = json.load(f)
             
             # Valider et fusionner avec les préférences actuelles
@@ -295,7 +293,7 @@ class UserPreferences(QObject):
             self.logger.error(f"Erreur lors de l'import des préférences: {e}")
             return False
     
-    def _merge_preferences(self, imported_prefs: Dict[str, Any]):
+    def _merge_preferences(self, imported_prefs: dict[str, Any]):
         """Fusionne les préférences importées avec les actuelles"""
         for category, settings in imported_prefs.items():
             if category in self._default_preferences:

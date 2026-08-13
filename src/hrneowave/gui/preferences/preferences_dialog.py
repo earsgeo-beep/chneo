@@ -11,10 +11,9 @@ Version: 1.0.0
 import logging
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QFont, QKeySequence
+from PySide6.QtGui import QFont, QKeySequence
 from PySide6.QtWidgets import (
     QCheckBox,
-    QColorDialog,
     QComboBox,
     QDialog,
     QFontDialog,
@@ -33,7 +32,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..components.material_components import MaterialButton
 from .user_preferences import Language, ThemeMode, get_user_preferences
 
 
@@ -85,10 +83,12 @@ class PreferencesDialog(QDialog):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         
-        self.reset_button = MaterialButton("Réinitialiser", style=MaterialButton.Style.TEXT)
-        self.cancel_button = MaterialButton("Annuler", style=MaterialButton.Style.TEXT)
-        self.apply_button = MaterialButton("Appliquer", style=MaterialButton.Style.FILLED)
-        self.ok_button = MaterialButton("OK", style=MaterialButton.Style.FILLED)
+        self.reset_button = QPushButton("Réinitialiser")
+        self.cancel_button = QPushButton("Annuler")
+        self.apply_button = QPushButton("Appliquer")
+        self.ok_button = QPushButton("OK")
+        for button in (self.apply_button, self.ok_button):
+            button.setProperty("kind", "primary")
         
         button_layout.addWidget(self.reset_button)
         button_layout.addWidget(self.cancel_button)
@@ -113,28 +113,24 @@ class PreferencesDialog(QDialog):
         theme_layout = QFormLayout(theme_group)
         
         self.theme_combo = QComboBox()
-        self.theme_combo.addItems(["Clair", "Sombre", "Automatique", "Contraste élevé"])
+        self.theme_combo.addItems(["Clair", "Sombre"])
         theme_layout.addRow("Mode:", self.theme_combo)
         
-        # Couleurs personnalisées
+        # Palette certifiée : les rôles sémantiques restent identiques partout.
         colors_layout = QHBoxLayout()
-        
-        self.primary_color_button = QPushButton("Couleur primaire")
-        self.primary_color_button.setFixedHeight(40)
-        self.primary_color_button.clicked.connect(lambda: self._choose_color('primary'))
+        self.primary_color_button = QPushButton("Action · pétrole")
         colors_layout.addWidget(self.primary_color_button)
-        
-        self.secondary_color_button = QPushButton("Couleur secondaire")
-        self.secondary_color_button.setFixedHeight(40)
-        self.secondary_color_button.clicked.connect(lambda: self._choose_color('secondary'))
+        self.secondary_color_button = QPushButton("Mesure · cyan")
         colors_layout.addWidget(self.secondary_color_button)
-        
-        self.accent_color_button = QPushButton("Couleur d'accent")
-        self.accent_color_button.setFixedHeight(40)
-        self.accent_color_button.clicked.connect(lambda: self._choose_color('accent'))
+        self.accent_color_button = QPushButton("Alerte · ambre")
         colors_layout.addWidget(self.accent_color_button)
-        
-        theme_layout.addRow("Couleurs:", colors_layout)
+        for button in (
+            self.primary_color_button,
+            self.secondary_color_button,
+            self.accent_color_button,
+        ):
+            button.setEnabled(False)
+        theme_layout.addRow("Palette:", colors_layout)
         
         layout.addWidget(theme_group)
         
@@ -211,7 +207,7 @@ class PreferencesDialog(QDialog):
         
         navigation_description = QLabel(
             "Bandeau horizontal permanent : Projets, Système, Calibration, "
-            "Acquisition, Traitement et Rapport."
+            "Acquisition, Analyse et Rapport."
         )
         navigation_description.setWordWrap(True)
         sidebar_layout.addRow("Disposition:", navigation_description)
@@ -261,10 +257,7 @@ class PreferencesDialog(QDialog):
             layout.addWidget(group)
         
         # Bouton de réinitialisation des raccourcis
-        reset_shortcuts_button = MaterialButton(
-            "Réinitialiser les raccourcis", 
-            style=MaterialButton.Style.TEXT
-        )
+        reset_shortcuts_button = QPushButton("Réinitialiser les raccourcis")
         reset_shortcuts_button.clicked.connect(self._reset_shortcuts)
         layout.addWidget(reset_shortcuts_button)
         
@@ -396,17 +389,8 @@ class PreferencesDialog(QDialog):
         theme_index = {
             ThemeMode.LIGHT.value: 0,
             ThemeMode.DARK.value: 1,
-            ThemeMode.AUTO.value: 2,
-            ThemeMode.HIGH_CONTRAST.value: 3
         }.get(theme_mode, 0)
         self.theme_combo.setCurrentIndex(theme_index)
-        
-        # Couleurs
-        colors = self.preferences.get_preference("theme", "custom_colors")
-        if colors:
-            self._update_color_button(self.primary_color_button, colors.get("primary", "#6750A4"))
-            self._update_color_button(self.secondary_color_button, colors.get("secondary", "#625B71"))
-            self._update_color_button(self.accent_color_button, colors.get("accent", "#7D5260"))
         
         # Police
         font_size = self.preferences.get_preference("theme", "font_size")
@@ -478,34 +462,6 @@ class PreferencesDialog(QDialog):
             self.preferences.get_preference("accessibility", "keyboard_navigation")
         )
     
-    def _choose_color(self, color_type: str):
-        """Ouvre un sélecteur de couleur"""
-        current_color = self.preferences.get_preference("theme", "custom_colors", color_type)
-        color = QColorDialog.getColor(QColor(current_color), self)
-        
-        if color.isValid():
-            color_hex = color.name()
-            self.preferences.set_preference("theme", "custom_colors", color_hex, color_type)
-            
-            # Mettre à jour le bouton
-            button = getattr(self, f"{color_type}_color_button")
-            self._update_color_button(button, color_hex)
-    
-    def _update_color_button(self, button: QPushButton, color: str):
-        """Met à jour l'apparence d'un bouton de couleur"""
-        button.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {color};
-                color: white;
-                border: 2px solid #ccc;
-                border-radius: 4px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                border-color: #999;
-            }}
-        """)
-    
     def _choose_font(self):
         """Ouvre un sélecteur de police"""
         current_family = self.preferences.get_preference("theme", "font_family")
@@ -572,8 +528,7 @@ class PreferencesDialog(QDialog):
     def _save_preferences(self):
         """Sauvegarde toutes les préférences depuis l'interface"""
         # Thème
-        theme_modes = [ThemeMode.LIGHT.value, ThemeMode.DARK.value, 
-                      ThemeMode.AUTO.value, ThemeMode.HIGH_CONTRAST.value]
+        theme_modes = [ThemeMode.LIGHT.value, ThemeMode.DARK.value]
         theme_mode = theme_modes[self.theme_combo.currentIndex()]
         self.preferences.set_theme_mode(theme_mode)
         

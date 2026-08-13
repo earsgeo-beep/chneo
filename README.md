@@ -17,8 +17,9 @@ Le runtime principal est un client Python/Qt lance depuis `chneowave.py`, `main.
 6. export et rapport tracable
 
 L'interface utilise une navigation horizontale et une barre de menus desktop.
-Le poste de traitement affiche simultanement les signaux et les PSD de toutes
-les voies choisies. Une alerte numerique reste un diagnostic automatique;
+Le poste de traitement utilise une scene graphique unique commutable entre
+signaux temporels et PSD, avec comparaison des voies S01 a S09 et inspecteur
+scientifique repliable. Une alerte numerique reste un diagnostic automatique;
 seul l'ingenieur peut accepter ou rejeter une voie dans le dossier scientifique.
 
 Il n'existe aucun repli automatique vers des donnees artificielles. Sans
@@ -110,3 +111,4 @@ registre apres validation sur les materiels reels.
 - [docs/user_guide.rst](docs/user_guide.rst)
 - [docs/technical_guide.rst](docs/technical_guide.rst)
 - [docs/laboratory_platform_architecture_2026-08-09.rst](docs/laboratory_platform_architecture_2026-08-09.rst)
+- [docs/audit_visuel_frontend_v6_2026-08-13.md](docs/audit_visuel_frontend_v6_2026-08-13.md)

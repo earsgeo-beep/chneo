@@ -41,7 +41,7 @@ def qt_app():
 def test_navigation_is_horizontal_and_exposes_workspaces(qt_app):
     navigation = TopNavigationBar()
 
-    assert navigation.height() == 58
+    assert navigation.height() == 48
     assert navigation.navigation_buttons["calibration"].text() == "Calibration"
     navigation.set_active_view("analysis")
     assert navigation.navigation_buttons["analysis"].isChecked()
@@ -73,8 +73,8 @@ def test_instrument_theme_has_distinct_light_and_dark_palettes(qt_app):
     manager.apply_theme("light")
 
     assert light_stylesheet != dark_stylesheet
-    assert "#E9EEF1" in light_stylesheet
-    assert "#11191E" in dark_stylesheet
+    assert "#F3F5F6" in light_stylesheet
+    assert "#08141B" in dark_stylesheet
 
 
 def test_calibration_workspace_fits_real_linear_record(qt_app):
@@ -135,12 +135,20 @@ def test_analysis_parameters_panel_is_collapsible(qt_app):
     assert view.tools_toggle_button.text() == "Fermer"
 
 
-def test_analysis_workbench_keeps_time_and_spectrum_visible(qt_app):
+def test_analysis_workbench_uses_one_switchable_scientific_scene(qt_app):
     view = AnalysisView()
 
-    assert view.results_area.time_plot.isVisibleTo(view)
-    assert view.results_area.spectrum_plot.isVisibleTo(view)
-    assert view.results_area.plot_splitter.count() == 2
+    assert view.results_area.plot_stack.count() == 2
+    assert view.results_area.plot_stack.currentWidget() is view.results_area.time_plot
+
+    view.results_area.set_plot_mode("spectrum")
+
+    assert view.results_area.plot_stack.currentWidget() is view.results_area.spectrum_plot
+    assert view.results_area.plot_mode_buttons["spectrum"].isChecked()
+
+    view.results_area.inspector_toggle_button.setChecked(False)
+
+    assert view.inspector.isHidden()
 
 
 def test_analysis_view_loads_raw_and_draws_time_signals(qt_app):
