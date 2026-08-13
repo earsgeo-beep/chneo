@@ -85,6 +85,48 @@ class WaveAnalyzerTests(unittest.TestCase):
         self.assertLess(lower, 1.0)
         self.assertGreater(upper, 1.0)
 
+    def test_zero_padding_refines_grid_without_claiming_better_rayleigh_resolution(self):
+        analyzer = WaveAnalyzer(
+            WaveAnalysisConfig(segment_length=512, fft_length=2048, detrend="constant")
+        )
+
+        spectrum = analyzer.analyze_channel(self.signal, self.sample_rate, "m")["spectral"]
+
+        self.assertAlmostEqual(spectrum["frequency_resolution"], self.sample_rate / 512)
+        self.assertAlmostEqual(spectrum["frequency_bin_spacing"], self.sample_rate / 2048)
+        self.assertEqual(spectrum["fft_length"], 2048)
+
+    def test_zero_phase_lowpass_suppresses_out_of_band_component(self):
+        mixed = np.sin(2 * np.pi * 0.5 * self.time) + np.sin(2 * np.pi * 8.0 * self.time)
+        analyzer = WaveAnalyzer(
+            WaveAnalysisConfig(
+                segment_length=2048,
+                detrend="constant",
+                filter_type="lowpass",
+                filter_high_frequency=2.0,
+                filter_order=4,
+            )
+        )
+
+        result = analyzer.analyze_channel(mixed, self.sample_rate, "m")
+        frequencies = np.asarray(result["spectral"]["frequencies"])
+        density = np.asarray(result["spectral"]["psd"])
+        low_power = density[np.argmin(np.abs(frequencies - 0.5))]
+        high_power = density[np.argmin(np.abs(frequencies - 8.0))]
+
+        self.assertGreater(low_power, 10_000 * high_power)
+        self.assertEqual(result["signal_processing"]["filter"]["implementation"], "sosfiltfilt")
+        self.assertTrue(result["signal_processing"]["filter"]["zero_phase"])
+
+    def test_median_welch_average_is_explicit_in_results(self):
+        analyzer = WaveAnalyzer(
+            WaveAnalysisConfig(segment_length=1024, average="median")
+        )
+
+        spectrum = analyzer.analyze_channel(self.signal, self.sample_rate, "m")["spectral"]
+
+        self.assertEqual(spectrum["average"], "median")
+
     def test_quality_detects_a_prolonged_flat_portion(self):
         damaged = self.signal.copy()
         damaged[3000:4000] = 0.123
@@ -165,6 +207,33 @@ class PostProcessorSpectralTests(unittest.TestCase):
             self.assertEqual(metadata["analysis_start_s"], 10.0)
             self.assertEqual(metadata["analysis_end_s"], 40.0)
             self.assertEqual(metadata["source_n_samples"], 2000)
+
+    def test_spectrogram_respects_selected_interval_and_recovers_peak(self):
+        sample_rate = 20.0
+        time = np.arange(4000) / sample_rate
+        values = np.sin(2 * np.pi * 0.75 * time)
+        payload = {
+            "metadata": {"sample_rate_hz": sample_rate},
+            "time": time.tolist(),
+            "channels": {"channel_00": values.tolist()},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "spectrogram.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            processor = PostProcessor()
+            self.assertTrue(processor.load_data_file(str(path)))
+            processor.config["analysis"].update(
+                {"start_time_s": 20.0, "end_time_s": 80.0, "window_size": 256}
+            )
+
+            spectrogram = processor.compute_spectrogram("channel_00")
+            density = np.asarray(spectrogram["psd"])
+            frequencies = np.asarray(spectrogram["frequencies"])
+            dominant = frequencies[int(np.argmax(np.mean(density, axis=1)))]
+
+            self.assertGreaterEqual(min(spectrogram["times"]), 20.0)
+            self.assertLessEqual(max(spectrogram["times"]), 80.0)
+            self.assertAlmostEqual(dominant, 0.75, delta=sample_rate / 256)
 
     def test_json_rejects_unsynchronised_channel_lengths(self):
         payload = {

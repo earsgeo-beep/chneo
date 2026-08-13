@@ -269,6 +269,30 @@ class AcquisitionControllerTests(unittest.TestCase):
         self.assertLess(elapsed, 1.0)
         self.assertEqual(self.controller.stats["samples_acquired"], 250)
 
+    def test_preview_snapshot_exposes_raw_voltage_and_exact_session_time(self):
+        self.assertTrue(
+            self._start(
+                "live_scope",
+                sampling_rate=32,
+                duration_seconds=0.5,
+                channels=[0],
+            )
+        )
+        self.controller.acquisition_thread.join(timeout=2)
+
+        raw = self.controller.get_recent_data(10, raw=True, channel_indices=[0])
+        physical = self.controller.get_recent_data(10, raw=False, channel_indices=[0])
+
+        self.assertIsNotNone(raw)
+        self.assertIsNotNone(physical)
+        self.assertEqual(raw["data_kind"], "raw_voltage")
+        self.assertEqual(raw["units"], ["V"])
+        self.assertEqual(raw["start_sample_index"], 6)
+        self.assertEqual(raw["stop_sample_index"], 16)
+        np.testing.assert_allclose(np.diff(raw["time_seconds"]), 1.0 / 32.0)
+        np.testing.assert_allclose(physical["data"], raw["data"] / 2.0)
+        self.assertLessEqual(max(item["sample_count"] for item in self.controller.data_buffer), 3)
+
     def test_csv_preserves_sample_rate_and_integrity_for_analysis(self):
         self.assertTrue(
             self._start(

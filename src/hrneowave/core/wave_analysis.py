@@ -26,9 +26,15 @@ class WaveAnalysisConfig:
     segment_length: int = 1024
     overlap_ratio: float = 0.5
     window: str = "hann"
-    detrend: bool = True
+    detrend: bool | str = True
+    fft_length: int | None = None
+    average: str = "mean"
     min_frequency: float = 0.0
     max_frequency: float | None = None
+    filter_type: str = "none"
+    filter_low_frequency: float | None = None
+    filter_high_frequency: float | None = None
+    filter_order: int = 4
     minimum_samples: int = 32
 
     def validate(self, sample_rate: float) -> None:
@@ -36,8 +42,19 @@ class WaveAnalysisConfig:
             raise WaveAnalysisError("La frequence d'echantillonnage est invalide")
         if self.segment_length < 8:
             raise WaveAnalysisError("La taille de segment doit etre au moins egale a 8")
+        if self.fft_length is not None and self.fft_length < self.segment_length:
+            raise WaveAnalysisError("Le nombre de points FFT doit etre superieur ou egal au segment")
         if not 0 <= self.overlap_ratio < 1:
             raise WaveAnalysisError("Le recouvrement doit etre compris entre 0 et 1 exclu")
+        if self.average not in {"mean", "median"}:
+            raise WaveAnalysisError("La moyenne Welch doit etre 'mean' ou 'median'")
+        detrend = self.detrend
+        if detrend not in {True, False, "none", "constant", "linear"}:
+            raise WaveAnalysisError("Le detrendage doit etre none, constant ou linear")
+        try:
+            signal.get_window(self.window, self.segment_length)
+        except (TypeError, ValueError) as exc:
+            raise WaveAnalysisError(f"Fenetre spectrale invalide: {self.window}") from exc
         if self.min_frequency < 0:
             raise WaveAnalysisError("La frequence minimale ne peut pas etre negative")
         if self.min_frequency >= sample_rate / 2:
@@ -47,12 +64,33 @@ class WaveAnalysisConfig:
                 raise WaveAnalysisError("La bande frequentielle est invalide")
             if self.max_frequency > sample_rate / 2:
                 raise WaveAnalysisError("La frequence maximale depasse Nyquist")
+        self._validate_filter(sample_rate)
+
+    def _validate_filter(self, sample_rate: float) -> None:
+        filter_type = str(self.filter_type).lower()
+        if filter_type not in {"none", "lowpass", "highpass", "bandpass", "bandstop"}:
+            raise WaveAnalysisError("Type de filtre inconnu")
+        if not 1 <= int(self.filter_order) <= 10:
+            raise WaveAnalysisError("L'ordre du filtre doit etre compris entre 1 et 10")
+        if filter_type == "none":
+            return
+        nyquist = sample_rate / 2.0
+        low = self.filter_low_frequency
+        high = self.filter_high_frequency
+        if filter_type in {"highpass", "bandpass", "bandstop"}:
+            if low is None or not 0 < float(low) < nyquist:
+                raise WaveAnalysisError("La coupure basse du filtre doit etre entre 0 et Nyquist")
+        if filter_type in {"lowpass", "bandpass", "bandstop"}:
+            if high is None or not 0 < float(high) < nyquist:
+                raise WaveAnalysisError("La coupure haute du filtre doit etre entre 0 et Nyquist")
+        if filter_type in {"bandpass", "bandstop"} and float(low) >= float(high):
+            raise WaveAnalysisError("Les coupures du filtre sont inversees")
 
 
 class WaveAnalyzer:
     """Calcule statistiques, spectre, moments et vagues individuelles."""
 
-    METHOD_VERSION = "1.3"
+    METHOD_VERSION = "1.4"
 
     def __init__(self, config: WaveAnalysisConfig | None = None):
         self.config = config or WaveAnalysisConfig()
@@ -72,11 +110,7 @@ class WaveAnalyzer:
     ) -> dict[str, Any]:
         self.config.validate(sample_rate)
         series = self._validate_series(values)
-        centered = series - np.mean(series)
-        if self.config.detrend and len(series) > 2:
-            processed = signal.detrend(series, type="linear")
-        else:
-            processed = centered
+        processed, processing = self.prepare_signal(series, sample_rate)
 
         spectral = self._spectral_analysis(
             processed,
@@ -90,6 +124,8 @@ class WaveAnalyzer:
 
         return {
             "basic_stats": self._basic_statistics(series, sample_rate, unit),
+            "analysis_signal_stats": self._basic_statistics(processed, sample_rate, unit),
+            "signal_processing": processing,
             "spectral": spectral,
             "wave_parameters": {
                 **temporal,
@@ -117,12 +153,8 @@ class WaveAnalyzer:
         sample_count = min(len(x), len(y))
         x = x[:sample_count]
         y = y[:sample_count]
-        if self.config.detrend:
-            x = signal.detrend(x, type="linear")
-            y = signal.detrend(y, type="linear")
-        else:
-            x = x - np.mean(x)
-            y = y - np.mean(y)
+        x, _ = self.prepare_signal(x, sample_rate)
+        y, _ = self.prepare_signal(y, sample_rate)
 
         nperseg, noverlap, segment_count = self._welch_layout(sample_count)
         common = {
@@ -175,6 +207,75 @@ class WaveAnalyzer:
             "segment_count": segment_count,
         }
 
+    def prepare_signal(
+        self,
+        values: np.ndarray,
+        sample_rate: float,
+    ) -> tuple[np.ndarray, dict[str, Any]]:
+        """Prepare an offline analysis signal and return complete provenance.
+
+        Detrending is explicit and the optional Butterworth filter is applied
+        forward/backward in second-order sections.  This preserves peak phase
+        positions and avoids the numerical fragility of high-order ``ba``
+        coefficients.
+        """
+
+        self.config.validate(sample_rate)
+        series = self._validate_series(values)
+        detrend = self.config.detrend
+        detrend_type = (
+            "linear"
+            if detrend is True
+            else "none"
+            if detrend is False
+            else str(detrend).lower()
+        )
+        if detrend_type == "linear" and len(series) > 2:
+            processed = signal.detrend(series, type="linear")
+        elif detrend_type == "constant":
+            processed = signal.detrend(series, type="constant")
+        else:
+            processed = series.copy()
+
+        filter_type = str(self.config.filter_type).lower()
+        if filter_type != "none":
+            cutoff: float | list[float]
+            if filter_type == "lowpass":
+                cutoff = float(self.config.filter_high_frequency)
+            elif filter_type == "highpass":
+                cutoff = float(self.config.filter_low_frequency)
+            else:
+                cutoff = [
+                    float(self.config.filter_low_frequency),
+                    float(self.config.filter_high_frequency),
+                ]
+            sos = signal.butter(
+                int(self.config.filter_order),
+                cutoff,
+                btype=filter_type,
+                fs=sample_rate,
+                output="sos",
+            )
+            try:
+                processed = signal.sosfiltfilt(sos, processed)
+            except ValueError as exc:
+                raise WaveAnalysisError(
+                    "L'intervalle est trop court pour appliquer ce filtre sans dephasage"
+                ) from exc
+
+        return np.asarray(processed, dtype=np.float64), {
+            "detrend": detrend_type,
+            "filter": {
+                "type": filter_type,
+                "family": "butterworth" if filter_type != "none" else "none",
+                "implementation": "sosfiltfilt" if filter_type != "none" else "none",
+                "zero_phase": bool(filter_type != "none"),
+                "order": int(self.config.filter_order) if filter_type != "none" else 0,
+                "low_frequency_hz": self.config.filter_low_frequency,
+                "high_frequency_hz": self.config.filter_high_frequency,
+            },
+        }
+
     def _spectral_analysis(
         self,
         values: np.ndarray,
@@ -183,16 +284,18 @@ class WaveAnalyzer:
         constant_signal: bool = False,
     ) -> dict[str, Any]:
         nperseg, noverlap, segment_count = self._welch_layout(len(values))
+        nfft = max(nperseg, int(self.config.fft_length or nperseg))
         frequencies, density = signal.welch(
             values,
             fs=sample_rate,
             window=self.config.window,
             nperseg=nperseg,
             noverlap=noverlap,
+            nfft=nfft,
             detrend=False,
             return_onesided=True,
             scaling="density",
-            average="mean",
+            average=self.config.average,
         )
         density = np.maximum(np.asarray(density, dtype=np.float64), 0.0)
         if constant_signal:
@@ -236,11 +339,15 @@ class WaveAnalyzer:
         tm02 = math.sqrt(m0 / m2) if m2 > 0 else 0.0
         energy_period = m_1 / m0 if m0 > 0 else 0.0
         bandwidth = math.sqrt(max(0.0, 1.0 - (m2 * m2) / (m0 * m4))) if m0 > 0 and m4 > 0 else 0.0
-        equivalent_dof = max(2, 2 * segment_count)
-        confidence_factors = [
-            float(equivalent_dof / stats.chi2.ppf(0.975, equivalent_dof)),
-            float(equivalent_dof / stats.chi2.ppf(0.025, equivalent_dof)),
-        ]
+        equivalent_dof = max(2, 2 * segment_count) if self.config.average == "mean" else None
+        confidence_factors = (
+            [
+                float(equivalent_dof / stats.chi2.ppf(0.975, equivalent_dof)),
+                float(equivalent_dof / stats.chi2.ppf(0.025, equivalent_dof)),
+            ]
+            if equivalent_dof is not None
+            else None
+        )
 
         return {
             "method": "Welch",
@@ -252,16 +359,24 @@ class WaveAnalyzer:
                 float(band_frequencies[0]),
                 float(band_frequencies[-1]),
             ],
-            "frequency_resolution": float(frequencies[1] - frequencies[0]),
+            # Rayleigh resolution is governed by segment duration.  Zero
+            # padding only refines the displayed frequency grid.
+            "frequency_resolution": float(sample_rate / nperseg),
+            "frequency_bin_spacing": float(frequencies[1] - frequencies[0]),
+            "fft_length": nfft,
             "nyquist_frequency": float(sample_rate / 2),
             "segment_length": nperseg,
             "overlap_samples": noverlap,
             "segment_count": segment_count,
+            "window": self.config.window,
+            "average": self.config.average,
             "equivalent_degrees_of_freedom_approx": equivalent_dof,
             "psd_confidence_interval_95_factors_approx": confidence_factors,
             "confidence_interval_note": (
                 "Multiply PSD by these lower/upper factors; approximation uses 2K "
                 "degrees of freedom and does not correct overlap correlation"
+                if confidence_factors is not None
+                else "Chi-square confidence factors are not reported for median Welch averaging"
             ),
             "spectral_moments": moments,
             "peak_frequency": peak_frequency,

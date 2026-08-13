@@ -16,17 +16,37 @@ The operator can select:
 
 * the exact time interval used by every channel, cross-spectrum and optional
   incident/reflected separation;
-* the Welch segment length, overlap, window and frequency band;
-* linear detrending before spectral and zero-upcrossing analysis;
+* presets of 30 seconds, 1, 5 or 10 minutes, a custom interval, and previous/
+  next-window navigation; records longer than 10 minutes open on a readable
+  5-minute view while the complete record remains selectable;
+* the Welch segment length, overlap, window, mean or median aggregation,
+  zero-padding factor and frequency band;
+* no detrending, mean removal or linear detrending;
+* optional zero-phase Butterworth low-pass, high-pass, band-pass and band-stop
+  filtering using second-order sections;
 * one active channel or an all-channel overlay;
 * physical units or original voltage when a RAW import contains both;
-* centred display, mean and standard-deviation guides;
-* logarithmic or linear PSD scale, approximate 95 percent confidence band and
-  cumulative spectral energy.
+* physical, centred, analysis-conditioned or display-only normalised temporal
+  traces;
+* PSD, ASD, PSD in dB or cumulative energy with linear/logarithmic axes and an
+  approximate 95 percent confidence band for mean Welch aggregation;
+* a selected-channel spectrogram with dynamic range and perceptual colour-map
+  controls.
 
-The Matplotlib navigation toolbar is present on every scientific figure. Home,
-back, forward, pan, zoom, subplot adjustment and figure export therefore work
-without modifying the source record.
+The PyQtGraph instrument toolbar is present on every scientific figure. Cursor,
+interval selection, rectangle zoom, pan, grid, legend, fit-to-data and PNG/SVG
+export work without modifying the source record. Long records are clipped to
+the visible X range and downsampled with a min/max preserving method for fast
+display; calculations always use the selected source samples, not the display
+decimation.
+
+Resolution semantics
+--------------------
+
+The displayed ``Rayleigh`` resolution is ``Fs / nperseg`` and is governed by
+segment duration. The distinct ``frequency_bin_spacing`` is ``Fs / nfft``.
+Zero-padding refines the frequency grid and peak interpolation but is never
+reported as an improvement of physical spectral resolution.
 
 Scientific results
 ------------------
@@ -52,10 +72,11 @@ report mark it ``NON FIABLE`` when the peak touches an analysis-band boundary,
 when fewer than ten samples describe a peak period, or when fewer than ten peak
 cycles occur in the selected record.
 
-A channel is rejected when the signal is constant, contains a prolonged flat
-portion, or has a block-variance ratio above the stationarity threshold. Other
-warnings produce an ``A VERIFIER`` verdict. Wave-height interpretation also
-requires an identified elevation sensor, a length unit and a valid calibration.
+Automatic checks only produce evidence levels (nominal, warning or critical).
+They never accept or reject a probe. The engineer's decision remains explicit
+because probe response can legitimately differ with model geometry and probe
+position. Wave-height interpretation also requires an identified elevation
+sensor, a length unit and a valid calibration.
 
 Scientific report and exports
 -----------------------------
@@ -73,10 +94,9 @@ Next scientific increments
 
 The following increments are intentionally not presented as implemented:
 
-* non-destructive filter previews with original/filtered comparison and filter
-  response plots;
+* filter-response magnitude/phase plots and before/after overlay;
 * spike, clipping and dropout event annotation on the time axis;
-* spectrogram/STFT and wavelet time-frequency analysis;
+* wavelet time-frequency analysis;
 * interactive coherence and phase dashboards for arbitrary channel pairs;
 * propagation of calibration uncertainty into amplitudes and wave parameters;
 * repeatability comparisons between several runs and ensemble confidence
@@ -91,5 +111,19 @@ Method references
 -----------------
 
 * `SciPy Welch PSD documentation <https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.welch.html>`_
+* `SciPy Butterworth filter documentation <https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.butter.html>`_
+* `SciPy zero-phase SOS filtering documentation <https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.sosfiltfilt.html>`_
+* `SciPy ShortTimeFFT documentation <https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.ShortTimeFFT.html>`_
+* `PyQtGraph PlotDataItem documentation <https://pyqtgraph.readthedocs.io/en/latest/api_reference/graphicsItems/plotdataitem.html>`_
 * `SciPy cross-spectral density documentation <https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.csd.html>`_
 * `ITTC 7.5-02-07-01.2, Laboratory Modelling of Waves <https://www.ittc.info/media/9697/75-02-07-012.pdf>`_
+
+Validated interface captures
+----------------------------
+
+The following captures were rendered from the real 9-channel, 32 Hz legacy RAW
+record supplied for validation, using a 300-second interval:
+
+* ``screenshots/v7/analysis-time-window.png``;
+* ``screenshots/v7/analysis-spectrum-controls.png``;
+* ``screenshots/v7/analysis-spectrogram.png``.

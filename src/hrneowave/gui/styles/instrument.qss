@@ -148,6 +148,32 @@ QPushButton#plotModeButton {
 }
 QPushButton#plotModeButton:hover { color: @TEXT_STRONG@; background: @HOVER@; }
 QPushButton#plotModeButton:checked { color: @TEXT_STRONG@; border-bottom-color: @ACCENT@; }
+QFrame#analysisViewControls {
+    background: @PANEL_ALT@;
+    border: none;
+    border-bottom: 1px solid @BORDER@;
+    min-height: 31px;
+    max-height: 31px;
+}
+QFrame#analysisViewControls QLabel {
+    color: @MUTED@;
+    font-size: 9px;
+    font-weight: 650;
+}
+QFrame#analysisViewControls QComboBox {
+    min-height: 23px;
+    max-height: 23px;
+    min-width: 96px;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+QFrame#analysisViewControls QPushButton {
+    min-height: 23px;
+    max-height: 23px;
+    padding: 0 7px;
+    font-size: 9px;
+}
+QFrame#analysisViewControls QCheckBox { font-size: 9px; spacing: 4px; }
 QPushButton#inspectorToggle {
     background: transparent;
     color: @MUTED@;
@@ -287,6 +313,77 @@ QPushButton#acquisitionMode {
 QPushButton#acquisitionMode:hover { color: @TEXT_STRONG@; background: @HOVER@; }
 QPushButton#acquisitionMode:checked { color: @TEXT_STRONG@; border-bottom-color: @ACCENT@; background: @PANEL@; }
 QFrame#acquisitionConfigActions { background: @PANEL_ALT@; border: 1px solid @BORDER@; border-top: none; }
+QFrame#acquisitionMonitor {
+    background: @PANEL@;
+    border: 1px solid @BORDER@;
+    border-radius: 3px;
+}
+QFrame#acquisitionStatusStrip {
+    background: @HEADER@;
+    border: none;
+    border-bottom: 1px solid @BORDER_STRONG@;
+    min-height: 32px;
+    max-height: 32px;
+}
+QLabel#acquisitionStatusCaption, QLabel#liveScopeCaption,
+QLabel#liveScopeReadoutCaption {
+    color: @MUTED@;
+    font-size: 9px;
+    font-weight: 700;
+}
+QLabel#acquisitionStatusValue {
+    color: @TEXT_STRONG@;
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 10px;
+    font-weight: 650;
+}
+QFrame#liveAcquisitionScope { background: @CANVAS@; border: none; }
+QFrame#liveScopeControls {
+    background: @PANEL_ALT@;
+    border: none;
+    border-bottom: 1px solid @BORDER@;
+    min-height: 34px;
+    max-height: 34px;
+}
+QFrame#liveScopeControls QComboBox,
+QFrame#liveScopeControls QDoubleSpinBox,
+QFrame#liveScopeControls QPushButton {
+    min-height: 24px;
+    max-height: 24px;
+    padding-top: 0;
+    padding-bottom: 0;
+    font-size: 9px;
+}
+QFrame#liveScopeControls QCheckBox { min-height: 19px; font-size: 9px; }
+QLabel#liveScopeState {
+    min-width: 112px;
+    font-size: 9px;
+    font-weight: 750;
+}
+QPushButton#liveScopePause:checked {
+    background: @WARNING@;
+    color: @ACCENT_TEXT@;
+    border-color: @WARNING@;
+}
+QFrame#liveScopeReadouts {
+    background: @TOPBAR@;
+    border: none;
+    border-top: 1px solid @BORDER_STRONG@;
+    min-height: 32px;
+    max-height: 32px;
+}
+QFrame#liveScopeReadout {
+    background: transparent;
+    border: none;
+    border-right: 1px solid @BORDER@;
+}
+QLabel#liveScopeReadoutValue {
+    color: @TEXT_STRONG@;
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 11px;
+    font-weight: 650;
+}
+QSplitter#acquisitionDetailsSplitter::handle { background: @BORDER_STRONG@; width: 2px; }
 QFrame#reportEvidence { background: @PANEL_ALT@; border: 1px solid @BORDER@; border-left: 3px solid @ACCENT@; }
 QTextEdit#reportDocument { background: #FFFFFF; color: #182D36; border: 1px solid @BORDER_STRONG@; padding: 14px; }
 QFrame#settingsSectionHeader { background: @HEADER@; border: none; border-bottom: 1px solid @BORDER@; }

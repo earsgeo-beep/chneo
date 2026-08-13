@@ -29,6 +29,7 @@ from hrneowave.gui.views.report_view import ReportView
 from hrneowave.gui.widgets.qualification_workspace import QualificationWorkspace
 from hrneowave.gui.widgets.top_navigation import TopNavigationBar
 from hrneowave.gui.workbench.channel_model import ChannelItem, ChannelListModel
+from hrneowave.gui.workbench.live_acquisition_scope import LiveAcquisitionScope
 from tests.hardware_test_doubles import DeterministicPhysicalBackend, physical_test_device
 
 
@@ -138,13 +139,18 @@ def test_analysis_parameters_panel_is_collapsible(qt_app):
 def test_analysis_workbench_uses_one_switchable_scientific_scene(qt_app):
     view = AnalysisView()
 
-    assert view.results_area.plot_stack.count() == 2
+    assert view.results_area.plot_stack.count() == 3
     assert view.results_area.plot_stack.currentWidget() is view.results_area.time_plot
 
     view.results_area.set_plot_mode("spectrum")
 
     assert view.results_area.plot_stack.currentWidget() is view.results_area.spectrum_plot
     assert view.results_area.plot_mode_buttons["spectrum"].isChecked()
+
+    view.results_area.set_plot_mode("spectrogram")
+
+    assert view.results_area.plot_stack.currentWidget() is view.results_area.spectrogram_plot
+    assert view.results_area.plot_mode_buttons["spectrogram"].isChecked()
 
     view.results_area.inspector_toggle_button.setChecked(False)
 
@@ -183,6 +189,9 @@ def test_analysis_view_loads_raw_and_draws_time_signals(qt_app):
         assert loaded
         assert view.post_processor.current_data["source_format"] == "legacy_raw"
         assert view.post_processor.sample_rate == 2.0
+        assert view.results_area.time_plot.series_count() == 1
+        assert view.source_pane.channel_model.visible_keys() == ["channel_00"]
+        view.source_pane.show_all_button.click()
         assert view.results_area.time_plot.series_count() == 2
         assert view.source_pane.channel_model.rowCount() == 2
         view.source_pane.channel_model.set_only_visible("channel_01")
@@ -303,3 +312,94 @@ def test_acquisition_configuration_round_trip_preserves_scientific_geometry(qt_a
     finally:
         if view.controller is not None:
             view.controller.close()
+
+
+def test_live_acquisition_scope_reads_raw_and_physical_buffers(qt_app, tmp_path):
+    backend = DeterministicPhysicalBackend()
+    backend.connect()
+    controller = AcquisitionController(daq_backend=backend)
+    scope = LiveAcquisitionScope()
+    try:
+        assert controller.configure_maritime_channel(
+            0,
+            "wave_height",
+            "Sonde 1",
+            sensor_sensitivity=2.0,
+            physical_units="m",
+        )
+        assert controller.configure_maritime_channel(
+            1,
+            "pressure",
+            "Pression 1",
+            sensor_sensitivity=0.5,
+            physical_units="bar",
+        )
+        assert controller.start_acquisition_session(
+            "scope-test",
+            sampling_rate=32,
+            duration_seconds=0.5,
+            channels=[0, 1],
+            recording_directory=str(tmp_path),
+        )
+        controller.acquisition_thread.join(timeout=2)
+
+        scope.bind_controller(controller)
+        scope.configure_session(controller.current_session)
+        scope.refresh()
+
+        assert scope.measure_combo.currentData() == "raw"
+        assert scope.plot.series_count() == 1
+        assert scope.plot.plot.getAxis("left").labelText == "Tension brute (V)"
+        assert scope.latest_readout.text().endswith(" V")
+        assert "SESSION TERMINÉE" in scope.state_label.text()
+
+        scope.channel_combo.setCurrentIndex(0)
+        scope.refresh()
+        assert scope.plot.series_count() == 2
+
+        scope.channel_combo.setCurrentIndex(1)
+        scope.measure_combo.setCurrentIndex(1)
+        scope.refresh()
+        assert scope.plot.plot.getAxis("left").labelText == "Grandeur physique (m)"
+        assert scope.latest_readout.text().endswith(" m")
+
+        scope.pause_button.setChecked(True)
+        assert "AFFICHAGE FIGÉ" in scope.state_label.text()
+        assert not controller.is_acquiring
+    finally:
+        controller.close()
+
+
+def test_pausing_live_scope_never_pauses_hdf_acquisition(qt_app, tmp_path):
+    class PacedPhysicalBackend(DeterministicPhysicalBackend):
+        def read(self, num_samples=100):
+            time.sleep(0.02)
+            return super().read(num_samples)
+
+    backend = PacedPhysicalBackend()
+    backend.connect()
+    controller = AcquisitionController(daq_backend=backend)
+    scope = LiveAcquisitionScope()
+    try:
+        assert controller.configure_maritime_channel(0, "generic", "Générateur", physical_units="V")
+        assert controller.start_acquisition_session(
+            "pause-display-only",
+            sampling_rate=32,
+            duration_seconds=1.0,
+            channels=[0],
+            recording_directory=str(tmp_path),
+        )
+        scope.bind_controller(controller)
+        scope.configure_session(controller.current_session)
+        scope.pause_button.setChecked(True)
+        samples_before = controller.stats["samples_acquired"]
+
+        time.sleep(0.08)
+
+        assert controller.is_acquiring
+        assert controller.stats["samples_acquired"] > samples_before
+        assert "HDF5 ACTIF" in scope.state_label.text()
+    finally:
+        if controller.is_acquiring:
+            controller.stop_acquisition()
+        controller.close()

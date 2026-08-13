@@ -6,6 +6,7 @@ import logging
 import math
 from datetime import datetime, timezone
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 from PySide6.QtCore import Qt, QTimer, Signal
@@ -45,6 +46,7 @@ from ...acquisition.acquisition_controller import AcquisitionController, create_
 from ...core.calibration import CalibrationRecord
 from ...hardware import VoltageRange
 from ..widgets.qualification_workspace import QualificationWorkspace
+from ..workbench.live_acquisition_scope import LiveAcquisitionScope
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +66,8 @@ class AcquisitionConfigView(QWidget):
         super().__init__(parent)
         self.controller: AcquisitionController | None = None
         self.update_timer = QTimer(self)
+        self.live_update_timer = QTimer(self)
+        self._last_ui_block_emit = 0.0
         self.project_metadata: dict[str, Any] = {}
         self.project_dir: Path | None = None
         self._hardware_state = "not_scanned"
@@ -90,9 +94,9 @@ class AcquisitionConfigView(QWidget):
         splitter.setHandleWidth(3)
         splitter.addWidget(self._create_config_panel())
         splitter.addWidget(self._create_monitor_panel())
-        splitter.setStretchFactor(0, 5)
-        splitter.setStretchFactor(1, 2)
-        splitter.setSizes([800, 360])
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([470, 930])
         main_layout.addWidget(splitter, 1)
 
     def _create_header(self) -> QWidget:
@@ -359,49 +363,74 @@ class AcquisitionConfigView(QWidget):
 
     def _create_monitor_panel(self) -> QWidget:
         widget = QFrame()
-        widget.setObjectName("surface")
-        widget.setMinimumWidth(310)
+        widget.setObjectName("acquisitionMonitor")
+        widget.setMinimumWidth(600)
         layout = QVBoxLayout(widget)
-        layout.setContentsMargins(11, 8, 11, 8)
-        layout.setSpacing(7)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        status_group = QGroupBox("Statut acquisition")
-        status_group.setObjectName("flatGroup")
-        status_layout = QFormLayout(status_group)
+        status_group = QFrame()
+        status_group.setObjectName("acquisitionStatusStrip")
+        status_layout = QHBoxLayout(status_group)
+        status_layout.setContentsMargins(9, 4, 9, 4)
+        status_layout.setSpacing(8)
         self.acquisition_status_label = QLabel("Arretee")
+        self.acquisition_status_label.setObjectName("acquisitionStatusValue")
         self.samples_count_label = QLabel("0")
+        self.samples_count_label.setObjectName("acquisitionStatusValue")
         self.acquisition_rate_label = QLabel("0.0 Hz")
+        self.acquisition_rate_label.setObjectName("acquisitionStatusValue")
         self.errors_count_label = QLabel("0")
+        self.errors_count_label.setObjectName("acquisitionStatusValue")
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
-        status_layout.addRow("Statut:", self.acquisition_status_label)
-        status_layout.addRow("Echantillons:", self.samples_count_label)
-        status_layout.addRow("Taux reel:", self.acquisition_rate_label)
-        status_layout.addRow("Erreurs:", self.errors_count_label)
-        status_layout.addRow("Progression:", self.progress_bar)
+        for caption, value in (
+            ("ÉTAT", self.acquisition_status_label),
+            ("ÉCHANTILLONS", self.samples_count_label),
+            ("TAUX RÉEL", self.acquisition_rate_label),
+            ("ERREURS", self.errors_count_label),
+        ):
+            caption_label = QLabel(caption)
+            caption_label.setObjectName("acquisitionStatusCaption")
+            status_layout.addWidget(caption_label)
+            status_layout.addWidget(value)
+            status_layout.addSpacing(5)
+        status_layout.addWidget(self.progress_bar, 1)
+        status_layout.addStretch()
         layout.addWidget(status_group)
 
-        log_group = QGroupBox("Journal")
+        self.live_scope = LiveAcquisitionScope()
+        layout.addWidget(self.live_scope, 1)
+
+        details_splitter = QSplitter(Qt.Orientation.Horizontal)
+        details_splitter.setObjectName("acquisitionDetailsSplitter")
+        details_splitter.setChildrenCollapsible(False)
+        details_splitter.setMaximumHeight(155)
+
+        data_group = QGroupBox("Dernières valeurs affichées")
+        data_group.setObjectName("flatGroup")
+        data_layout = QVBoxLayout(data_group)
+        data_layout.setContentsMargins(5, 8, 5, 5)
+        self.data_table = QTableWidget(0, 3)
+        self.data_table.setHorizontalHeaderLabels(["Canal", "Valeur", "Unité"])
+        self.data_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        data_layout.addWidget(self.data_table)
+        details_splitter.addWidget(data_group)
+
+        log_group = QGroupBox("Journal technique")
         log_group.setObjectName("flatGroup")
         log_layout = QVBoxLayout(log_group)
+        log_layout.setContentsMargins(5, 8, 5, 5)
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setMaximumHeight(120)
         clear_log_btn = QPushButton("Effacer le journal")
         clear_log_btn.setProperty("kind", "quiet")
         clear_log_btn.clicked.connect(self.clear_log)
         log_layout.addWidget(self.log_text)
         log_layout.addWidget(clear_log_btn)
-        layout.addWidget(log_group)
-
-        data_group = QGroupBox("Apercu temps reel")
-        data_group.setObjectName("flatGroup")
-        data_layout = QVBoxLayout(data_group)
-        self.data_table = QTableWidget(0, 3)
-        self.data_table.setHorizontalHeaderLabels(["Canal", "Valeur", "Unite"])
-        self.data_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        data_layout.addWidget(self.data_table)
-        layout.addWidget(data_group, 1)
+        details_splitter.addWidget(log_group)
+        details_splitter.setSizes([360, 320])
+        layout.addWidget(details_splitter)
         return widget
 
     def _setup_connections(self) -> None:
@@ -421,10 +450,13 @@ class AcquisitionConfigView(QWidget):
         self.export_json_btn.clicked.connect(self.export_json)
         self.export_hdf5_btn.clicked.connect(self.export_hdf5)
         self.update_timer.timeout.connect(self.update_display)
+        self.live_update_timer.timeout.connect(self._refresh_live_scope)
         self.data_block_received.connect(self._display_received_data)
+        self.live_scope.latest_values_changed.connect(self._update_realtime_table)
         self.qualification_workspace.stage_requested.connect(self.start_qualification_stage)
         self.qualification_workspace.refresh_requested.connect(self.refresh_qualification_history)
         self.update_timer.start(1000)
+        self.live_update_timer.start(100)
 
     def _initialize_channels_table(
         self,
@@ -469,6 +501,7 @@ class AcquisitionConfigView(QWidget):
                 self.data_received_callback,
                 auto_initialize=False,
             )
+            self.live_scope.bind_controller(self.controller)
             self.log_message("Contrôleur prêt - détectez un équipement physique")
             self.board_combo.clear()
             self.board_combo.addItem("Inventaire matériel non lancé", None)
@@ -888,6 +921,7 @@ class AcquisitionConfigView(QWidget):
         self.board_combo.setEnabled(False)
         self.test_connection_btn.setEnabled(False)
         self.progress_bar.setVisible(duration is not None)
+        self.live_scope.configure_session(self.controller.current_session)
         if duration is not None:
             self.progress_bar.setMaximum(max(1, int(duration)))
             self.progress_bar.setValue(0)
@@ -1036,12 +1070,6 @@ class AcquisitionConfigView(QWidget):
         if self.progress_bar.isVisible():
             elapsed = int(session.get("duration_seconds", 0))
             self.progress_bar.setValue(min(elapsed, self.progress_bar.maximum()))
-
-        recent_data = self.controller.get_recent_data(1)
-        if recent_data and "data" in recent_data and len(recent_data["data"]) > 0:
-            self._update_realtime_table(
-                recent_data["data"][-1], recent_data.get("channels", []), recent_data.get("units", [])
-            )
 
         if not status.get("is_acquiring") and self.stop_acquisition_btn.isEnabled():
             pending_stage = self._pending_qualification_stage
@@ -1407,19 +1435,26 @@ class AcquisitionConfigView(QWidget):
 
     def data_received_callback(self, data, session) -> None:
         """Relaye le bloc vers le thread Qt au lieu de modifier l'UI ici."""
-        self.data_block_received.emit(data, session)
+        now = monotonic()
+        if now - self._last_ui_block_emit >= 0.1:
+            self._last_ui_block_emit = now
+            self.data_block_received.emit(data, session)
 
     def _display_received_data(self, data, session) -> None:
         try:
-            if hasattr(data, "shape") and data.shape[0] > 0:
-                latest_sample = data[-1]
-                labels = [channel.label for channel in session.channels] if session else []
-                units = [channel.physical_units for channel in session.channels] if session else []
-                self._update_realtime_table(latest_sample, labels, units)
+            if session is not None and not self.live_scope.uses_session(session):
+                self.live_scope.configure_session(session)
+            self._refresh_live_scope()
         except Exception as exc:
             self.log_message(f"Erreur callback donnees: {exc}")
 
+    def _refresh_live_scope(self) -> None:
+        if hasattr(self, "live_scope"):
+            self.live_scope.refresh()
+
     def closeEvent(self, event) -> None:
+        self.update_timer.stop()
+        self.live_update_timer.stop()
         if self.controller and self.controller.is_acquiring:
             self.controller.stop_acquisition()
         if self.controller:
@@ -1482,6 +1517,9 @@ class AcquisitionConfigView(QWidget):
         self.board_combo.setEnabled(True)
         self.test_connection_btn.setEnabled(connected)
         self.progress_bar.setVisible(False)
+
+    def set_theme(self, is_dark: bool) -> None:
+        self.live_scope.set_theme(is_dark)
 
     def _get_default_export_directory(self) -> Path:
         if self.project_dir:

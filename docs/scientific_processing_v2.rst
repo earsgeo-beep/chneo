@@ -69,7 +69,29 @@ Les parametres principaux sont:
 Le moteur exporte aussi un intervalle de confiance PSD approximatif a 95 %. Il
 utilise ``2K`` degres de liberte pour ``K`` segments Welch. Cette approximation
 ne corrige pas la correlation introduite par le recouvrement et est donc
-identifiee comme telle dans les resultats.
+identifiee comme telle dans les resultats. Elle est affichee uniquement pour
+l'agregation Welch par moyenne; le logiciel ne pretend pas appliquer ce modele
+du khi-deux a l'agregation robuste par mediane.
+
+La resolution de Rayleigh exportee vaut ``Fs / nperseg``. L'espacement de la
+grille FFT vaut ``Fs / nfft``. Un ``nfft`` plus grand par zero-padding fournit
+plus de points d'affichage mais ne cree pas de resolution physique nouvelle.
+
+Conditionnement optionnel
+-------------------------
+
+Le detrendage est explicite: aucun, retrait de moyenne, ou retrait d'une derive
+lineaire. Les filtres optionnels sont des Butterworth passe-bas, passe-haut,
+passe-bande ou coupe-bande d'ordre 1 a 10. Ils sont calcules en sections du
+second ordre puis appliques aller-retour avec ``sosfiltfilt``. Le filtrage est
+donc sans dephasage dans ce traitement hors ligne. Le type, les coupures,
+l'ordre et l'implementation sont exportes avec chaque resultat.
+
+Le spectrogramme de la voie active utilise ``scipy.signal.ShortTimeFFT`` quand
+la version installee le fournit, avec fenetres completement incluses dans
+l'intervalle selectionne. Une voie de compatibilite SciPy 1.10/1.11 reste
+disponible. La carte montre une PSD unilaterale en dB et conserve dans les
+resultats la resolution de Rayleigh et l'espacement FFT distincts.
 
 Analyse croisee
 ---------------

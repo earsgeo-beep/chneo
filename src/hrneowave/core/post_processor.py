@@ -69,9 +69,15 @@ class PostProcessor(QObject):
                 "window_size": 1024,
                 "overlap": 0.5,
                 "window": "hann",
-                "detrend": True,
+                "detrend": "linear",
+                "fft_length": None,
+                "average": "mean",
                 "min_frequency": 0.0,
                 "max_frequency": None,
+                "filter_type": "none",
+                "filter_low_frequency": None,
+                "filter_high_frequency": None,
+                "filter_order": 4,
                 "minimum_samples": 32,
                 "start_time_s": 0.0,
                 "end_time_s": None,
@@ -100,11 +106,27 @@ class PostProcessor(QObject):
             segment_length=int(analysis.get("window_size", 1024)),
             overlap_ratio=float(analysis.get("overlap", 0.5)),
             window=str(analysis.get("window", "hann")),
-            detrend=bool(analysis.get("detrend", True)),
+            detrend=analysis.get("detrend", "linear"),
+            fft_length=(
+                int(analysis["fft_length"]) if analysis.get("fft_length") is not None else None
+            ),
+            average=str(analysis.get("average", "mean")),
             min_frequency=float(analysis.get("min_frequency", 0.0)),
             max_frequency=(
                 float(analysis["max_frequency"]) if analysis.get("max_frequency") is not None else None
             ),
+            filter_type=str(analysis.get("filter_type", "none")),
+            filter_low_frequency=(
+                float(analysis["filter_low_frequency"])
+                if analysis.get("filter_low_frequency") is not None
+                else None
+            ),
+            filter_high_frequency=(
+                float(analysis["filter_high_frequency"])
+                if analysis.get("filter_high_frequency") is not None
+                else None
+            ),
+            filter_order=int(analysis.get("filter_order", 4)),
             minimum_samples=int(analysis.get("minimum_samples", 32)),
         )
 
@@ -568,6 +590,142 @@ class PostProcessor(QObject):
         )
         return time_values, values
 
+    def load_channel_window(
+        self,
+        channel: str,
+        start_time_s: float = 0.0,
+        end_time_s: float | None = None,
+        maximum_points: int = 250_000,
+        *,
+        raw: bool = False,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Load a time window at full resolution whenever its size allows it."""
+
+        if self.current_data is None:
+            raise WaveAnalysisError("Aucune donnée chargée")
+        sample_count = self._channel_sample_count(channel)
+        start = max(0, int(np.floor(float(start_time_s) * self.sample_rate)))
+        requested_end = sample_count / self.sample_rate if end_time_s is None else float(end_time_s)
+        stop = min(sample_count, int(np.ceil(requested_end * self.sample_rate)))
+        if stop <= start:
+            raise WaveAnalysisError("Fenêtre d'affichage temporelle invalide")
+        indices = np.arange(start, stop, dtype=int)
+        if maximum_points > 0 and len(indices) > maximum_points:
+            indices = np.unique(
+                np.linspace(start, stop - 1, int(maximum_points), dtype=int)
+            )
+
+        if self.current_data.get("source_format") == "hdf5":
+            import h5py
+
+            with h5py.File(self.current_data["source_path"], "r") as handle:
+                dataset_path = (
+                    f"acquisition_data/{channel}"
+                    if f"acquisition_data/{channel}" in handle
+                    else channel
+                )
+                # h5py supports sorted fancy indices and avoids loading the
+                # rest of a multi-hour session into memory.
+                values = np.asarray(handle[dataset_path][indices], dtype=np.float64)
+                if "acquisition_data/time" in handle:
+                    time_values = np.asarray(
+                        handle["acquisition_data/time"][indices],
+                        dtype=np.float64,
+                    )
+                else:
+                    time_values = indices.astype(np.float64) / self.sample_rate
+            return time_values, values
+
+        source = (
+            self.current_data.get("raw_channels", {})
+            if raw
+            else self.current_data.get("channels", {})
+        )
+        if channel not in source:
+            raise WaveAnalysisError(f"Fenêtre indisponible pour {channel}")
+        values = np.asarray(source[channel], dtype=np.float64)[indices]
+        full_time = np.asarray(self.current_data.get("time", []), dtype=np.float64)
+        time_values = (
+            full_time[indices]
+            if len(full_time) == sample_count
+            else indices.astype(np.float64) / self.sample_rate
+        )
+        return time_values, values
+
+    def compute_spectrogram(self, channel: str) -> dict[str, Any]:
+        """Compute an on-demand time-frequency map for the selected channel."""
+
+        if self.current_data is None:
+            raise WaveAnalysisError("Aucune donnée chargée")
+        sample_count = self._channel_sample_count(channel)
+        sample_bounds = self._analysis_sample_bounds(sample_count)
+        values = self._analysis_channel_values(channel, sample_bounds)
+        analyzer = WaveAnalyzer(self._wave_config())
+        processed, processing = analyzer.prepare_signal(values, self.sample_rate)
+        nperseg, noverlap, segment_count = analyzer._welch_layout(len(processed))
+        nfft = max(nperseg, int(analyzer.config.fft_length or nperseg))
+        if hasattr(signal, "ShortTimeFFT"):
+            short_time_fft = signal.ShortTimeFFT.from_window(
+                analyzer.config.window,
+                fs=self.sample_rate,
+                nperseg=nperseg,
+                noverlap=noverlap,
+                fft_mode="onesided2X",
+                mfft=nfft,
+                scale_to="psd",
+            )
+            p0 = int(short_time_fft.lower_border_end[1])
+            p1 = int(short_time_fft.upper_border_begin(len(processed))[1])
+            if p1 <= p0:
+                p0, p1 = short_time_fft.p_min, short_time_fft.p_max(len(processed))
+            density = short_time_fft.spectrogram(processed, p0=p0, p1=p1)
+            frequencies = short_time_fft.f
+            times = short_time_fft.t(len(processed), p0=p0, p1=p1)
+            implementation = "scipy.signal.ShortTimeFFT"
+        else:  # SciPy 1.10/1.11 compatibility path.
+            frequencies, times, density = signal.spectrogram(
+                processed,
+                fs=self.sample_rate,
+                window=analyzer.config.window,
+                nperseg=nperseg,
+                noverlap=noverlap,
+                nfft=nfft,
+                detrend=False,
+                return_onesided=True,
+                scaling="density",
+                mode="psd",
+            )
+            implementation = "scipy.signal.spectrogram_compatibility"
+        band = analyzer._frequency_mask(frequencies, self.sample_rate)
+        start_index, _ = sample_bounds
+        return {
+            "channel": channel,
+            "times": (times + start_index / self.sample_rate).tolist(),
+            "frequencies": frequencies[band].tolist(),
+            "psd": np.maximum(density[band, :], np.finfo(np.float64).tiny).tolist(),
+            "psd_units": f"{self._spectrogram_unit(channel)}^2/Hz",
+            "segment_length": nperseg,
+            "fft_length": nfft,
+            "overlap_samples": noverlap,
+            "segment_count": segment_count,
+            "frequency_resolution": self.sample_rate / nperseg,
+            "frequency_bin_spacing": self.sample_rate / nfft,
+            "signal_processing": processing,
+            "implementation": implementation,
+        }
+
+    def _spectrogram_unit(self, channel: str) -> str:
+        metadata = self._channel_metadata_map(
+            list((self.current_data or {}).get("channel_keys", [])),
+            (self.current_data or {}).get("channel_metadata", {}),
+        ).get(channel, {})
+        return str(
+            metadata.get("physical_unit")
+            or metadata.get("physical_units")
+            or metadata.get("unit")
+            or "unit"
+        )
+
     def _analysis_sample_bounds(self, sample_count: int) -> tuple[int, int]:
         """Return a validated half-open sample interval selected by the operator."""
 
@@ -868,6 +1026,8 @@ class PostProcessor(QObject):
             reference_values = self._analysis_channel_values(reference_channel, sample_bounds)
             results: dict[str, Any] = {
                 "basic_stats": {},
+                "analysis_signal_stats": {},
+                "signal_processing": {},
                 "spectral_analysis": {},
                 "wave_parameters": {},
                 "zero_crossing_metrics": {},
@@ -938,6 +1098,12 @@ class PostProcessor(QObject):
                         channel_results["quality"]["status"] = "warning"
                         channel_results["quality"]["diagnostic_level"] = "warning"
                 results["basic_stats"][channel] = channel_results["basic_stats"]
+                results["analysis_signal_stats"][channel] = channel_results[
+                    "analysis_signal_stats"
+                ]
+                results["signal_processing"][channel] = channel_results[
+                    "signal_processing"
+                ]
                 results["spectral_analysis"][channel] = channel_results["spectral"]
                 results["wave_parameters"][channel] = channel_results["wave_parameters"]
                 results["quality"][channel] = channel_results["quality"]
@@ -993,11 +1159,28 @@ class PostProcessor(QObject):
                 "processing_method": "post_processor.run_analysis",
                 "psd_method": "welch",
                 "window": str(self.config["analysis"].get("window", "hann")),
+                "welch_average": str(self.config["analysis"].get("average", "mean")),
+                "fft_length": self.config["analysis"].get("fft_length"),
                 "overlap_applied": bool(
                     any(int(spectrum.get("segment_count", 1)) > 1 for spectrum in spectra)
                     and float(self.config["analysis"].get("overlap", 0.0)) > 0
                 ),
-                "detrend": bool(self.config["analysis"].get("detrend", True)),
+                "detrend": self.config["analysis"].get("detrend", "linear"),
+                "filter": {
+                    "type": self.config["analysis"].get("filter_type", "none"),
+                    "low_frequency_hz": self.config["analysis"].get(
+                        "filter_low_frequency"
+                    ),
+                    "high_frequency_hz": self.config["analysis"].get(
+                        "filter_high_frequency"
+                    ),
+                    "order": self.config["analysis"].get("filter_order", 4),
+                    "implementation": (
+                        "butterworth_sosfiltfilt"
+                        if self.config["analysis"].get("filter_type", "none") != "none"
+                        else "none"
+                    ),
+                },
                 "warnings": processing_warnings,
                 "result_semantics": {
                     "zero_crossing_metrics": "individual waves by zero-upcrossing",
@@ -1057,7 +1240,13 @@ class PostProcessor(QObject):
         import pandas as pd
 
         rows: list[dict[str, Any]] = []
-        categories = ("basic_stats", "wave_parameters", "quality")
+        categories = (
+            "basic_stats",
+            "analysis_signal_stats",
+            "signal_processing",
+            "wave_parameters",
+            "quality",
+        )
         for category in categories:
             for channel, metrics in self.current_analysis.get(category, {}).items():
                 for metric, value in metrics.items():
@@ -1083,6 +1272,10 @@ class PostProcessor(QObject):
                 "total_energy",
                 "spectral_bandwidth_epsilon",
                 "frequency_resolution",
+                "frequency_bin_spacing",
+                "fft_length",
+                "window",
+                "average",
                 "analysis_band_hz",
                 "nyquist_frequency",
                 "segment_count",
@@ -1164,9 +1357,15 @@ class PostProcessor(QObject):
                 self.current_analysis["analysis_configuration"], ensure_ascii=False
             )
 
-            for category in ("basic_stats", "wave_parameters", "quality"):
+            for category in (
+                "basic_stats",
+                "analysis_signal_stats",
+                "signal_processing",
+                "wave_parameters",
+                "quality",
+            ):
                 category_group = handle.create_group(category)
-                for channel, metrics in self.current_analysis[category].items():
+                for channel, metrics in self.current_analysis.get(category, {}).items():
                     channel_group = category_group.create_group(channel)
                     for metric, value in metrics.items():
                         channel_group.attrs[metric] = self._hdf5_attribute(value)

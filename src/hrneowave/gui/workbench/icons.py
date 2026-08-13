@@ -134,6 +134,16 @@ class _LineIconEngine(QIconEngine):
             p.drawLine(3, 10, 8, 10)
             p.drawLine(12, 10, 17, 10)
             p.drawLine(10, 13, 10, 18)
+        elif n == "grid":
+            p.drawRect(QRectF(3, 3, 14, 14))
+            p.drawLine(7.7, 3, 7.7, 17)
+            p.drawLine(12.3, 3, 12.3, 17)
+            p.drawLine(3, 7.7, 17, 7.7)
+            p.drawLine(3, 12.3, 17, 12.3)
+        elif n == "legend":
+            for y in (5.0, 10.0, 15.0):
+                p.drawLine(3, y, 7, y)
+                p.drawLine(10, y, 17, y)
         elif n == "fit":
             p.drawLine(3, 7, 3, 3)
             p.drawLine(3, 3, 7, 3)

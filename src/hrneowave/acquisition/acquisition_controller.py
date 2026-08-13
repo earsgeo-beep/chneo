@@ -605,7 +605,11 @@ class AcquisitionController:
                     self.current_session.metadata["incomplete_reason"] = "acquisition_timeout"
                     break
 
-                requested = 100
+                # Limite la demande à environ 100 ms de signal. Un pilote peut
+                # retourner un bloc plus court dès que des points sont disponibles;
+                # la cadence matérielle et le contrat HDF5 restent inchangés.
+                session_rate = float(self.current_session.sampling_rate)
+                requested = max(1, min(1000, int(round(session_rate * 0.1))))
                 if target_samples is not None:
                     requested = min(requested, target_samples - self.stats["samples_acquired"])
                 result = self._daq_backend.read(num_samples=requested)
@@ -652,6 +656,7 @@ class AcquisitionController:
             raise RecordingError("Enregistreur maître absent pendant l'acquisition")
         self._recorder.append(raw, processed)
 
+        start_sample_index = int(self.stats["samples_acquired"])
         with self._data_lock:
             self.data_buffer.append(
                 {
@@ -659,6 +664,8 @@ class AcquisitionController:
                     "raw_data": raw.copy(),
                     "processed_data": processed.copy(),
                     "sample_count": raw.shape[0],
+                    "start_sample_index": start_sample_index,
+                    "stop_sample_index": start_sample_index + raw.shape[0],
                 }
             )
             preview_samples = sum(entry["sample_count"] for entry in self.data_buffer)
@@ -809,32 +816,70 @@ class AcquisitionController:
                 status["hardware_status"] = {"connected": False, "error": str(exc)}
         return status
 
-    def get_recent_data(self, num_samples: int = 1000) -> dict[str, Any] | None:
+    def get_recent_data(
+        self,
+        num_samples: int = 1000,
+        *,
+        raw: bool = False,
+        channel_indices: list[int] | tuple[int, ...] | None = None,
+    ) -> dict[str, Any] | None:
+        """Retourne un instantané temporel du tampon d'affichage.
+
+        Cet accès n'interagit jamais avec le backend ni l'enregistreur maître.
+        ``channel_indices`` désigne les colonnes de la session, pas les numéros
+        physiques de la carte.
+        """
+
+        requested_samples = max(1, int(num_samples))
         with self._data_lock:
             if not self.data_buffer:
                 return None
             snapshot = list(self.data_buffer)
+        if self.current_session is None:
+            return None
+        session_channels = list(self.current_session.channels)
+        if channel_indices is None:
+            selected_columns = list(range(len(session_channels)))
+        else:
+            selected_columns = [int(index) for index in channel_indices]
+            if not selected_columns or any(
+                index < 0 or index >= len(session_channels) for index in selected_columns
+            ):
+                raise ValueError("Sélection de colonnes hors session")
+        source_key = "raw_data" if raw else "processed_data"
         chunks: list[np.ndarray] = []
         total = 0
         for entry in reversed(snapshot):
-            if total >= num_samples:
+            if total >= requested_samples:
                 break
-            chunks.append(entry["processed_data"])
+            chunks.append(np.asarray(entry[source_key])[:, selected_columns])
             total += entry["sample_count"]
-        if not chunks or self.current_session is None:
+        if not chunks:
             return None
-        data = np.vstack(chunks[::-1])[-num_samples:]
-        first_index = max(0, self.stats["samples_acquired"] - data.shape[0])
+        latest_stop_index = int(snapshot[-1].get("stop_sample_index", self.stats["samples_acquired"]))
+        data = np.vstack(chunks[::-1])[-requested_samples:]
+        first_index = max(0, latest_stop_index - data.shape[0])
         interval = timedelta(seconds=1.0 / self.current_session.sampling_rate)
         timestamps = [
             self.current_session.start_time + (first_index + index) * interval
             for index in range(data.shape[0])
         ]
+        time_seconds = (
+            first_index + np.arange(data.shape[0], dtype=np.float64)
+        ) / self.current_session.sampling_rate
         return {
             "data": data,
             "timestamps": timestamps,
-            "channels": [item.label for item in self.current_session.channels],
-            "units": [item.physical_units for item in self.current_session.channels],
+            "time_seconds": time_seconds,
+            "channels": [session_channels[index].label for index in selected_columns],
+            "channel_numbers": [session_channels[index].channel for index in selected_columns],
+            "units": ["V" for _index in selected_columns]
+            if raw
+            else [session_channels[index].physical_units for index in selected_columns],
+            "data_kind": "raw_voltage" if raw else "physical",
+            "sample_rate_hz": float(self.current_session.sampling_rate),
+            "start_sample_index": first_index,
+            "stop_sample_index": latest_stop_index,
             "sample_count": data.shape[0],
         }
 

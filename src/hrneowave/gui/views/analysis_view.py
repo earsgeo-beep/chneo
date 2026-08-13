@@ -40,6 +40,7 @@ from ...core.legacy_raw import (
 )
 from ...core.post_processor import PostProcessor
 from ...core.scientific_report import build_scientific_report_text
+from ...core.wave_analysis import WaveAnalyzer
 from ..workbench.channel_delegate import ChannelDelegate
 from ..workbench.channel_model import ChannelItem, ChannelListModel
 from ..workbench.icons import line_icon
@@ -336,10 +337,21 @@ class ScientificInspector(QFrame):
         panel.setContentsMargins(0, 0, 0, 0)
         panel.setSpacing(0)
         interval, form = self._section("Intervalle")
+        self.interval_preset_combo = QComboBox()
+        for label, seconds in (
+            ("Tout le signal", 0.0),
+            ("30 secondes", 30.0),
+            ("1 minute", 60.0),
+            ("5 minutes", 300.0),
+            ("10 minutes", 600.0),
+            ("Personnalisé", -1.0),
+        ):
+            self.interval_preset_combo.addItem(label, seconds)
         self.start_time_spin = self._time_spin(False)
         self.end_time_spin = self._time_spin(True)
         self.duration_value = self._technical("—")
         self.samples_value = self._technical("—")
+        form.addRow("Fenêtre", self.interval_preset_combo)
         form.addRow("Début", self.start_time_spin)
         form.addRow("Fin", self.end_time_spin)
         form.addRow("Durée", self.duration_value)
@@ -352,6 +364,8 @@ class ScientificInspector(QFrame):
             ("Hann", "hann"),
             ("Hamming", "hamming"),
             ("Blackman", "blackman"),
+            ("Blackman-Harris", "blackmanharris"),
+            ("Flattop", "flattop"),
             ("Rectangulaire", "boxcar"),
         ):
             self.window_combo.addItem(label, value)
@@ -362,15 +376,46 @@ class ScientificInspector(QFrame):
         self.overlap_spin.setRange(0, 90)
         self.overlap_spin.setValue(50)
         self.overlap_spin.setSuffix(" %")
-        self.detrend_check = QCheckBox("Moyenne + dérive")
-        self.detrend_check.setChecked(True)
+        self.average_combo = QComboBox()
+        self.average_combo.addItem("Moyenne", "mean")
+        self.average_combo.addItem("Médiane robuste", "median")
+        self.zero_padding_combo = QComboBox()
+        for label, factor in (("Aucun", 1), ("×2", 2), ("×4", 4), ("×8", 8)):
+            self.zero_padding_combo.addItem(label, factor)
         self.resolution_value = self._technical("—")
         form.addRow("Fenêtre", self.window_combo)
         form.addRow("Segment", self.segment_length_combo)
         form.addRow("Recouvrement", self.overlap_spin)
-        form.addRow("Débruitage", self.detrend_check)
-        form.addRow("Δf", self.resolution_value)
+        form.addRow("Agrégation", self.average_combo)
+        form.addRow("Zéro-padding", self.zero_padding_combo)
+        form.addRow("Résolution", self.resolution_value)
         panel.addWidget(welch)
+        conditioning, form = self._section("Conditionnement")
+        self.detrend_combo = QComboBox()
+        self.detrend_combo.addItem("Aucun", "none")
+        self.detrend_combo.addItem("Retirer moyenne", "constant")
+        self.detrend_combo.addItem("Retirer dérive linéaire", "linear")
+        self.detrend_combo.setCurrentIndex(2)
+        self.filter_combo = QComboBox()
+        for label, value in (
+            ("Aucun", "none"),
+            ("Passe-bas Butterworth", "lowpass"),
+            ("Passe-haut Butterworth", "highpass"),
+            ("Passe-bande Butterworth", "bandpass"),
+            ("Coupe-bande Butterworth", "bandstop"),
+        ):
+            self.filter_combo.addItem(label, value)
+        self.filter_low_spin = self._frequency_spin(False)
+        self.filter_high_spin = self._frequency_spin(False)
+        self.filter_order_spin = QSpinBox()
+        self.filter_order_spin.setRange(1, 10)
+        self.filter_order_spin.setValue(4)
+        form.addRow("Dérive", self.detrend_combo)
+        form.addRow("Filtre", self.filter_combo)
+        form.addRow("Coupure basse", self.filter_low_spin)
+        form.addRow("Coupure haute", self.filter_high_spin)
+        form.addRow("Ordre", self.filter_order_spin)
+        panel.addWidget(conditioning)
         band, form = self._section("Bande utile")
         self.min_frequency_spin = self._frequency_spin(False)
         self.max_frequency_spin = self._frequency_spin(True)
@@ -380,10 +425,8 @@ class ScientificInspector(QFrame):
         reading, form = self._section("Lecture")
         self.confidence_interval_check = QCheckBox("IC PSD 95 %")
         self.confidence_interval_check.setChecked(True)
-        self.cumulative_energy_check = QCheckBox("Énergie cumulée")
         self.cursor_value = self._technical("t —   y —")
         form.addRow("Incertitude", self.confidence_interval_check)
-        form.addRow("Intégrale", self.cumulative_energy_check)
         form.addRow("Curseur", self.cursor_value)
         panel.addWidget(reading)
         panel.addStretch()
@@ -418,6 +461,14 @@ class ScientificInspector(QFrame):
             lambda: self.export_requested.emit(str(self.export_format_combo.currentData()))
         )
         self.details_button.clicked.connect(self.details_requested.emit)
+        self.interval_preset_combo.currentIndexChanged.connect(self._apply_interval_preset)
+        self.start_time_spin.valueChanged.connect(self._refresh_interval_readout)
+        self.end_time_spin.valueChanged.connect(self._refresh_interval_readout)
+        self.filter_combo.currentIndexChanged.connect(self._update_filter_controls)
+        self._record_duration = 0.0
+        self._record_samples = 0
+        self._sample_rate = 0.0
+        self._update_filter_controls()
 
     @staticmethod
     def _technical(text: str) -> QLabel:
@@ -450,12 +501,29 @@ class ScientificInspector(QFrame):
 
     def parameters(self) -> dict:
         maximum = self.max_frequency_spin.value()
+        segment = int(self.segment_length_combo.currentText())
+        padding_factor = int(self.zero_padding_combo.currentData())
+        filter_type = str(self.filter_combo.currentData())
         return {
-            "window_size": int(self.segment_length_combo.currentText()),
+            "window_size": segment,
             "overlap": self.overlap_spin.value() / 100.0,
+            "fft_length": segment * padding_factor if padding_factor > 1 else None,
+            "average": str(self.average_combo.currentData()),
             "min_frequency": self.min_frequency_spin.value(),
             "max_frequency": maximum if maximum > 0 else None,
-            "detrend": self.detrend_check.isChecked(),
+            "detrend": str(self.detrend_combo.currentData()),
+            "filter_type": filter_type,
+            "filter_low_frequency": (
+                self.filter_low_spin.value()
+                if filter_type in {"highpass", "bandpass", "bandstop"}
+                else None
+            ),
+            "filter_high_frequency": (
+                self.filter_high_spin.value()
+                if filter_type in {"lowpass", "bandpass", "bandstop"}
+                else None
+            ),
+            "filter_order": self.filter_order_spin.value(),
             "window": str(self.window_combo.currentData()),
             "start_time_s": self.start_time_spin.value(),
             "end_time_s": self.end_time_spin.value() or None,
@@ -463,16 +531,86 @@ class ScientificInspector(QFrame):
 
     def set_record(self, duration: float, samples: int, rate: float) -> None:
         duration = max(0.0, float(duration))
+        self._record_duration = duration
+        self._record_samples = int(samples)
+        self._sample_rate = float(rate)
         self.start_time_spin.setMaximum(duration)
         self.end_time_spin.setMaximum(duration)
         self.end_time_spin.setValue(0.0)
         self.duration_value.setText(f"{duration:.3f} s")
         self.samples_value.setText(f"N = {samples:,}".replace(",", " "))
         segment = int(self.segment_length_combo.currentText())
-        self.resolution_value.setText(f"{rate / segment:.5g} Hz" if rate else "—")
+        self.resolution_value.setText(
+            f"Rayleigh {rate / segment:.5g} Hz" if rate else "—"
+        )
+        nyquist = rate / 2.0 if rate else 0.0
+        for spin in (
+            self.min_frequency_spin,
+            self.max_frequency_spin,
+            self.filter_low_spin,
+            self.filter_high_spin,
+        ):
+            spin.setMaximum(nyquist)
+        if nyquist > 0:
+            self.filter_low_spin.setValue(max(0.0001, nyquist * 0.01))
+            self.filter_high_spin.setValue(nyquist * 0.8)
+        default_interval = 300.0 if duration > 600.0 else 0.0
+        default_index = self.interval_preset_combo.findData(default_interval)
+        self.interval_preset_combo.setCurrentIndex(max(0, default_index))
+        self._update_filter_controls()
+        self._refresh_interval_readout()
 
     def set_record_duration(self, duration_s: float) -> None:
         self.set_record(duration_s, 0, 0.0)
+
+    def _apply_interval_preset(self, _index: int) -> None:
+        seconds = float(self.interval_preset_combo.currentData())
+        if seconds < 0 or self._record_duration <= 0:
+            return
+        if seconds == 0 or seconds >= self._record_duration:
+            self.start_time_spin.setValue(0.0)
+            self.end_time_spin.setValue(0.0)
+            return
+        start = min(self.start_time_spin.value(), self._record_duration - seconds)
+        self.start_time_spin.setValue(start)
+        self.end_time_spin.setValue(start + seconds)
+
+    def shift_interval(self, direction: int) -> None:
+        start = self.start_time_spin.value()
+        end = self.end_time_spin.value()
+        if end <= start:
+            return
+        span = end - start
+        new_start = min(max(0.0, start + int(direction) * span), self._record_duration - span)
+        self.start_time_spin.setValue(new_start)
+        self.end_time_spin.setValue(new_start + span)
+
+    def set_interval_custom(self) -> None:
+        custom = self.interval_preset_combo.findData(-1.0)
+        if custom >= 0 and self.interval_preset_combo.currentIndex() != custom:
+            self.interval_preset_combo.blockSignals(True)
+            self.interval_preset_combo.setCurrentIndex(custom)
+            self.interval_preset_combo.blockSignals(False)
+
+    def _update_filter_controls(self, *_args) -> None:
+        filter_type = str(self.filter_combo.currentData())
+        self.filter_low_spin.setEnabled(filter_type in {"highpass", "bandpass", "bandstop"})
+        self.filter_high_spin.setEnabled(filter_type in {"lowpass", "bandpass", "bandstop"})
+        self.filter_order_spin.setEnabled(filter_type != "none")
+
+    def _refresh_interval_readout(self, *_args) -> None:
+        if not hasattr(self, "_record_duration"):
+            return
+        start = self.start_time_spin.value()
+        end = self.end_time_spin.value()
+        selected_duration = end - start if end > start else self._record_duration
+        selected_samples = (
+            int(round(selected_duration * self._sample_rate))
+            if self._sample_rate > 0
+            else self._record_samples
+        )
+        self.duration_value.setText(f"{selected_duration:.3f} s")
+        self.samples_value.setText(f"N = {selected_samples:,}".replace(",", " "))
 
 
 class AnalysisDetailsDrawer(QFrame):
@@ -550,7 +688,11 @@ class AnalysisResultsArea(QFrame):
         self.analysis_count_label = QLabel("0 calcul")
         self.analysis_count_label.setObjectName("plotMeta")
         self.plot_mode_buttons: dict[str, QPushButton] = {}
-        for mode, caption in (("time", "SIGNAL TEMPOREL"), ("spectrum", "SPECTRE PSD")):
+        for mode, caption in (
+            ("time", "SIGNAL TEMPOREL"),
+            ("spectrum", "SPECTRE"),
+            ("spectrogram", "TEMPS–FRÉQUENCE"),
+        ):
             button = QPushButton(caption)
             button.setObjectName("plotModeButton")
             button.setCheckable(True)
@@ -563,6 +705,8 @@ class AnalysisResultsArea(QFrame):
         self.time_cursor_label.setObjectName("plotMeta")
         self.spectrum_readout_label = QLabel("pic —   Δf —")
         self.spectrum_readout_label.setObjectName("plotMeta")
+        self.spectrogram_readout_label = QLabel("voie —   plage — dB")
+        self.spectrogram_readout_label.setObjectName("plotMeta")
         row.addWidget(self.analysis_status_label)
         row.addWidget(self.analysis_count_label)
         row.addStretch()
@@ -578,7 +722,101 @@ class AnalysisResultsArea(QFrame):
         row.addWidget(self.time_cursor_label)
         row.addSpacing(12)
         row.addWidget(self.spectrum_readout_label)
+        row.addSpacing(12)
+        row.addWidget(self.spectrogram_readout_label)
         layout.addWidget(status)
+        controls = QFrame()
+        controls.setObjectName("analysisViewControls")
+        controls_layout = QHBoxLayout(controls)
+        controls_layout.setContentsMargins(8, 3, 8, 3)
+        controls_layout.setSpacing(5)
+        self.context_controls = QStackedWidget()
+        self.context_controls.setObjectName("analysisContextControls")
+
+        time_controls = QWidget()
+        time_row = QHBoxLayout(time_controls)
+        time_row.setContentsMargins(0, 0, 0, 0)
+        time_row.setSpacing(5)
+        time_row.addWidget(QLabel("INTERVALLE"))
+        self.time_window_combo = QComboBox()
+        for label, seconds in (
+            ("Tout", 0.0),
+            ("30 s", 30.0),
+            ("1 min", 60.0),
+            ("5 min", 300.0),
+            ("10 min", 600.0),
+            ("Personnalisé", -1.0),
+        ):
+            self.time_window_combo.addItem(label, seconds)
+        self.time_previous_button = QPushButton("PRÉC.")
+        self.time_next_button = QPushButton("SUIV.")
+        time_row.addWidget(self.time_window_combo)
+        time_row.addWidget(self.time_previous_button)
+        time_row.addWidget(self.time_next_button)
+        time_row.addSpacing(10)
+        time_row.addWidget(QLabel("AFFICHAGE"))
+        self.time_display_combo = QComboBox()
+        self.time_display_combo.addItem("Amplitude physique", "physical")
+        self.time_display_combo.addItem("Centré", "centered")
+        self.time_display_combo.addItem("Signal analysé", "analysis")
+        self.time_display_combo.addItem("Normalisé — visuel", "normalized")
+        time_row.addWidget(self.time_display_combo)
+        time_row.addStretch()
+        self.context_controls.addWidget(time_controls)
+
+        spectrum_controls = QWidget()
+        spectrum_row = QHBoxLayout(spectrum_controls)
+        spectrum_row.setContentsMargins(0, 0, 0, 0)
+        spectrum_row.setSpacing(5)
+        spectrum_row.addWidget(QLabel("ORDONNÉE"))
+        self.spectrum_representation_combo = QComboBox()
+        self.spectrum_representation_combo.addItem("PSD", "psd")
+        self.spectrum_representation_combo.addItem("ASD", "asd")
+        self.spectrum_representation_combo.addItem("PSD en dB", "db")
+        self.spectrum_representation_combo.addItem("Énergie cumulée", "energy")
+        spectrum_row.addWidget(self.spectrum_representation_combo)
+        spectrum_row.addWidget(QLabel("AXES"))
+        self.spectrum_axes_combo = QComboBox()
+        self.spectrum_axes_combo.addItem("f linéaire · Y log", (False, True))
+        self.spectrum_axes_combo.addItem("f linéaire · Y linéaire", (False, False))
+        self.spectrum_axes_combo.addItem("f log · Y log", (True, True))
+        spectrum_row.addWidget(self.spectrum_axes_combo)
+        self.spectrum_band_only_check = QCheckBox("Bande utile")
+        self.spectrum_band_only_check.setChecked(True)
+        self.spectrum_confidence_check = QCheckBox("IC 95 %")
+        self.spectrum_confidence_check.setChecked(True)
+        spectrum_row.addWidget(self.spectrum_band_only_check)
+        spectrum_row.addWidget(self.spectrum_confidence_check)
+        spectrum_row.addStretch()
+        self.context_controls.addWidget(spectrum_controls)
+
+        spectrogram_controls = QWidget()
+        spectrogram_row = QHBoxLayout(spectrogram_controls)
+        spectrogram_row.setContentsMargins(0, 0, 0, 0)
+        spectrogram_row.setSpacing(5)
+        spectrogram_row.addWidget(QLabel("DYNAMIQUE"))
+        self.spectrogram_range_combo = QComboBox()
+        for label, value in (("40 dB", 40.0), ("60 dB", 60.0), ("80 dB", 80.0), ("100 dB", 100.0)):
+            self.spectrogram_range_combo.addItem(label, value)
+        self.spectrogram_range_combo.setCurrentIndex(1)
+        spectrogram_row.addWidget(self.spectrogram_range_combo)
+        spectrogram_row.addWidget(QLabel("PALETTE"))
+        self.spectrogram_palette_combo = QComboBox()
+        for label, value in (
+            ("Viridis", "viridis"),
+            ("Cividis", "cividis"),
+            ("Plasma", "plasma"),
+            ("Inferno", "inferno"),
+        ):
+            self.spectrogram_palette_combo.addItem(label, value)
+        spectrogram_row.addWidget(self.spectrogram_palette_combo)
+        self.spectrogram_channel_label = QLabel("VOIE ACTIVE —")
+        self.spectrogram_channel_label.setObjectName("plotMeta")
+        spectrogram_row.addWidget(self.spectrogram_channel_label)
+        spectrogram_row.addStretch()
+        self.context_controls.addWidget(spectrogram_controls)
+        controls_layout.addWidget(self.context_controls)
+        layout.addWidget(controls)
         self.time_plot = ScientificPlotWidget("Signal temporel", "Temps (s)", "Amplitude")
         self.spectrum_plot = ScientificPlotWidget(
             "Densité spectrale de puissance",
@@ -586,10 +824,16 @@ class AnalysisResultsArea(QFrame):
             "PSD",
             logarithmic_y=True,
         )
+        self.spectrogram_plot = ScientificPlotWidget(
+            "Spectrogramme",
+            "Temps (s)",
+            "Fréquence (Hz)",
+        )
         self.plot_stack = QStackedWidget()
         self.plot_stack.setObjectName("plotSceneStack")
         self.plot_stack.addWidget(self.time_plot)
         self.plot_stack.addWidget(self.spectrum_plot)
+        self.plot_stack.addWidget(self.spectrogram_plot)
         layout.addWidget(self.plot_stack, 1)
         self.metric_strip = MetricStrip()
         layout.addWidget(self.metric_strip)
@@ -607,12 +851,20 @@ class AnalysisResultsArea(QFrame):
     def set_plot_mode(self, mode: str) -> None:
         """Switch the representation while preserving the whole plotting area."""
 
-        spectrum = mode == "spectrum"
-        self.plot_stack.setCurrentWidget(self.spectrum_plot if spectrum else self.time_plot)
-        self.plot_mode_buttons["spectrum"].setChecked(spectrum)
-        self.plot_mode_buttons["time"].setChecked(not spectrum)
-        self.time_cursor_label.setVisible(not spectrum)
-        self.spectrum_readout_label.setVisible(spectrum)
+        targets = {
+            "time": (self.time_plot, 0),
+            "spectrum": (self.spectrum_plot, 1),
+            "spectrogram": (self.spectrogram_plot, 2),
+        }
+        mode = mode if mode in targets else "time"
+        target, control_index = targets[mode]
+        self.plot_stack.setCurrentWidget(target)
+        self.context_controls.setCurrentIndex(control_index)
+        for name, button in self.plot_mode_buttons.items():
+            button.setChecked(name == mode)
+        self.time_cursor_label.setVisible(mode == "time")
+        self.spectrum_readout_label.setVisible(mode == "spectrum")
+        self.spectrogram_readout_label.setVisible(mode == "spectrogram")
 
     def update_analysis_status(self, status: str, count: int = 0) -> None:
         self.analysis_status_label.setText(status.upper())
@@ -669,18 +921,55 @@ class AnalysisView(QWidget):
         self.source_pane.channel_selected.connect(self._select_channel)
         self.source_pane.visibility_changed.connect(self._on_plot_controls_changed)
         self.source_pane.raw_signal_check.toggled.connect(self._update_time_plot)
-        self.source_pane.center_signal_check.toggled.connect(self._update_time_plot)
         self.source_pane.overlay_channels_check.toggled.connect(self._on_plot_controls_changed)
         self.inspector.analysis_requested.connect(self.on_analysis_requested)
         self.inspector.export_requested.connect(self.on_export_requested)
         self.inspector.details_requested.connect(self._toggle_tools_panel)
         self.inspector.segment_length_combo.currentTextChanged.connect(self._update_resolution_preview)
+        self.inspector.zero_padding_combo.currentIndexChanged.connect(self._update_resolution_preview)
         self.inspector.start_time_spin.valueChanged.connect(self._sync_region_from_controls)
         self.inspector.end_time_spin.valueChanged.connect(self._sync_region_from_controls)
+        self.inspector.interval_preset_combo.currentIndexChanged.connect(
+            self.results_area.time_window_combo.setCurrentIndex
+        )
+        self.results_area.time_window_combo.currentIndexChanged.connect(
+            self.inspector.interval_preset_combo.setCurrentIndex
+        )
+        self.results_area.time_previous_button.clicked.connect(
+            lambda: self.inspector.shift_interval(-1)
+        )
+        self.results_area.time_next_button.clicked.connect(
+            lambda: self.inspector.shift_interval(1)
+        )
+        self.results_area.time_display_combo.currentIndexChanged.connect(self._update_time_plot)
+        self.results_area.spectrum_representation_combo.currentIndexChanged.connect(
+            self._update_spectrum_plot
+        )
+        self.results_area.spectrum_axes_combo.currentIndexChanged.connect(
+            self._update_spectrum_plot
+        )
+        self.results_area.spectrum_band_only_check.toggled.connect(self._update_spectrum_plot)
+        self.results_area.spectrum_confidence_check.toggled.connect(self._update_spectrum_plot)
+        self.results_area.spectrum_confidence_check.toggled.connect(
+            self.inspector.confidence_interval_check.setChecked
+        )
+        self.inspector.confidence_interval_check.toggled.connect(
+            self.results_area.spectrum_confidence_check.setChecked
+        )
+        self.results_area.spectrogram_range_combo.currentIndexChanged.connect(
+            self._update_spectrogram_plot
+        )
+        self.results_area.spectrogram_palette_combo.currentIndexChanged.connect(
+            self._update_spectrogram_plot
+        )
+        self.results_area.plot_mode_buttons["spectrogram"].clicked.connect(
+            self._update_spectrogram_plot
+        )
         self.results_area.time_plot.region_changed.connect(self._sync_controls_from_region)
         self.results_area.time_plot.cursor_moved.connect(self._on_time_cursor_moved)
         self.results_area.spectrum_plot.cursor_moved.connect(self._on_spectrum_cursor_moved)
         self.results_area.inspector_visibility_requested.connect(self.inspector.setVisible)
+        self.source_pane.center_signal_check.hide()
 
     def _toggle_tools_panel(self) -> None:
         self._set_tools_panel_expanded(not self._tools_panel_expanded)
@@ -789,17 +1078,23 @@ class AnalysisView(QWidget):
                 )
             )
         self.source_pane.set_channels(channels)
+        if channel_keys:
+            # Start with one readable trace; "Toutes" remains available for
+            # explicit multi-channel comparison.
+            self.source_pane.channel_model.set_only_visible(channel_keys[0])
         self.source_pane.raw_signal_check.setVisible(bool(data.get("raw_channels")))
         self._selected_channel = channel_keys[0] if channel_keys else ""
         self.results_area.metric_strip.clear()
         self._update_time_plot()
         self._update_spectrum_plot()
+        self.results_area.spectrogram_plot.clear_series()
         self.results_area.update_analysis_status("DONNÉES CHARGÉES", self.analysis_count)
         self.inspector.analysis_status_label.setText("SOURCE PRÊTE")
         self.results_area.time_plot.set_title_metadata(
             f"{rate:g} Hz · {sample_count:,} points".replace(",", " ")
         )
         self.results_area.spectrum_plot.set_title_metadata("Welch · en attente de calcul")
+        self.results_area.spectrogram_plot.set_title_metadata("Calculé à la demande · voie active")
         return True
 
     def on_analysis_requested(self, analysis_type: str, params: dict) -> None:
@@ -819,6 +1114,7 @@ class AnalysisView(QWidget):
         self.current_analysis_result = self.post_processor.current_analysis
         self._attach_time_series_previews()
         self._update_results_views()
+        self._update_time_plot()
         self.results_area.set_plot_mode("spectrum")
         self._set_tools_panel_expanded(False)
         quality = self.current_analysis_result.get("quality", {})
@@ -872,6 +1168,7 @@ class AnalysisView(QWidget):
         theme = "dark" if is_dark else "light"
         self.results_area.time_plot.apply_theme(theme)
         self.results_area.spectrum_plot.apply_theme(theme)
+        self.results_area.spectrogram_plot.apply_theme(theme)
 
     def get_analysis_results(self) -> dict:
         return {
@@ -886,6 +1183,7 @@ class AnalysisView(QWidget):
         self.current_analysis_result = None
         self.results_area.time_plot.clear_series()
         self.results_area.spectrum_plot.clear_series()
+        self.results_area.spectrogram_plot.clear_series()
         self.results_area.metric_strip.clear()
         self.results_area.report_text.clear()
         for table in (
@@ -924,6 +1222,7 @@ class AnalysisView(QWidget):
         self._selected_channel = channel
         self._update_time_plot()
         self._update_spectrum_plot()
+        self._update_spectrogram_plot()
         self._update_metric_strip()
 
     def _on_plot_controls_changed(self, *_args) -> None:
@@ -986,11 +1285,29 @@ class AnalysisView(QWidget):
         data = self.post_processor.current_data or {}
         available = list(data.get("channel_keys", []))
         raw = self.source_pane.raw_signal_check.isChecked() and bool(data.get("raw_channels"))
+        start = self.inspector.start_time_spin.value()
+        selected_end = self.inspector.end_time_spin.value()
+        end = selected_end if selected_end > start else None
+        display_mode = str(self.results_area.time_display_combo.currentData())
         series = {}
         for channel in self._visible_channels(available):
-            time_values, values = self.post_processor.load_channel_preview(channel, raw=raw)
-            if self.source_pane.center_signal_check.isChecked():
+            time_values, values = self.post_processor.load_channel_window(
+                channel,
+                start,
+                end,
+                raw=raw,
+            )
+            if display_mode == "analysis":
+                values, _ = WaveAnalyzer(self.post_processor._wave_config()).prepare_signal(
+                    values,
+                    self.post_processor.sample_rate,
+                )
+            elif display_mode == "centered":
                 values = values - float(np.mean(values))
+            elif display_mode == "normalized":
+                values = values - float(np.mean(values))
+                scale = float(np.std(values))
+                values = values / scale if scale > np.finfo(float).tiny else values
             series[self._display_name_for_channel(channel)] = (
                 time_values,
                 values,
@@ -1000,38 +1317,193 @@ class AnalysisView(QWidget):
         unit = (
             "V"
             if raw
+            else "z = (x−μ)/σ [affichage]"
+            if display_mode == "normalized"
             else self._channel_unit(self._selected_channel)
             if self._selected_channel
             else "Amplitude"
         )
         self.results_area.time_plot.set_axis_labels(y_label=unit)
-        if series and not self.results_area.time_plot.region.isVisible():
+        if series:
             first = next(iter(series.values()))[0]
             if len(first):
-                self.results_area.time_plot.set_region(float(first[0]), float(first[-1]), visible=False)
+                left = float(first[0])
+                right = float(first[-1])
+                self.results_area.time_plot.set_x_range(left, right)
+                self.results_area.time_plot.set_region(
+                    left,
+                    right,
+                    visible=selected_end > start,
+                )
+                points = sum(len(values[0]) for values in series.values())
+                mode_label = {
+                    "physical": "amplitude physique",
+                    "centered": "centré pour affichage",
+                    "analysis": "signal conditionné pour analyse",
+                    "normalized": "normalisé uniquement pour affichage",
+                }.get(display_mode, display_mode)
+                self.results_area.time_plot.set_title_metadata(
+                    f"{right - left:.3f} s · {points:,} points tracés · {mode_label}".replace(
+                        ",", " "
+                    )
+                )
 
     def _update_spectrum_plot(self, *_args) -> None:
         spectral = (self.current_analysis_result or {}).get("spectral_analysis", {})
+        representation = str(self.results_area.spectrum_representation_combo.currentData())
+        axes = self.results_area.spectrum_axes_combo.currentData() or (False, True)
+        logarithmic_x, logarithmic_y = bool(axes[0]), bool(axes[1])
+        if representation in {"db", "energy"}:
+            logarithmic_y = False
+        self.results_area.spectrum_plot.set_log_mode(logarithmic_x, logarithmic_y)
+        band_only = self.results_area.spectrum_band_only_check.isChecked()
         series = {}
         for channel in self._visible_channels(list(spectral)):
             values = spectral[channel]
+            frequencies = np.asarray(values.get("frequencies", []), dtype=float)
+            density = np.asarray(values.get("psd", []), dtype=float)
+            mask = np.isfinite(frequencies) & np.isfinite(density)
+            if logarithmic_x:
+                mask &= frequencies > 0
+            if band_only and len(values.get("analysis_band_hz", [])) == 2:
+                low, high = values["analysis_band_hz"]
+                mask &= (frequencies >= float(low)) & (frequencies <= float(high))
+            frequencies = frequencies[mask]
+            density = density[mask]
+            displayed = self._spectral_display_values(frequencies, density, representation)
             series[self._display_name_for_channel(channel)] = (
-                np.asarray(values.get("frequencies", []), dtype=float),
-                np.asarray(values.get("psd", []), dtype=float),
+                frequencies,
+                displayed,
                 self._color_for_channel(channel),
             )
         self.results_area.spectrum_plot.set_series(series)
+        unit = self._channel_unit(self._selected_channel) if self._selected_channel else "unité"
+        y_label = {
+            "psd": f"PSD ({unit}²/Hz)",
+            "asd": f"ASD ({unit}/√Hz)",
+            "db": f"PSD (dB re 1 {unit}²/Hz)",
+            "energy": "Énergie cumulée (%)",
+        }.get(representation, "PSD")
+        self.results_area.spectrum_plot.set_axis_labels(
+            x_label="Fréquence (Hz)",
+            y_label=y_label,
+        )
         selected = self._selected_channel
         if selected in spectral:
             values = spectral[selected]
             peak = float(values.get("peak_frequency", 0))
             peak_psd = float(values.get("peak_psd", 0))
-            self.results_area.spectrum_plot.add_marker(peak, peak_psd)
-            resolution = float(values.get("frequency_resolution", 0))
-            self.results_area.spectrum_readout_label.setText(f"pic {peak:.5g} Hz   Δf {resolution:.5g} Hz")
-            self.results_area.spectrum_plot.set_title_metadata(
-                f"Welch · {values.get('segment_count', 0)} segments · Δf {resolution:.5g} Hz"
+            peak_display = self._spectral_display_values(
+                np.asarray([peak]),
+                np.asarray([peak_psd]),
+                representation,
             )
+            if representation != "energy" and len(peak_display):
+                self.results_area.spectrum_plot.add_marker(peak, float(peak_display[0]))
+            self._add_selected_psd_confidence_band(values, representation, logarithmic_x)
+            resolution = float(values.get("frequency_resolution", 0))
+            bin_spacing = float(values.get("frequency_bin_spacing", resolution))
+            self.results_area.spectrum_readout_label.setText(
+                f"pic {peak:.5g} Hz   Rayleigh {resolution:.5g} Hz   grille {bin_spacing:.5g} Hz"
+            )
+            self.results_area.spectrum_plot.set_title_metadata(
+                f"Welch {values.get('average', 'mean')} · {values.get('window', 'hann')} · "
+                f"{values.get('segment_count', 0)} segments · NFFT {values.get('fft_length', 0)}"
+            )
+
+    @staticmethod
+    def _spectral_display_values(
+        frequencies: np.ndarray,
+        density: np.ndarray,
+        representation: str,
+    ) -> np.ndarray:
+        density = np.maximum(np.asarray(density, dtype=float), np.finfo(float).tiny)
+        if representation == "asd":
+            return np.sqrt(density)
+        if representation == "db":
+            return 10.0 * np.log10(density)
+        if representation == "energy":
+            if len(density) < 2:
+                return np.zeros_like(density)
+            increments = 0.5 * (density[:-1] + density[1:]) * np.diff(frequencies)
+            cumulative = np.concatenate(([0.0], np.cumsum(increments)))
+            return 100.0 * cumulative / cumulative[-1] if cumulative[-1] > 0 else cumulative
+        return density
+
+    def _add_selected_psd_confidence_band(
+        self,
+        spectrum: dict,
+        representation: str,
+        logarithmic_x: bool,
+    ) -> None:
+        if (
+            not self.results_area.spectrum_confidence_check.isChecked()
+            or representation == "energy"
+            or spectrum.get("average", "mean") != "mean"
+        ):
+            return
+        factors = spectrum.get("psd_confidence_interval_95_factors_approx")
+        if not isinstance(factors, list) or len(factors) != 2:
+            return
+        frequencies = np.asarray(spectrum.get("frequencies", []), dtype=float)
+        density = np.asarray(spectrum.get("psd", []), dtype=float)
+        mask = np.isfinite(frequencies) & np.isfinite(density)
+        if logarithmic_x:
+            mask &= frequencies > 0
+        if self.results_area.spectrum_band_only_check.isChecked():
+            low, high = spectrum.get("analysis_band_hz", (0.0, np.inf))
+            mask &= (frequencies >= float(low)) & (frequencies <= float(high))
+        frequencies = frequencies[mask]
+        density = density[mask]
+        lower = self._spectral_display_values(
+            frequencies,
+            density * float(factors[0]),
+            representation,
+        )
+        upper = self._spectral_display_values(
+            frequencies,
+            density * float(factors[1]),
+            representation,
+        )
+        self.results_area.spectrum_plot.add_confidence_band(
+            frequencies,
+            lower,
+            upper,
+            self._color_for_channel(self._selected_channel),
+        )
+
+    def _update_spectrogram_plot(self, *_args) -> None:
+        if self.current_analysis_result is None or not self._selected_channel:
+            self.results_area.spectrogram_plot.clear_series()
+            return
+        try:
+            spectrogram = self.post_processor.compute_spectrogram(self._selected_channel)
+        except Exception as exc:
+            self.results_area.spectrogram_plot.clear_series()
+            self.results_area.spectrogram_plot.set_title_metadata(str(exc))
+            return
+        times = np.asarray(spectrogram.get("times", []), dtype=float)
+        frequencies = np.asarray(spectrogram.get("frequencies", []), dtype=float)
+        density = np.asarray(spectrogram.get("psd", []), dtype=float)
+        dynamic_range = float(self.results_area.spectrogram_range_combo.currentData())
+        palette = str(self.results_area.spectrogram_palette_combo.currentData())
+        self.results_area.spectrogram_plot.set_spectrogram(
+            times,
+            frequencies,
+            density,
+            dynamic_range_db=dynamic_range,
+            color_map=palette,
+            color_label=f"PSD dB · {spectrogram.get('psd_units', '')}",
+        )
+        name = self._display_name_for_channel(self._selected_channel)
+        self.results_area.spectrogram_channel_label.setText(f"VOIE ACTIVE {name}")
+        self.results_area.spectrogram_readout_label.setText(
+            f"{name}   dynamique {dynamic_range:g} dB"
+        )
+        self.results_area.spectrogram_plot.set_title_metadata(
+            f"{name} · {spectrogram.get('segment_count', 0)} fenêtres · "
+            f"Rayleigh {float(spectrogram.get('frequency_resolution', 0)):.5g} Hz"
+        )
 
     def _update_results_views(self) -> None:
         results = self.current_analysis_result or {}
@@ -1187,8 +1659,16 @@ class AnalysisView(QWidget):
             return
         data = self.post_processor.current_data or {}
         previews = {}
+        metadata = self.current_analysis_result.get("metadata", {})
+        start_time = float(metadata.get("analysis_start_s", 0.0))
+        end_time = metadata.get("analysis_end_s")
         for channel in data.get("channel_keys", []):
-            time_values, values = self.post_processor.load_channel_preview(channel, maximum_points=2500)
+            time_values, values = self.post_processor.load_channel_window(
+                channel,
+                start_time,
+                float(end_time) if end_time is not None else None,
+                maximum_points=2500,
+            )
             previews[channel] = {
                 "time_s": time_values.tolist(),
                 "values": values.tolist(),
@@ -1259,6 +1739,11 @@ class AnalysisView(QWidget):
         self.inspector.start_time_spin.setValue(start)
         self.inspector.end_time_spin.setValue(end)
         self._setting_region = False
+        self.inspector.set_interval_custom()
+        custom = self.results_area.time_window_combo.findData(-1.0)
+        if custom >= 0:
+            self.results_area.time_window_combo.setCurrentIndex(custom)
+        self._update_time_plot()
 
     def _sync_region_from_controls(self, *_args) -> None:
         if self._setting_region:
@@ -1267,11 +1752,17 @@ class AnalysisView(QWidget):
         end = self.inspector.end_time_spin.value()
         if end > start:
             self.results_area.time_plot.set_region(start, end, visible=True)
+        self._update_time_plot()
 
     def _update_resolution_preview(self, *_args) -> None:
         rate = self.post_processor.sample_rate or 0.0
         segment = int(self.inspector.segment_length_combo.currentText())
-        self.inspector.resolution_value.setText(f"{rate / segment:.5g} Hz" if rate else "—")
+        padding = int(self.inspector.zero_padding_combo.currentData())
+        self.inspector.resolution_value.setText(
+            f"Rayleigh {rate / segment:.5g} Hz · grille {rate / (segment * padding):.5g} Hz"
+            if rate
+            else "—"
+        )
 
     def _on_time_cursor_moved(self, time_s: float, value: float) -> None:
         text = f"t {time_s:.4g} s   y {value:.5g}"
