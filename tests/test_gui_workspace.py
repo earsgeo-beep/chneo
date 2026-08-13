@@ -6,6 +6,9 @@ from __future__ import annotations
 
 import copy
 import os
+import tempfile
+import time
+from pathlib import Path
 
 import pytest
 
@@ -13,15 +16,20 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 QtWidgets = pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QTableWidgetItem
 
-from hrneowave.acquisition import MCC_USB1608FS_PROTOCOL
+from hrneowave.acquisition import MCC_USB1608FS_PROTOCOL, AcquisitionController
+from hrneowave.core.legacy_raw import LegacyRawImportOptions
+from hrneowave.gui.styles.theme_manager import ThemeManager
 from hrneowave.gui.views.acquisition_config_view import AcquisitionConfigView
 from hrneowave.gui.views.analysis_view import AnalysisView
 from hrneowave.gui.views.calibration_view import CalibrationView
-from hrneowave.gui.widgets.main_sidebar import MainSidebar
+from hrneowave.gui.views.report_view import ReportView
 from hrneowave.gui.widgets.qualification_workspace import QualificationWorkspace
-from tests.hardware_test_doubles import physical_test_device
+from hrneowave.gui.widgets.top_navigation import TopNavigationBar
+from hrneowave.gui.workbench.channel_model import ChannelItem, ChannelListModel
+from tests.hardware_test_doubles import DeterministicPhysicalBackend, physical_test_device
 
 
 @pytest.fixture(scope="module")
@@ -30,16 +38,43 @@ def qt_app():
     yield app
 
 
-def test_sidebar_can_release_workspace_width(qt_app):
-    sidebar = MainSidebar()
+def test_navigation_is_horizontal_and_exposes_workspaces(qt_app):
+    navigation = TopNavigationBar()
 
-    sidebar.collapse_sidebar(True)
-    assert sidebar.width() == 72
-    assert sidebar.navigation_buttons["calibration"].text() == "03"
+    assert navigation.height() == 58
+    assert navigation.navigation_buttons["calibration"].text() == "Calibration"
+    navigation.set_active_view("analysis")
+    assert navigation.navigation_buttons["analysis"].isChecked()
 
-    sidebar.collapse_sidebar(False)
-    assert sidebar.width() == 248
-    assert "Calibration" in sidebar.navigation_buttons["calibration"].text()
+
+def test_channel_model_tracks_visible_sensor_channels(qt_app):
+    model = ChannelListModel(
+        [
+            ChannelItem("channel_00", "Sonde 1", unit="cm", visible=True),
+            ChannelItem("channel_01", "Sonde 2", unit="cm", visible=False),
+        ]
+    )
+
+    assert model.visible_keys() == ["channel_00"]
+    model.setData(model.index(1, 0), Qt.CheckState.Checked, Qt.ItemDataRole.CheckStateRole)
+    assert model.visible_keys() == ["channel_00", "channel_01"]
+    model.set_only_visible("channel_01")
+    assert model.visible_keys() == ["channel_01"]
+    model.set_all_visible(True)
+    assert model.visible_keys() == ["channel_00", "channel_01"]
+
+
+def test_instrument_theme_has_distinct_light_and_dark_palettes(qt_app):
+    manager = ThemeManager(qt_app)
+    manager.apply_theme("light")
+    light_stylesheet = qt_app.styleSheet()
+    manager.apply_theme("dark")
+    dark_stylesheet = qt_app.styleSheet()
+    manager.apply_theme("light")
+
+    assert light_stylesheet != dark_stylesheet
+    assert "#E9EEF1" in light_stylesheet
+    assert "#11191E" in dark_stylesheet
 
 
 def test_calibration_workspace_fits_real_linear_record(qt_app):
@@ -67,13 +102,105 @@ def test_calibration_channel_count_follows_active_hardware(qt_app):
     assert view.channel_progress_label.text() == "CANAL 1 / 24"
 
 
+def test_calibration_live_monitor_reads_the_shared_physical_controller(qt_app):
+    backend = DeterministicPhysicalBackend()
+    backend.connect()
+    controller = AcquisitionController(daq_backend=backend)
+    view = CalibrationView()
+    try:
+        view.bind_acquisition_controller(controller)
+        view._start_live_preview()
+        deadline = time.monotonic() + 3.0
+        while view._live_values.size == 0 and time.monotonic() < deadline:
+            qt_app.processEvents()
+            time.sleep(0.01)
+
+        assert view._live_values.size > 0
+        assert view.live_state_label.text() == "LECTURE LIVE"
+        assert view.live_voltage_label.text().endswith(" V")
+        assert controller.is_calibration_preview_active
+        assert view.signal_verdict_label.text() == "SIGNAL INSTABLE"
+        assert not view.record_point_button.isEnabled()
+    finally:
+        view._stop_live_preview()
+        controller.close()
+
+
 def test_analysis_parameters_panel_is_collapsible(qt_app):
     view = AnalysisView()
 
     view._toggle_tools_panel()
-    assert not view._tools_panel_expanded
-    assert view.tools_panel.parameters_panel.isHidden()
-    assert view.tools_toggle_button.text() == "Afficher les réglages"
+    assert view._tools_panel_expanded
+    assert not view.results_area.details_drawer.isHidden()
+    assert view.tools_toggle_button.text() == "Fermer"
+
+
+def test_analysis_workbench_keeps_time_and_spectrum_visible(qt_app):
+    view = AnalysisView()
+
+    assert view.results_area.time_plot.isVisibleTo(view)
+    assert view.results_area.spectrum_plot.isVisibleTo(view)
+    assert view.results_area.plot_splitter.count() == 2
+
+
+def test_analysis_view_loads_raw_and_draws_time_signals(qt_app):
+    view = AnalysisView()
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "waves.raw"
+        path.write_text(
+            "\n".join(
+                [
+                    "2",
+                    "2",
+                    "2",
+                    "2.0 -0.5",
+                    "0 0.0 2.0",
+                    "1 0.5 1.0",
+                    "2 1.0 0.0",
+                    "3 1.5 -1.0",
+                ]
+            ),
+            encoding="ascii",
+        )
+
+        loaded = view.load_data_file(
+            str(path),
+            raw_options=LegacyRawImportOptions(
+                sensor_type="wave_height",
+                physical_unit="cm",
+                calibration_confirmed=True,
+            ),
+        )
+
+        assert loaded
+        assert view.post_processor.current_data["source_format"] == "legacy_raw"
+        assert view.post_processor.sample_rate == 2.0
+        assert view.results_area.time_plot.series_count() == 2
+        assert view.source_pane.channel_model.rowCount() == 2
+        view.source_pane.channel_model.set_only_visible("channel_01")
+        assert view.results_area.time_plot.series_count() == 1
+
+
+def test_scientific_report_exports_pdf_with_current_qt_api(qt_app, tmp_path):
+    view = ReportView()
+    view.set_analysis_context(
+        "laboratory.raw",
+        {
+            "sample_rate": 32.0,
+            "metadata": {"sample_rate_hz": 32.0, "n_samples": 1024, "duration_s": 32.0},
+            "analysis_configuration": {"method": "Welch PSD + zero-upcrossing"},
+            "basic_stats": {},
+            "spectral_analysis": {},
+            "wave_parameters": {},
+            "quality": {},
+        },
+    )
+    output_path = tmp_path / "scientific-report.pdf"
+
+    view.on_export_requested("pdf", str(output_path))
+
+    assert output_path.is_file()
+    assert output_path.stat().st_size > 0
 
 
 def test_hardware_panel_uses_one_connected_state(qt_app):

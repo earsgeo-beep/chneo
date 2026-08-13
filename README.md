@@ -16,6 +16,11 @@ Le runtime principal est un client Python/Qt lance depuis `chneowave.py`, `main.
 5. analyse scientifique et controle qualite
 6. export et rapport tracable
 
+L'interface utilise une navigation horizontale et une barre de menus desktop.
+Le poste de traitement affiche simultanement les signaux et les PSD de toutes
+les voies choisies. Une alerte numerique reste un diagnostic automatique;
+seul l'ingenieur peut accepter ou rejeter une voie dans le dossier scientifique.
+
 Il n'existe aucun repli automatique vers des donnees artificielles. Sans
 equipement physique connecte, l'acquisition reste verrouillee.
 
@@ -43,7 +48,7 @@ equipement physique connecte, l'acquisition reste verrouillee.
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-pip install PySide6 numpy pandas h5py
+pip install PySide6 numpy pandas h5py scipy matplotlib pyqtgraph reportlab
 python chneowave.py
 ```
 
@@ -58,6 +63,9 @@ CHNeoWave.bat
 ## Dependances reelles
 
 - `PySide6` : requis dans l'etat actuel du theme manager et de la GUI
+- `PyQtGraph` : tracés temporels et spectraux interactifs du poste scientifique
+- `SciPy` : estimation spectrale Welch et traitements numériques
+- `Matplotlib` : figures intégrées aux rapports scientifiques PDF/HTML
 - `numpy` : calculs numeriques
 - `pandas` : lecture/ecriture CSV cote analyse
 - `h5py` : support HDF5

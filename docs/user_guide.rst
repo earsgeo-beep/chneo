@@ -4,6 +4,11 @@ Guide utilisateur
 Vue d'ensemble
 --------------
 
+La navigation principale est horizontale. La barre de menus desktop fournit
+``Fichier``, ``Outils``, ``Affichage`` et ``Aide``; le bandeau de travail donne
+un acces direct a Projets, Systeme, Calibration, Acquisition, Traitement et
+Rapport.
+
 L'application active suit un enchainement simple:
 
 1. creer un projet
@@ -64,6 +69,19 @@ Les analyses exposees dans l'interface sont:
 - coherence et phase de chaque canal par rapport au premier canal;
 - indicateurs de qualite et avertissements d'interpretation.
 
+Toutes les voies sont visibles par defaut. Les commandes ``Tout afficher``,
+``Tout masquer`` et ``Isoler la voie active`` permettent de construire une
+comparaison sans limiter le traitement au canal 0.
+
+Dans les statistiques temporelles, ``N`` est le nombre d'echantillons analyses
+par voie, ``sigma`` est l'ecart-type autour de la moyenne et ``RMS`` est la
+valeur efficace du signal. A 32 Hz pendant 2160 s, ``N = 32 x 2160 = 69120``.
+
+Les controles automatiques ne constituent jamais un verdict. Ils produisent
+des alertes techniques. L'acceptation ou le rejet de chaque voie est enregistre
+separement par l'ingenieur, selon le plan d'essai, la position des sondes et la
+reponse locale attendue.
+
 Le traitement est delegue a ``PostProcessor`` qui produit un resume, un trace
 spectral et des resultats exportables. Voir :doc:`data_analysis` pour les
 definitions et les limites d'interpretation.
@@ -94,6 +112,9 @@ Dependances utiles
 ------------------
 
 - ``PySide6`` pour la GUI
+- ``PyQtGraph`` pour les graphes interactifs temps réel et spectraux
+- ``SciPy`` pour les calculs spectraux Welch
+- ``Matplotlib`` pour les figures des rapports scientifiques
 - ``numpy`` pour le calcul numerique
 - ``pandas`` pour certains chargements/export CSV
 - ``h5py`` pour HDF5

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 CHNeoWave - Preferences Dialog
 Interface de configuration des préférences utilisateur
@@ -10,23 +9,32 @@ Version: 1.0.0
 """
 
 import logging
-from typing import Dict, Any
 
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget,
-    QLabel, QComboBox, QCheckBox, QSpinBox, QSlider, QPushButton,
-    QGroupBox, QFormLayout, QColorDialog, QFontDialog, QLineEdit,
-    QKeySequenceEdit, QMessageBox, QFileDialog, QScrollArea
-)
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QKeySequence
-from PySide6.QtGui import QFont, QColor, QPalette
-
-from ..components.material_components import (
-    MaterialButton, MaterialCard, MaterialTextField
+from PySide6.QtGui import QColor, QFont, QKeySequence
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QColorDialog,
+    QComboBox,
+    QDialog,
+    QFontDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QKeySequenceEdit,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QSlider,
+    QSpinBox,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
 )
-from ..components.material.theme import MaterialTheme
-from .user_preferences import get_user_preferences, ThemeMode, Language
+
+from ..components.material_components import MaterialButton
+from .user_preferences import Language, ThemeMode, get_user_preferences
 
 
 class PreferencesDialog(QDialog):
@@ -183,8 +191,8 @@ class PreferencesDialog(QDialog):
         
         layout.addWidget(behavior_group)
         
-        # Barre latérale
-        sidebar_group = QGroupBox("Barre latérale")
+        # Navigation principale
+        sidebar_group = QGroupBox("Navigation")
         sidebar_layout = QFormLayout(sidebar_group)
         
         self.sidebar_width_slider = QSlider(Qt.Horizontal)
@@ -194,12 +202,19 @@ class PreferencesDialog(QDialog):
         self.sidebar_width_slider.valueChanged.connect(
             lambda v: self.sidebar_width_label.setText(f"{v} px")
         )
+        self.sidebar_width_slider.hide()
+        self.sidebar_width_label.hide()
         
         sidebar_width_layout = QHBoxLayout()
         sidebar_width_layout.addWidget(self.sidebar_width_slider)
         sidebar_width_layout.addWidget(self.sidebar_width_label)
         
-        sidebar_layout.addRow("Largeur:", sidebar_width_layout)
+        navigation_description = QLabel(
+            "Bandeau horizontal permanent : Projets, Système, Calibration, "
+            "Acquisition, Traitement et Rapport."
+        )
+        navigation_description.setWordWrap(True)
+        sidebar_layout.addRow("Disposition:", navigation_description)
         
         layout.addWidget(sidebar_group)
         
@@ -333,7 +348,7 @@ class PreferencesDialog(QDialog):
         
         layout.addStretch()
     
-    def _get_default_actions(self, category: str) -> Dict[str, str]:
+    def _get_default_actions(self, category: str) -> dict[str, str]:
         """Retourne les actions par défaut pour une catégorie"""
         actions = {
             "file": {
@@ -344,7 +359,7 @@ class PreferencesDialog(QDialog):
                 "quit": "Quitter"
             },
             "view": {
-                "toggle_sidebar": "Basculer barre latérale",
+                "toggle_sidebar": "Afficher les résultats détaillés",
                 "fullscreen": "Plein écran",
                 "zoom_in": "Zoom avant",
                 "zoom_out": "Zoom arrière",
@@ -586,13 +601,23 @@ class PreferencesDialog(QDialog):
         self.preferences.set_preference("acquisition", "auto_save", self.autosave_checkbox.isChecked())
         self.preferences.set_preference("acquisition", "save_interval", self.save_interval_spinbox.value())
         self.preferences.set_preference("acquisition", "backup_count", self.backup_count_spinbox.value())
-        self.preferences.set_preference("acquisition", "default_duration", self.default_duration_spinbox.value())
-        self.preferences.set_preference("acquisition", "default_frequency", self.default_frequency_spinbox.value())
+        self.preferences.set_preference(
+            "acquisition", "default_duration", self.default_duration_spinbox.value()
+        )
+        self.preferences.set_preference(
+            "acquisition", "default_frequency", self.default_frequency_spinbox.value()
+        )
         
         # Accessibilité
-        self.preferences.set_preference("accessibility", "high_contrast", self.high_contrast_checkbox.isChecked())
+        self.preferences.set_preference(
+            "accessibility", "high_contrast", self.high_contrast_checkbox.isChecked()
+        )
         self.preferences.set_preference("accessibility", "large_fonts", self.large_fonts_checkbox.isChecked())
-        self.preferences.set_preference("accessibility", "screen_reader", self.screen_reader_checkbox.isChecked())
-        self.preferences.set_preference("accessibility", "keyboard_navigation", self.keyboard_nav_checkbox.isChecked())
+        self.preferences.set_preference(
+            "accessibility", "screen_reader", self.screen_reader_checkbox.isChecked()
+        )
+        self.preferences.set_preference(
+            "accessibility", "keyboard_navigation", self.keyboard_nav_checkbox.isChecked()
+        )
         
         self.logger.info("Préférences sauvegardées depuis l'interface")

@@ -6,6 +6,7 @@ import math
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 
@@ -41,6 +42,9 @@ class WaveAnalyzerTests(unittest.TestCase):
             delta=0.02,
         )
         self.assertAlmostEqual(waves["H1_3"], 2 * self.amplitude, delta=0.01)
+        self.assertAlmostEqual(waves["H_min"], 2 * self.amplitude, delta=0.01)
+        self.assertAlmostEqual(waves["H_mean"], 2 * self.amplitude, delta=0.01)
+        self.assertAlmostEqual(waves["H_max"], 2 * self.amplitude, delta=0.01)
         self.assertAlmostEqual(waves["T_mean"], 1 / self.frequency, delta=0.02)
         self.assertGreater(waves["n_waves"], 60)
 
@@ -89,6 +93,9 @@ class WaveAnalyzerTests(unittest.TestCase):
 
         self.assertGreaterEqual(quality["longest_flat_run_fraction"], 0.09)
         self.assertTrue(any("Portion plate prolongee" in warning for warning in quality["warnings"]))
+        self.assertEqual(quality["diagnostic_level"], "critical")
+        self.assertEqual(quality["engineer_decision"], "pending")
+        self.assertNotEqual(quality["status"], "rejected")
 
     def test_rejects_non_finite_measurements(self):
         invalid = self.signal.copy()
@@ -103,8 +110,62 @@ class WaveAnalyzerTests(unittest.TestCase):
         self.assertEqual(result["wave_parameters"]["n_waves"], 0)
         self.assertIn("Signal constant", result["quality"]["warnings"][0])
 
+    def test_interpolated_peak_cannot_escape_the_selected_frequency_band(self):
+        sample_rate = 32.0
+        time = np.arange(8192, dtype=float) / sample_rate
+        low_frequency_signal = np.sin(2 * np.pi * 0.09 * time)
+        analyzer = WaveAnalyzer(
+            WaveAnalysisConfig(
+                segment_length=1024,
+                overlap_ratio=0.5,
+                min_frequency=0.1,
+                max_frequency=2.0,
+            )
+        )
+
+        spectrum = analyzer.analyze_channel(low_frequency_signal, sample_rate, "cm")["spectral"]
+
+        band_minimum, band_maximum = spectrum["analysis_band_hz"]
+        self.assertGreaterEqual(spectrum["peak_frequency"], band_minimum)
+        self.assertLessEqual(spectrum["peak_frequency"], band_maximum)
+        quality = analyzer.analyze_channel(low_frequency_signal, sample_rate, "cm")["quality"]
+        self.assertTrue(quality["peak_at_analysis_band_boundary"])
+        self.assertFalse(quality["peak_period_reliable"])
+        self.assertFalse(
+            analyzer.analyze_channel(low_frequency_signal, sample_rate, "cm")["wave_parameters"][
+                "Tp_reliable"
+            ]
+        )
+        self.assertTrue(any("limite de bande" in warning for warning in quality["warnings"]))
+
+        with patch.object(WaveAnalyzer, "_interpolated_peak", return_value=0.0):
+            clamped = analyzer.analyze_channel(low_frequency_signal, sample_rate, "cm")["spectral"]
+        self.assertEqual(clamped["peak_frequency"], clamped["analysis_band_hz"][0])
+
 
 class PostProcessorSpectralTests(unittest.TestCase):
+    def test_operator_can_analyze_a_selected_time_interval(self):
+        sample_rate = 20.0
+        time = np.arange(2000) / sample_rate
+        values = np.sin(2 * np.pi * 0.5 * time)
+        payload = {
+            "metadata": {"sample_rate_hz": sample_rate},
+            "time": time.tolist(),
+            "channels": {"channel_00": values.tolist()},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "windowed.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            processor = PostProcessor()
+            self.assertTrue(processor.load_data_file(str(path)))
+            processor.config["analysis"].update({"start_time_s": 10.0, "end_time_s": 40.0})
+            self.assertTrue(processor.run_analysis())
+            metadata = processor.current_analysis["metadata"]
+            self.assertEqual(metadata["n_samples"], 600)
+            self.assertEqual(metadata["analysis_start_s"], 10.0)
+            self.assertEqual(metadata["analysis_end_s"], 40.0)
+            self.assertEqual(metadata["source_n_samples"], 2000)
+
     def test_json_rejects_unsynchronised_channel_lengths(self):
         payload = {
             "metadata": {"sample_rate_hz": 10.0},
@@ -197,6 +258,12 @@ class PostProcessorSpectralTests(unittest.TestCase):
                 processor.current_data["channel_keys"],
                 ["channel_00", "channel_01"],
             )
+            preview_time, preview_values = processor.load_channel_preview(
+                "channel_00",
+                maximum_points=100,
+            )
+            self.assertEqual(len(preview_time), 100)
+            self.assertEqual(len(preview_values), 100)
             self.assertTrue(processor.run_analysis())
             analysis_path = Path(directory) / "analysis.h5"
             self.assertTrue(processor.export_results(str(analysis_path), "hdf5"))

@@ -1,32 +1,37 @@
-# -*- coding: utf-8 -*-
-"""
-Vue des paramètres de projet CHNeoWave - Interface Moderne
-Configuration et gestion des paramètres de projet
+"""Configuration et gestion des paramètres de projet CHNeoWave.
 
 Auteur: Architecte Logiciel en Chef (ALC)
 Date: 2025-01-26
 Version: 1.1.0
 """
 
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit, 
-    QSpinBox, QDoubleSpinBox, QComboBox, QCheckBox, QTabWidget, QScrollArea, QFrame, QSlider
-)
-from PySide6.QtCore import Signal, Qt, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, Signal
 from PySide6.QtGui import QFont
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
+    QFormLayout,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QScrollArea,
+    QSlider,
+    QSpinBox,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
-# Import des composants modernes
-from ..components.modern_card import ModernCard
 from ..components.animated_button import AnimatedButton
+from ..components.modern_card import ModernCard
 from ..widgets.kpi_card import KPICard
-from ..layouts.golden_ratio_layout import GoldenRatioLayout
-from ..styles.maritime_theme import MaritimeTheme
 
 
 class ProjectSettingsView(QWidget):
     """
-    Vue des paramètres de projet moderne pour CHNeoWave
-    Utilise le design system avec nombre d'or et thème maritime
+    Vue des paramètres de projet dans le poste de travail scientifique.
     """
     
     # Signaux
@@ -36,9 +41,6 @@ class ProjectSettingsView(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        
-        # Thème maritime
-        self.theme = MaritimeTheme()
         
         # Paramètres du projet
         self.project_settings = {}

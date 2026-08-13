@@ -4,15 +4,12 @@
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal, Slot
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtCore import Signal, Slot
+from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
-    QFrame,
-    QHBoxLayout,
-    QLabel,
     QMainWindow,
-    QPushButton,
+    QMessageBox,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -26,92 +23,9 @@ from .components.status_indicators import StatusLevel, SystemStatusWidget
 from .preferences import get_user_preferences
 from .view_manager import ViewManager
 from .views import VIEWS_CONFIG, DashboardViewMaritime, WelcomeView
-from .widgets.main_sidebar import MainSidebar
+from .widgets.top_navigation import TopNavigationBar
 
 logger = logging.getLogger(__name__)
-
-
-class ApplicationHeader(QFrame):
-    """Stable page context bar; navigation remains solely in the sidebar."""
-
-    sidebar_toggle_requested = Signal()
-
-    PAGE_CONTEXT = {
-        "welcome": (
-            "PROJETS",
-            "Préparer une campagne",
-            "Créer le dossier d'essai et son contexte laboratoire.",
-        ),
-        "dashboard": (
-            "VUE SYSTÈME",
-            "Pilotage de la campagne",
-            "Suivre l'avancement, le matériel et les prochaines actions.",
-        ),
-        "calibration": (
-            "ÉTAPE 01",
-            "Calibration des capteurs",
-            "Tracer et valider la chaîne de mesure avant l'acquisition.",
-        ),
-        "acquisition": (
-            "ÉTAPE 02",
-            "Acquisition du laboratoire",
-            "Sélectionner un équipement physique et enregistrer une session traçable.",
-        ),
-        "analysis": (
-            "ÉTAPE 03",
-            "Traitement des données",
-            "Contrôler la qualité et interpréter les résultats spectraux.",
-        ),
-        "export": (
-            "ÉTAPE 04",
-            "Rapport technique",
-            "Consolider les résultats et produire un livrable vérifiable.",
-        ),
-        "settings": ("SYSTÈME", "Paramètres", "Configurer le projet et le comportement de l'application."),
-    }
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("applicationHeader")
-        self.setFixedHeight(76)
-
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(24, 10, 24, 10)
-        layout.setSpacing(14)
-
-        self.sidebar_toggle_button = QPushButton("←")
-        self.sidebar_toggle_button.setObjectName("sidebarToggleButton")
-        self.sidebar_toggle_button.setFixedSize(36, 36)
-        self.sidebar_toggle_button.setToolTip("Replier la navigation (F9)")
-        self.sidebar_toggle_button.clicked.connect(self.sidebar_toggle_requested.emit)
-        layout.addWidget(self.sidebar_toggle_button, 0, Qt.AlignmentFlag.AlignVCenter)
-
-        title_stack = QVBoxLayout()
-        title_stack.setSpacing(1)
-        self.eyebrow = QLabel()
-        self.eyebrow.setObjectName("pageEyebrow")
-        self.title = QLabel()
-        self.title.setObjectName("pageTitle")
-        self.subtitle = QLabel()
-        self.subtitle.setObjectName("pageSubtitle")
-        title_stack.addWidget(self.eyebrow)
-        title_stack.addWidget(self.title)
-        title_stack.addWidget(self.subtitle)
-
-        layout.addLayout(title_stack, 1)
-        self.mode_badge = QLabel("TRAITEMENT LOCAL")
-        self.mode_badge.setObjectName("offlineBadge")
-        layout.addWidget(self.mode_badge, 0, Qt.AlignmentFlag.AlignVCenter)
-        self.set_view("welcome")
-
-    def set_view(self, view_name: str) -> None:
-        eyebrow, title, subtitle = self.PAGE_CONTEXT.get(
-            view_name,
-            ("CHNEOWAVE", view_name.replace("_", " ").title(), ""),
-        )
-        self.eyebrow.setText(eyebrow)
-        self.title.setText(title)
-        self.subtitle.setText(subtitle)
 
 
 class MainWindow(QMainWindow):
@@ -122,7 +36,7 @@ class MainWindow(QMainWindow):
     def __init__(self, config=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("CHNeoWave")
-        self.setMinimumSize(1180, 760)
+        self.setMinimumSize(1060, 680)
 
         self.config = config or {}
         self.user_preferences = get_user_preferences()
@@ -134,13 +48,12 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._create_and_register_views()
         self._setup_connections()
+        self._apply_current_theme_to_views()
         self._setup_status_indicators()
         self._install_contextual_help()
 
-        self.sidebar.navigation_requested.connect(self._on_navigation_requested)
-        self.application_header.sidebar_toggle_requested.connect(self._toggle_sidebar)
-        self.sidebar_shortcut = QShortcut(QKeySequence("F9"), self)
-        self.sidebar_shortcut.activated.connect(self._toggle_sidebar)
+        self.application_header.navigation_requested.connect(self._on_navigation_requested)
+        self.application_header.theme_toggle_requested.connect(self._toggle_theme)
 
         self.show()
         self.raise_()
@@ -152,32 +65,119 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        main_layout = QHBoxLayout(central_widget)
+        main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        self.sidebar = MainSidebar()
-        main_layout.addWidget(self.sidebar)
-
-        content_widget = QWidget()
-        content_widget.setObjectName("workspace")
-        content_layout = QVBoxLayout(content_widget)
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(0)
-
-        self.application_header = ApplicationHeader()
-        content_layout.addWidget(self.application_header)
+        self.application_header = TopNavigationBar()
+        main_layout.addWidget(self.application_header)
 
         self.stack_widget = QStackedWidget()
         self.stack_widget.setObjectName("mainContent")
-        content_layout.addWidget(self.stack_widget)
-
-        main_layout.addWidget(content_widget, 1)
+        main_layout.addWidget(self.stack_widget, 1)
 
         self.help_panel = HelpPanel()
         self.status_widget = SystemStatusWidget()
         self.status_widget.status_updated.connect(self._on_system_status_updated)
         self.view_manager = ViewManager(self.stack_widget)
+        self._build_desktop_menus()
+
+    def _build_desktop_menus(self) -> None:
+        """Create conventional desktop menus for repeatable laboratory actions."""
+
+        menu_bar = self.menuBar()
+        menu_bar.setObjectName("desktopMenuBar")
+        menu_bar.setNativeMenuBar(False)
+
+        file_menu = menu_bar.addMenu("Fichier")
+        new_project = self._menu_action(
+            "Nouveau projet", "Ctrl+N", lambda: self._on_navigation_requested("welcome")
+        )
+        open_data = self._menu_action("Ouvrir des données…", "Ctrl+O", self._open_analysis_file)
+        report = self._menu_action(
+            "Préparer le rapport scientifique", "Ctrl+R", lambda: self._on_navigation_requested("export")
+        )
+        quit_action = self._menu_action("Quitter", "Ctrl+Q", QApplication.instance().quit)
+        file_menu.addActions((new_project, open_data))
+        file_menu.addSeparator()
+        file_menu.addAction(report)
+        file_menu.addSeparator()
+        file_menu.addAction(quit_action)
+
+        tools_menu = menu_bar.addMenu("Outils")
+        tools_menu.addAction(
+            self._menu_action(
+                "Configuration matérielle", "Ctrl+M", lambda: self._on_navigation_requested("acquisition")
+            )
+        )
+        tools_menu.addAction(
+            self._menu_action(
+                "Calibration des capteurs", "Ctrl+L", lambda: self._on_navigation_requested("calibration")
+            )
+        )
+        tools_menu.addAction(
+            self._menu_action(
+                "Traitement scientifique", "Ctrl+T", lambda: self._on_navigation_requested("analysis")
+            )
+        )
+        tools_menu.addSeparator()
+        tools_menu.addAction(
+            self._menu_action("Préférences", "Ctrl+,", lambda: self._on_navigation_requested("settings"))
+        )
+
+        display_menu = menu_bar.addMenu("Affichage")
+        display_menu.addAction(self._menu_action("Thème clair / sombre", "Ctrl+D", self._toggle_theme))
+        display_menu.addAction(
+            self._menu_action("Ajuster les graphes", "F", self._fit_analysis_plots)
+        )
+        display_menu.addAction(
+            self._menu_action("Afficher les résultats détaillés", "F9", self._toggle_analysis_details)
+        )
+
+        help_menu = menu_bar.addMenu("Aide")
+        help_menu.addAction(self._menu_action("Guide d’utilisation", "F1", self._show_quick_help))
+        help_menu.addAction(self._menu_action("À propos de CHNeoWave", None, self._show_about))
+
+    def _menu_action(self, text: str, shortcut: str | None, callback) -> QAction:
+        action = QAction(text, self)
+        if shortcut:
+            action.setShortcut(QKeySequence(shortcut))
+        action.triggered.connect(callback)
+        return action
+
+    def _open_analysis_file(self) -> None:
+        self._on_navigation_requested("analysis")
+        view = self.view_manager.get_view_widget("analysis")
+        if view and hasattr(view, "open_file_dialog"):
+            view.open_file_dialog()
+
+    def _fit_analysis_plots(self) -> None:
+        view = self.view_manager.get_view_widget("analysis")
+        if not view or not hasattr(view, "results_area"):
+            return
+        view.results_area.time_plot.fit_data()
+        view.results_area.spectrum_plot.fit_data()
+
+    def _toggle_analysis_details(self) -> None:
+        view = self.view_manager.get_view_widget("analysis")
+        if view and hasattr(view, "_toggle_tools_panel"):
+            view._toggle_tools_panel()
+
+    def _show_quick_help(self) -> None:
+        QMessageBox.information(
+            self,
+            "Guide CHNeoWave",
+            "Workflow laboratoire : Projet → Calibration → Acquisition → Traitement → Rapport.\n\n"
+            "Dans Traitement, cochez plusieurs voies pour les comparer. Les alertes automatiques "
+            "ne remplacent jamais la décision de l’ingénieur.",
+        )
+
+    def _show_about(self) -> None:
+        QMessageBox.about(
+            self,
+            "À propos de CHNeoWave",
+            "CHNeoWave\nPoste d’acquisition et d’analyse scientifique pour laboratoire maritime.",
+        )
 
     def _create_and_register_views(self) -> None:
         logger.info("Creation et enregistrement des vues")
@@ -208,13 +208,13 @@ class MainWindow(QMainWindow):
 
     def _setup_connections(self) -> None:
         self.view_manager.view_changed.connect(self._update_header_for_view)
-        self.view_manager.view_changed.connect(self.sidebar.set_active_view)
+        self.view_manager.view_changed.connect(self.application_header.set_active_view)
 
     def _setup_status_indicators(self) -> None:
         self.status_widget.hide()
 
     def _install_contextual_help(self) -> None:
-        install_help_on_widget(self.sidebar, "navigation-sidebar")
+        install_help_on_widget(self.application_header, "navigation-workspaces")
 
     def _wire_runtime_flow(self) -> None:
         calibration_view = self.view_manager.get_view_widget("calibration")
@@ -231,7 +231,7 @@ class MainWindow(QMainWindow):
                 lambda: self._on_navigation_requested("calibration")
             )
         if acquisition_view and hasattr(acquisition_view, "hardware_state_changed"):
-            acquisition_view.hardware_state_changed.connect(self.sidebar.update_connection_status)
+            acquisition_view.hardware_state_changed.connect(self.application_header.set_hardware)
         if (
             acquisition_view
             and calibration_view
@@ -239,10 +239,30 @@ class MainWindow(QMainWindow):
             and hasattr(calibration_view, "set_channel_count")
         ):
             acquisition_view.hardware_channels_changed.connect(calibration_view.set_channel_count)
+        if (
+            acquisition_view
+            and calibration_view
+            and hasattr(
+                calibration_view,
+                "bind_acquisition_controller",
+            )
+        ):
+            calibration_view.bind_acquisition_controller(acquisition_view.controller)
+        if (
+            acquisition_view
+            and calibration_view
+            and hasattr(acquisition_view, "hardware_state_changed")
+            and hasattr(calibration_view, "update_hardware_state")
+        ):
+            acquisition_view.hardware_state_changed.connect(calibration_view.update_hardware_state)
+        if calibration_view and hasattr(calibration_view, "hardware_setup_requested"):
+            calibration_view.hardware_setup_requested.connect(self._open_hardware_setup)
         if calibration_view and hasattr(calibration_view, "calibration_completed"):
             calibration_view.calibration_completed.connect(self._on_calibration_completed)
         if analysis_view and hasattr(analysis_view, "analysis_completed"):
             analysis_view.analysis_completed.connect(self._on_analysis_completed)
+        if analysis_view and hasattr(analysis_view, "source_changed"):
+            analysis_view.source_changed.connect(self.application_header.set_source)
         if dashboard_view and hasattr(dashboard_view, "navigation_requested"):
             dashboard_view.navigation_requested.connect(self._on_navigation_requested)
 
@@ -264,15 +284,34 @@ class MainWindow(QMainWindow):
         self.view_manager.switch_to_view(view_name)
 
     def _update_header_for_view(self, view_name: str) -> None:
-        self.application_header.set_view(view_name)
+        self.application_header.set_active_view(view_name)
+        calibration_view = self.view_manager.get_view_widget("calibration")
+        if calibration_view and hasattr(calibration_view, "set_workspace_active"):
+            calibration_view.set_workspace_active(view_name == "calibration")
 
-    def _toggle_sidebar(self) -> None:
-        collapsed = not self.sidebar.is_collapsed
-        self.sidebar.collapse_sidebar(collapsed)
-        self.application_header.sidebar_toggle_button.setText("☰" if collapsed else "←")
-        self.application_header.sidebar_toggle_button.setToolTip(
-            "Ouvrir la navigation (F9)" if collapsed else "Replier la navigation (F9)"
-        )
+    def _open_hardware_setup(self) -> None:
+        acquisition_view = self.view_manager.get_view_widget("acquisition")
+        if acquisition_view and hasattr(acquisition_view, "config_tabs"):
+            acquisition_view.config_tabs.setCurrentIndex(0)
+        self._on_navigation_requested("acquisition")
+
+    def _toggle_theme(self) -> None:
+        app = QApplication.instance()
+        manager = getattr(app, "theme_manager", None) if app else None
+        if manager is not None:
+            manager.toggle_theme()
+            is_dark = manager.get_current_theme() == "dark"
+            for view in self.view_manager.views.values():
+                if view and hasattr(view, "set_theme"):
+                    view.set_theme(is_dark)
+
+    def _apply_current_theme_to_views(self) -> None:
+        app = QApplication.instance()
+        manager = getattr(app, "theme_manager", None) if app else None
+        is_dark = bool(manager and manager.get_current_theme() == "dark")
+        for view in self.view_manager.views.values():
+            if hasattr(view, "set_theme"):
+                view.set_theme(is_dark)
 
     def _handle_project_creation(self, project_metadata=None) -> None:
         metadata = dict(project_metadata or {})
@@ -299,6 +338,7 @@ class MainWindow(QMainWindow):
                 "project_dir": str(self.project_dir),
                 "author": manager,
             }
+            self.application_header.set_project(project_name)
 
             self._push_project_context()
             self.projectCreated.emit()

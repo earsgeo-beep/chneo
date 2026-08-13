@@ -23,6 +23,7 @@ Le depot ne doit plus etre lu comme un prototype web ni comme une release autono
    mcc_qualification_protocol
    data_analysis
    scientific_processing_v2
+   scientific_analysis_workspace
    interface_design
    laboratory_platform_architecture_2026-08-09
 

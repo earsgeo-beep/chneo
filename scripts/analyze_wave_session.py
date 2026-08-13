@@ -7,6 +7,7 @@ import argparse
 import json
 from pathlib import Path
 
+from hrneowave.core.legacy_raw import LegacyRawImportOptions
 from hrneowave.core.post_processor import PostProcessor
 
 
@@ -24,16 +25,29 @@ def _output_format(path: Path) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Analyse spectrale et temporelle d'une session CHNeoWave."
-    )
-    parser.add_argument("input_file", help="Session CSV, JSON ou HDF5")
+    parser = argparse.ArgumentParser(description="Analyse spectrale et temporelle d'une session CHNeoWave.")
+    parser.add_argument("input_file", help="Session RAW, CSV, JSON ou HDF5")
     parser.add_argument("--output", required=True, help="Resultat CSV, JSON ou HDF5")
     parser.add_argument("--segment-length", type=int, default=1024)
     parser.add_argument("--overlap", type=float, default=0.5)
     parser.add_argument("--min-frequency", type=float, default=0.0)
     parser.add_argument("--max-frequency", type=float)
     parser.add_argument("--no-detrend", action="store_true")
+    parser.add_argument(
+        "--raw-sensor-type",
+        help="Type physique du signal RAW, par ex. wave_height",
+    )
+    parser.add_argument("--raw-unit", help="Unite physique des coefficients RAW, par ex. cm")
+    parser.add_argument(
+        "--confirm-raw-calibration",
+        action="store_true",
+        help="Confirme X = V * facteur et zero applique dans le fichier RAW",
+    )
+    parser.add_argument(
+        "--raw-voltage-only",
+        action="store_true",
+        help="N'applique pas les coefficients RAW et analyse uniquement les volts",
+    )
     args = parser.parse_args()
 
     processor = PostProcessor()
@@ -46,7 +60,36 @@ def main() -> int:
             "detrend": not args.no_detrend,
         }
     )
-    if not processor.load_data_file(args.input_file):
+    raw_options = None
+    if Path(args.input_file).suffix.lower() == ".raw":
+        if args.raw_voltage_only:
+            raw_options = LegacyRawImportOptions(
+                sensor_type="generic",
+                physical_unit="V",
+                apply_calibration=False,
+            )
+        elif args.raw_sensor_type and args.raw_unit and args.confirm_raw_calibration:
+            raw_options = LegacyRawImportOptions(
+                sensor_type=args.raw_sensor_type,
+                physical_unit=args.raw_unit,
+                apply_calibration=True,
+                calibration_confirmed=True,
+            )
+        else:
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error": (
+                            "Un RAW calibre exige --raw-sensor-type, --raw-unit et "
+                            "--confirm-raw-calibration, ou --raw-voltage-only"
+                        ),
+                    },
+                    ensure_ascii=False,
+                )
+            )
+            return 2
+    if not processor.load_data_file(args.input_file, raw_options=raw_options):
         return 2
     if not processor.run_analysis():
         return 3

@@ -121,6 +121,10 @@ class AcquisitionController:
         self.last_qualification_files: tuple[str, str] | None = None
         self._last_backend_time_seconds: float | None = None
         self._acquisition_started_monotonic: float | None = None
+        self._calibration_preview_active = False
+        self._calibration_preview_thread: threading.Thread | None = None
+        self._calibration_preview_stop = threading.Event()
+        self.calibration_preview_error: str | None = None
 
         if auto_initialize and daq_backend is None:
             self.refresh_hardware()
@@ -142,8 +146,8 @@ class AcquisitionController:
     def discover_hardware(self) -> DiscoveryReport:
         """Interroge tous les pilotes enregistrés sans fallback logiciel."""
 
-        if self.is_acquiring:
-            raise RuntimeError("Inventaire matériel interdit pendant une acquisition")
+        if self.is_acquiring or self.is_calibration_preview_active:
+            raise RuntimeError("Inventaire matériel interdit pendant une lecture active")
         report = self.hardware_registry.discover()
         self.available_devices = list(report.devices)
         self.discovery_errors = dict(report.driver_errors)
@@ -157,8 +161,8 @@ class AcquisitionController:
     def connect_hardware(self, device_key: str) -> bool:
         """Sélectionne un équipement physique du dernier inventaire."""
 
-        if self.is_acquiring:
-            logger.error("Changement de matériel interdit pendant une acquisition")
+        if self.is_acquiring or self.is_calibration_preview_active:
+            logger.error("Changement de matériel interdit pendant une lecture active")
             return False
         try:
             backend = self.hardware_registry.open_device(device_key)
@@ -277,6 +281,164 @@ class AcquisitionController:
             "probe_position_m": config.probe_position_m,
         }
 
+    @property
+    def is_calibration_preview_active(self) -> bool:
+        """Indique si un scan physique temporaire alimente le poste de calibration."""
+
+        thread = self._calibration_preview_thread
+        return bool(self._calibration_preview_active and thread is not None and thread.is_alive())
+
+    def start_calibration_preview(
+        self,
+        channel: int,
+        *,
+        sample_rate_hz: float = 200.0,
+        range_volts: float = 10.0,
+        block_size: int | None = None,
+        data_callback: Callable[[np.ndarray, float], None] | None = None,
+        error_callback: Callable[[str], None] | None = None,
+    ) -> float:
+        """Démarre une lecture brute réelle, non enregistrée, pour l'étalonnage.
+
+        Ce chemin utilise le même backend physique que l'acquisition principale.
+        Il ne crée ni session, ni fichier, ni source de remplacement logicielle.
+        """
+
+        if self.is_acquiring:
+            raise RuntimeError("Lecture de calibration interdite pendant une acquisition")
+        if self.is_calibration_preview_active:
+            raise RuntimeError("Une lecture de calibration est déjà active")
+        if not self.is_hardware_available() or self._daq_backend is None:
+            raise RuntimeError("Aucun équipement physique connecté")
+
+        capabilities = self.get_hardware_capabilities()
+        channel_number = int(channel)
+        if capabilities is None or not 0 <= channel_number < capabilities.analog_input_channels:
+            raise ValueError(f"Canal matériel invalide: {channel_number}")
+        voltage_range = VoltageRange.from_limit(float(range_volts))
+        if voltage_range not in capabilities.voltage_ranges:
+            raise ValueError(f"Plage non prise en charge: {voltage_range.label}")
+        rate = float(sample_rate_hz)
+        capabilities.validate(rate, 1)
+        requested_block_size = int(block_size or max(10, round(rate / 10.0)))
+        if requested_block_size <= 0:
+            raise ValueError("Taille de bloc de calibration invalide")
+
+        configured = self.channels_config.get(channel_number)
+        preview_channel = MaritimeChannelConfig(
+            channel=channel_number,
+            sensor_type=configured.sensor_type if configured else "calibration",
+            label=configured.label if configured else f"Canal {channel_number + 1}",
+            voltage_range=voltage_range,
+            physical_units="V",
+            sensor_sensitivity=1.0,
+            sensor_id=configured.sensor_id if configured else "",
+        )
+
+        actual_rate = float(
+            self._daq_backend.start(
+                sample_rate_hz=rate,
+                channels=[preview_channel],
+                chunk_size=max(requested_block_size, 100),
+            )
+        )
+        if not np.isfinite(actual_rate) or actual_rate <= 0:
+            self._daq_backend.stop()
+            raise RuntimeError("Le pilote a retourné une fréquence de calibration invalide")
+        self.calibration_preview_error = None
+        self._calibration_preview_stop.clear()
+        self._calibration_preview_active = True
+        self._calibration_preview_thread = threading.Thread(
+            target=self._calibration_preview_loop,
+            args=(
+                actual_rate,
+                requested_block_size,
+                data_callback,
+                error_callback,
+            ),
+            daemon=True,
+            name=f"CHNeoWave-calibration-channel-{channel_number}",
+        )
+        try:
+            self._calibration_preview_thread.start()
+        except Exception:
+            self._calibration_preview_active = False
+            self._calibration_preview_thread = None
+            self._daq_backend.stop()
+            raise
+        logger.info(
+            "Lecture calibration démarrée: canal=%s, plage=%s, fréquence=%.3f Hz",
+            channel_number,
+            voltage_range.label,
+            actual_rate,
+        )
+        return actual_rate
+
+    def _calibration_preview_loop(
+        self,
+        sample_rate_hz: float,
+        block_size: int,
+        data_callback: Callable[[np.ndarray, float], None] | None,
+        error_callback: Callable[[str], None] | None,
+    ) -> None:
+        minimum_period = block_size / sample_rate_hz
+        try:
+            while not self._calibration_preview_stop.is_set():
+                cycle_started = time.monotonic()
+                result = self._daq_backend.read(num_samples=block_size)
+                if result is not None:
+                    raw = np.asarray(result.raw_data, dtype=np.float64)
+                    if raw.ndim != 2 or raw.shape[1] != 1:
+                        raise RuntimeError("La lecture de calibration doit retourner un seul canal")
+                    if result.backend_name != self._daq_backend.name:
+                        raise RuntimeError("Le bloc de calibration ne correspond pas au pilote actif")
+                    if data_callback is not None:
+                        try:
+                            data_callback(raw.copy(), float(result.sample_rate_hz))
+                        except Exception as exc:
+                            logger.error("Callback de calibration refusé: %s", exc)
+                elapsed = time.monotonic() - cycle_started
+                self._calibration_preview_stop.wait(max(0.0, minimum_period - elapsed))
+        except Exception as exc:
+            self.calibration_preview_error = str(exc)
+            logger.exception("Lecture de calibration interrompue: %s", exc)
+            if error_callback is not None:
+                try:
+                    error_callback(str(exc))
+                except Exception:
+                    logger.exception("Impossible de notifier l'erreur de calibration")
+        finally:
+            if self._daq_backend is not None:
+                try:
+                    self._daq_backend.stop()
+                except Exception:
+                    logger.exception("Arrêt du backend après calibration impossible")
+            self._calibration_preview_active = False
+
+    def stop_calibration_preview(self) -> bool:
+        """Arrête proprement le scan de calibration sans fermer la carte."""
+
+        thread = self._calibration_preview_thread
+        if thread is None:
+            self._calibration_preview_active = False
+            return True
+        self._calibration_preview_stop.set()
+        if thread is not threading.current_thread() and thread.is_alive():
+            thread.join(timeout=2.0)
+        stopped = not thread.is_alive()
+        if not stopped and self._daq_backend is not None:
+            try:
+                self._daq_backend.stop()
+            except Exception:
+                logger.exception("Arrêt forcé de la lecture calibration impossible")
+            thread.join(timeout=1.0)
+            stopped = not thread.is_alive()
+        self._calibration_preview_active = False
+        self._calibration_preview_thread = None
+        if not stopped:
+            logger.error("Le thread de calibration ne s'est pas arrêté")
+        return stopped
+
     def apply_calibration_record(self, record: CalibrationRecord) -> bool:
         if not isinstance(record, CalibrationRecord):
             logger.error("Enregistrement de calibration invalide")
@@ -314,6 +476,9 @@ class AcquisitionController:
         if self.is_acquiring:
             logger.error("Acquisition déjà en cours")
             return False
+        if self.is_calibration_preview_active:
+            logger.error("Acquisition interdite: arrêtez d'abord la lecture de calibration")
+            return False
         if not self.is_hardware_available() or self._daq_backend is None:
             logger.error("Acquisition interdite: aucun équipement physique connecté")
             return False
@@ -323,14 +488,10 @@ class AcquisitionController:
         if not np.isfinite(sampling_rate) or sampling_rate <= 0:
             logger.error("Fréquence d'échantillonnage invalide: %s", sampling_rate)
             return False
-        if duration_seconds is not None and (
-            not np.isfinite(duration_seconds) or duration_seconds <= 0
-        ):
+        if duration_seconds is not None and (not np.isfinite(duration_seconds) or duration_seconds <= 0):
             logger.error("Durée d'acquisition invalide: %s", duration_seconds)
             return False
-        if water_depth_m is not None and (
-            not np.isfinite(water_depth_m) or water_depth_m <= 0
-        ):
+        if water_depth_m is not None and (not np.isfinite(water_depth_m) or water_depth_m <= 0):
             logger.error("Profondeur d'eau invalide: %s", water_depth_m)
             return False
 
@@ -583,9 +744,7 @@ class AcquisitionController:
         relative_rate_error = abs(float(result.sample_rate_hz) - sample_rate) / sample_rate
         if relative_rate_error > 1e-6:
             self.stats["timing_discontinuities"] += 1
-            raise RuntimeError(
-                "La fréquence annoncée par le bloc diffère de la fréquence de session"
-            )
+            raise RuntimeError("La fréquence annoncée par le bloc diffère de la fréquence de session")
 
         time_values = np.asarray(result.time, dtype=np.float64)
         expected_interval = 1.0 / sample_rate
@@ -603,9 +762,7 @@ class AcquisitionController:
         maximum_error = 0.0
         if intervals:
             maximum_error = max(
-                float(np.max(np.abs(values - expected_interval)))
-                for values in intervals
-                if values.size
+                float(np.max(np.abs(values - expected_interval))) for values in intervals if values.size
             )
         self.stats["max_timing_error_seconds"] = max(
             float(self.stats["max_timing_error_seconds"]),
@@ -768,6 +925,7 @@ class AcquisitionController:
         }
 
     def close(self) -> None:
+        self.stop_calibration_preview()
         if self.is_acquiring:
             self.stop_acquisition()
         if self._daq_backend is not None:

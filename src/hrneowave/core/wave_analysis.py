@@ -52,7 +52,7 @@ class WaveAnalysisConfig:
 class WaveAnalyzer:
     """Calcule statistiques, spectre, moments et vagues individuelles."""
 
-    METHOD_VERSION = "1.1"
+    METHOD_VERSION = "1.3"
 
     def __init__(self, config: WaveAnalysisConfig | None = None):
         self.config = config or WaveAnalysisConfig()
@@ -86,6 +86,7 @@ class WaveAnalyzer:
         )
         temporal = self._zero_upcrossing_analysis(processed, sample_rate, unit)
         quality = self._quality_indicators(series, processed, spectral, sample_rate)
+        peak_period_reliable = bool(quality["peak_period_reliable"])
 
         return {
             "basic_stats": self._basic_statistics(series, sample_rate, unit),
@@ -94,6 +95,7 @@ class WaveAnalyzer:
                 **temporal,
                 "Hm0": spectral["Hm0"],
                 "Tp": spectral["peak_period"],
+                "Tp_reliable": peak_period_reliable,
                 "Tm01": spectral["Tm01"],
                 "Tm02": spectral["Tm02"],
                 "Te": spectral["Te"],
@@ -211,11 +213,18 @@ class WaveAnalyzer:
         }
         peak_local_index = int(np.argmax(band_density))
         peak_index = int(band_indices[peak_local_index])
+        has_resolved_peak = float(band_density[peak_local_index]) > np.finfo(np.float64).tiny
         peak_frequency = (
-            self._interpolated_peak(frequencies, density, peak_index)
-            if float(band_density[peak_local_index]) > np.finfo(np.float64).tiny
-            else 0.0
+            self._interpolated_peak(frequencies, density, peak_index) if has_resolved_peak else 0.0
         )
+        if has_resolved_peak:
+            peak_frequency = float(
+                np.clip(
+                    peak_frequency,
+                    float(band_frequencies[0]),
+                    float(band_frequencies[-1]),
+                )
+            )
 
         m0 = moments["m0"]
         m1 = moments["m1"]
@@ -298,6 +307,7 @@ class WaveAnalyzer:
                 "Hs": 0.0,
                 "H1_3": 0.0,
                 "H1_10": 0.0,
+                "H_min": 0.0,
                 "H_max": 0.0,
                 "H_mean": 0.0,
                 "H_rms": 0.0,
@@ -319,6 +329,7 @@ class WaveAnalyzer:
             "Hs": float(np.mean(height_array[top_third])),
             "H1_3": float(np.mean(height_array[top_third])),
             "H1_10": float(np.mean(height_array[order[:top_tenth_count]])),
+            "H_min": float(np.min(height_array)),
             "H_max": float(np.max(height_array)),
             "H_mean": float(np.mean(height_array)),
             "H_rms": float(np.sqrt(np.mean(height_array**2))),
@@ -378,6 +389,20 @@ class WaveAnalyzer:
         peak_resolution_ratio = (
             float(spectral["frequency_resolution"]) / peak_frequency if peak_frequency > 0 else 0.0
         )
+        analysis_band = spectral["analysis_band_hz"]
+        boundary_tolerance = float(spectral["frequency_resolution"]) * 0.51
+        peak_at_band_boundary = bool(
+            peak_frequency > 0
+            and (
+                abs(peak_frequency - float(analysis_band[0])) <= boundary_tolerance
+                or abs(peak_frequency - float(analysis_band[1])) <= boundary_tolerance
+            )
+        )
+        if peak_at_band_boundary:
+            warnings.append(
+                "Pic spectral sur une limite de bande: Tp à confirmer par l’ingénieur; "
+                "ajuster la bande d'analyse"
+            )
         if peak_frequency > 0 and samples_per_peak_period < 10.0:
             warnings.append("Moins de dix echantillons par periode de pic: resolution temporelle faible")
         if peak_frequency > 0 and record_cycles_at_peak < 10.0:
@@ -387,8 +412,22 @@ class WaveAnalyzer:
 
         time_axis = np.arange(len(original), dtype=np.float64) / sample_rate
         trend_slope = float(np.polyfit(time_axis, original, 1)[0]) if len(original) > 1 else 0.0
+        peak_period_reliable = bool(
+            peak_frequency > 0
+            and not peak_at_band_boundary
+            and samples_per_peak_period >= 10.0
+            and record_cycles_at_peak >= 10.0
+        )
+        critical = bool(np.ptp(original) == 0 or stationarity_ratio > 4.0 or flat_run_fraction >= 0.05)
+        # This is deliberately a diagnostic severity, never an acceptance verdict.
+        # Only the engineer can accept or reject a channel with knowledge of the
+        # basin layout, probe position and expected local response.
+        status = "critical" if critical else ("warning" if warnings else "nominal")
         return {
             "valid": not warnings,
+            "status": status,
+            "diagnostic_level": status,
+            "engineer_decision": "pending",
             "warnings": warnings,
             "sample_count": int(len(original)),
             "duration_seconds": float(len(original) / sample_rate),
@@ -402,6 +441,8 @@ class WaveAnalyzer:
             "samples_per_peak_period": samples_per_peak_period,
             "record_cycles_at_peak": record_cycles_at_peak,
             "peak_frequency_resolution_ratio": peak_resolution_ratio,
+            "peak_at_analysis_band_boundary": peak_at_band_boundary,
+            "peak_period_reliable": peak_period_reliable,
             "linear_trend_per_second": trend_slope,
         }
 

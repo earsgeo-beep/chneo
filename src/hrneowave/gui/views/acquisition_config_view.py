@@ -26,9 +26,9 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSpinBox,
     QSplitter,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
-    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -81,26 +81,31 @@ class AcquisitionConfigView(QWidget):
 
     def _build_ui(self) -> None:
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(14)
+        main_layout.setContentsMargins(10, 8, 10, 10)
+        main_layout.setSpacing(6)
         main_layout.addWidget(self._create_header())
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setChildrenCollapsible(False)
+        splitter.setHandleWidth(3)
         splitter.addWidget(self._create_config_panel())
         splitter.addWidget(self._create_monitor_panel())
-        splitter.setSizes([760, 420])
-        main_layout.addWidget(splitter)
+        splitter.setStretchFactor(0, 5)
+        splitter.setStretchFactor(1, 2)
+        splitter.setSizes([800, 360])
+        main_layout.addWidget(splitter, 1)
 
     def _create_header(self) -> QWidget:
         frame = QFrame()
-        frame.setObjectName("operationalHeader")
+        frame.setObjectName("contextBar")
         layout = QHBoxLayout(frame)
-        layout.setContentsMargins(18, 12, 18, 12)
+        layout.setContentsMargins(12, 7, 12, 7)
 
         title_layout = QVBoxLayout()
-        title = QLabel("Système d'acquisition du laboratoire")
-        title.setObjectName("sectionTitle")
-        subtitle = QLabel("Pilotes matériels interchangeables · session HDF5 maître obligatoire")
+        title_layout.setSpacing(1)
+        title = QLabel("CHAÎNE MATÉRIELLE")
+        title.setObjectName("metricLabel")
+        subtitle = QLabel("Équipement physique qualifié · session HDF5 maître obligatoire")
         subtitle.setObjectName("mutedText")
         title_layout.addWidget(title)
         title_layout.addWidget(subtitle)
@@ -116,17 +121,46 @@ class AcquisitionConfigView(QWidget):
         widget = QWidget()
         widget.setObjectName("contentCanvas")
         layout = QVBoxLayout(widget)
-        layout.setContentsMargins(0, 0, 14, 0)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        self.config_tabs = QTabWidget()
-        self.config_tabs.addTab(self._create_hardware_tab(), "Materiel")
-        self.config_tabs.addTab(self._create_channels_tab(), "Canaux")
-        self.config_tabs.addTab(self._create_acquisition_tab(), "Acquisition")
+        mode_bar = QFrame()
+        mode_bar.setObjectName("acquisitionModeBar")
+        mode_layout = QHBoxLayout(mode_bar)
+        mode_layout.setContentsMargins(4, 3, 4, 3)
+        mode_layout.setSpacing(2)
+        self.config_tabs = QStackedWidget()
+        pages = (
+            ("MATÉRIEL", self._create_hardware_tab()),
+            ("VOIES", self._create_channels_tab()),
+            ("SESSION", self._create_acquisition_tab()),
+        )
+        self.config_mode_buttons = []
+        for index, (label, page) in enumerate(pages):
+            self.config_tabs.addWidget(page)
+            button = QPushButton(label)
+            button.setObjectName("acquisitionMode")
+            button.setCheckable(True)
+            button.setChecked(index == 0)
+            button.clicked.connect(lambda _checked=False, target=index: self._set_config_mode(target))
+            self.config_mode_buttons.append(button)
+            mode_layout.addWidget(button)
         self.qualification_workspace = QualificationWorkspace()
-        self.config_tabs.addTab(self.qualification_workspace, "Qualification")
+        self.config_tabs.addWidget(self.qualification_workspace)
+        qualification_button = QPushButton("QUALIFICATION Q0–Q4")
+        qualification_button.setObjectName("acquisitionMode")
+        qualification_button.setCheckable(True)
+        qualification_button.clicked.connect(lambda: self._set_config_mode(3))
+        self.config_mode_buttons.append(qualification_button)
+        mode_layout.addWidget(qualification_button)
+        mode_layout.addStretch()
+        layout.addWidget(mode_bar)
         layout.addWidget(self.config_tabs)
 
-        buttons_layout = QHBoxLayout()
+        config_actions = QFrame()
+        config_actions.setObjectName("acquisitionConfigActions")
+        buttons_layout = QHBoxLayout(config_actions)
+        buttons_layout.setContentsMargins(4, 4, 4, 0)
         self.load_config_btn = QPushButton("Charger config")
         self.save_config_btn = QPushButton("Sauver config")
         self.reset_config_btn = QPushButton("Reset")
@@ -140,19 +174,24 @@ class AcquisitionConfigView(QWidget):
         buttons_layout.addWidget(self.save_config_btn)
         buttons_layout.addWidget(self.reset_config_btn)
         buttons_layout.addStretch()
-        layout.addLayout(buttons_layout)
+        layout.addWidget(config_actions)
         return widget
+
+    def _set_config_mode(self, index: int) -> None:
+        self.config_tabs.setCurrentIndex(index)
+        for current, button in enumerate(self.config_mode_buttons):
+            button.setChecked(current == index)
 
     def _create_hardware_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(12)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(8)
 
         summary = QFrame()
         summary.setObjectName("quietSurface")
         summary_layout = QHBoxLayout(summary)
-        summary_layout.setContentsMargins(14, 10, 14, 10)
+        summary_layout.setContentsMargins(11, 7, 11, 7)
         summary_text = QVBoxLayout()
         summary_text.setSpacing(1)
         summary_title = QLabel("Gestionnaire des équipements")
@@ -167,6 +206,7 @@ class AcquisitionConfigView(QWidget):
         summary_layout.addLayout(summary_text, 1)
 
         detection_group = QGroupBox("Détection et sélection")
+        detection_group.setObjectName("flatGroup")
         detection_layout = QGridLayout(detection_group)
         self.board_combo = QComboBox()
         self.scan_boards_btn = QPushButton("Détecter les équipements")
@@ -181,6 +221,7 @@ class AcquisitionConfigView(QWidget):
         detection_layout.setColumnStretch(2, 1)
 
         info_group = QGroupBox("État technique cohérent")
+        info_group.setObjectName("flatGroup")
         info_layout = QFormLayout(info_group)
         self.board_name_label = QLabel("Non scannée")
         self.backend_label = QLabel("Aucun pilote actif")
@@ -207,6 +248,8 @@ class AcquisitionConfigView(QWidget):
     def _create_channels_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(7)
 
         actions = QHBoxLayout()
         self.load_preset_btn = QPushButton("Preset maritime")
@@ -239,8 +282,11 @@ class AcquisitionConfigView(QWidget):
     def _create_acquisition_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(7)
 
         params_group = QGroupBox("Parametres d'acquisition")
+        params_group.setObjectName("flatGroup")
         params_layout = QFormLayout(params_group)
         self.sampling_rate_spin = QDoubleSpinBox()
         # Les limites sont remplacées par celles du pilote après connexion.
@@ -270,6 +316,7 @@ class AcquisitionConfigView(QWidget):
         layout.addWidget(params_group)
 
         controls_group = QGroupBox("Controles")
+        controls_group.setObjectName("flatGroup")
         controls_layout = QHBoxLayout(controls_group)
         self.start_acquisition_btn = QPushButton("Demarrer")
         self.start_acquisition_btn.setText("Démarrer l'acquisition")
@@ -290,6 +337,7 @@ class AcquisitionConfigView(QWidget):
         layout.addWidget(controls_group)
 
         project_group = QGroupBox("Projet et export")
+        project_group.setObjectName("flatGroup")
         project_layout = QFormLayout(project_group)
         self.project_name_edit = QLineEdit("Acquisition_Maritime")
         project_layout.addRow("Nom du projet:", self.project_name_edit)
@@ -312,11 +360,13 @@ class AcquisitionConfigView(QWidget):
     def _create_monitor_panel(self) -> QWidget:
         widget = QFrame()
         widget.setObjectName("surface")
+        widget.setMinimumWidth(310)
         layout = QVBoxLayout(widget)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(12)
+        layout.setContentsMargins(11, 8, 11, 8)
+        layout.setSpacing(7)
 
         status_group = QGroupBox("Statut acquisition")
+        status_group.setObjectName("flatGroup")
         status_layout = QFormLayout(status_group)
         self.acquisition_status_label = QLabel("Arretee")
         self.samples_count_label = QLabel("0")
@@ -332,10 +382,11 @@ class AcquisitionConfigView(QWidget):
         layout.addWidget(status_group)
 
         log_group = QGroupBox("Journal")
+        log_group.setObjectName("flatGroup")
         log_layout = QVBoxLayout(log_group)
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setMaximumHeight(220)
+        self.log_text.setMaximumHeight(120)
         clear_log_btn = QPushButton("Effacer le journal")
         clear_log_btn.setProperty("kind", "quiet")
         clear_log_btn.clicked.connect(self.clear_log)
@@ -344,12 +395,13 @@ class AcquisitionConfigView(QWidget):
         layout.addWidget(log_group)
 
         data_group = QGroupBox("Apercu temps reel")
+        data_group.setObjectName("flatGroup")
         data_layout = QVBoxLayout(data_group)
         self.data_table = QTableWidget(0, 3)
         self.data_table.setHorizontalHeaderLabels(["Canal", "Valeur", "Unite"])
         self.data_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         data_layout.addWidget(self.data_table)
-        layout.addWidget(data_group)
+        layout.addWidget(data_group, 1)
         return widget
 
     def _setup_connections(self) -> None:
@@ -370,12 +422,8 @@ class AcquisitionConfigView(QWidget):
         self.export_hdf5_btn.clicked.connect(self.export_hdf5)
         self.update_timer.timeout.connect(self.update_display)
         self.data_block_received.connect(self._display_received_data)
-        self.qualification_workspace.stage_requested.connect(
-            self.start_qualification_stage
-        )
-        self.qualification_workspace.refresh_requested.connect(
-            self.refresh_qualification_history
-        )
+        self.qualification_workspace.stage_requested.connect(self.start_qualification_stage)
+        self.qualification_workspace.refresh_requested.connect(self.refresh_qualification_history)
         self.update_timer.start(1000)
 
     def _initialize_channels_table(
@@ -532,9 +580,7 @@ class AcquisitionConfigView(QWidget):
             capabilities.min_sample_rate_hz,
             capabilities.max_sample_rate_hz_per_channel,
         )
-        self.sampling_rate_spin.setValue(
-            min(1000.0, capabilities.max_sample_rate_hz_per_channel)
-        )
+        self.sampling_rate_spin.setValue(min(1000.0, capabilities.max_sample_rate_hz_per_channel))
         self._hardware_state = "connected"
         self._pending_qualification_stage = None
         self._qualification_protocol = self._qualification_protocol_registry.resolve(device)
@@ -866,10 +912,8 @@ class AcquisitionConfigView(QWidget):
             return
         first_stage = self._qualification_protocol.stages[0]
         self.qualification_workspace.select_stage(first_stage.stage_id)
-        self.config_tabs.setCurrentWidget(self.qualification_workspace)
-        self.log_message(
-            f"Préparez la checklist du palier {first_stage.stage_id} avant son lancement"
-        )
+        self._set_config_mode(3)
+        self.log_message(f"Préparez la checklist du palier {first_stage.stage_id} avant son lancement")
 
     def start_qualification_stage(self, stage_id: str) -> None:
         if (
@@ -888,9 +932,7 @@ class AcquisitionConfigView(QWidget):
             stage,
             self.qualification_workspace.accepted_stage_ids,
         ):
-            self.log_message(
-                f"Palier {stage.stage_id} verrouillé: terminez d'abord ses prérequis"
-            )
+            self.log_message(f"Palier {stage.stage_id} verrouillé: terminez d'abord ses prérequis")
             return
         if not self.qualification_workspace.checklist_complete():
             self.log_message(f"Checklist incomplète pour le palier {stage.stage_id}")
@@ -902,9 +944,7 @@ class AcquisitionConfigView(QWidget):
             self.log_message("Qualification annulée: configuration des voies invalide")
             return
         active_channels = self._get_active_channels()
-        configured_channels = [
-            self.controller.channels_config[channel] for channel in active_channels
-        ]
+        configured_channels = [self.controller.channels_config[channel] for channel in active_channels]
         setup_issues = stage.validate_setup(
             configured_channels,
             self.sampling_rate_spin.value(),
@@ -1363,9 +1403,7 @@ class AcquisitionConfigView(QWidget):
         self.qualification_status_label.style().polish(self.qualification_status_label)
         connected = bool(self.controller and self.controller.is_hardware_available())
         acquiring = bool(self.controller and self.controller.is_acquiring)
-        self.start_acquisition_btn.setEnabled(
-            connected and not acquiring and normalized == "accepted"
-        )
+        self.start_acquisition_btn.setEnabled(connected and not acquiring and normalized == "accepted")
 
     def data_received_callback(self, data, session) -> None:
         """Relaye le bloc vers le thread Qt au lieu de modifier l'UI ici."""
@@ -1413,17 +1451,12 @@ class AcquisitionConfigView(QWidget):
         )
 
     def _session_setup_signature(self) -> tuple[Any, ...] | None:
-        if (
-            not self.controller
-            or not self.controller.selected_device
-            or not self.controller.current_session
-        ):
+        if not self.controller or not self.controller.selected_device or not self.controller.current_session:
             return None
         session = self.controller.current_session
         requested_rate = session.metadata.get("requested_sampling_rate", session.sampling_rate)
         channel_contract = tuple(
-            (channel.channel, float(channel.voltage_range.value))
-            for channel in session.channels
+            (channel.channel, float(channel.voltage_range.value)) for channel in session.channels
         )
         return (
             self.controller.selected_device.key,
@@ -1442,9 +1475,7 @@ class AcquisitionConfigView(QWidget):
 
     def _reset_acquisition_controls(self) -> None:
         connected = bool(self.controller and self.controller.is_hardware_available())
-        self.start_acquisition_btn.setEnabled(
-            connected and self._last_qualification_verdict == "accepted"
-        )
+        self.start_acquisition_btn.setEnabled(connected and self._last_qualification_verdict == "accepted")
         self.stop_acquisition_btn.setEnabled(False)
         self.test_acquisition_btn.setEnabled(connected)
         self.scan_boards_btn.setEnabled(True)
